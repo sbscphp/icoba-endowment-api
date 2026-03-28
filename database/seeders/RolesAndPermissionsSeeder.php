@@ -38,16 +38,6 @@ class RolesAndPermissionsSeeder extends Seeder
             'guard_name' => 'api',
         ]);
 
-        $platformAdmin = Role::firstOrCreate([
-            'name' => RoleEnum::PLATFORM_ADMIN->value,
-            'guard_name' => 'api',
-        ]);
-
-        $systemAdmin = Role::firstOrCreate([
-            'name' => RoleEnum::SYSTEM_ADMIN->value,
-            'guard_name' => 'api',
-        ]);
-
         $customer = Role::firstOrCreate([
             'name' => RoleEnum::CUSTOMER->value,
             'guard_name' => 'api',
@@ -57,22 +47,6 @@ class RolesAndPermissionsSeeder extends Seeder
         $admin->syncPermissions(
             array_map(fn($p) => $p->value, PermissionEnum::cases())
         );
-
-        $systemAdmin->syncPermissions([
-            PermissionEnum::PAYMENTS_VIEW->value,
-            PermissionEnum::DOCUMENT_VIEW->value,
-            PermissionEnum::DOCUMENT_MANAGE->value,
-            PermissionEnum::USERS_MANAGE->value,
-            PermissionEnum::DOCUMENT_APPROVE->value,
-        ]);
-
-        $platformAdmin->syncPermissions([
-            PermissionEnum::PAYMENTS_VIEW->value,
-            PermissionEnum::DOCUMENT_VIEW->value,
-            PermissionEnum::DOCUMENT_MANAGE->value,
-            PermissionEnum::USERS_MANAGE->value,
-            PermissionEnum::DOCUMENT_APPROVE->value,
-        ]);
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }
