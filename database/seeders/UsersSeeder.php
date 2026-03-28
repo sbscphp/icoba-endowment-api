@@ -10,11 +10,14 @@ use App\Enums\eRole;
 
 class UsersSeeder extends Seeder
 {
+    // php artisan db:seed --class=UsersSeeder
     /**
      * Run the database seeds.
      */
     public function run(): void
     {
+        $this->call(RolesAndPermissionsSeeder::class);
+
         $superAdmin = User::firstOrCreate(
             ['email' => strtolower(env('APP_NAME')).'-superadmin@yopmail.com'],
             [
