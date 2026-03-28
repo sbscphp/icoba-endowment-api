@@ -16,7 +16,7 @@ class UsersSeeder extends Seeder
     public function run(): void
     {
         $superAdmin = User::firstOrCreate(
-            ['email' => 'quiva-superadmin@yopmail.com'],
+            ['email' => 'apfspn-superadmin@yopmail.com'],
             [
                 'firstname' => 'Super Admin',
                 'lastname' => 'User',
@@ -31,7 +31,7 @@ class UsersSeeder extends Seeder
         $superAdmin->assignRole(eRole::SUPER_ADMIN->value);
 
         $admin = User::firstOrCreate(
-            ['email' => 'quiva-admin@yopmail.com'],
+            ['email' => 'apfspn-admin@yopmail.com'],
             [
                 'firstname' => 'Admin',
                 'lastname' => 'User',
@@ -45,38 +45,8 @@ class UsersSeeder extends Seeder
         );
         $admin->assignRole(eRole::ADMIN->value);
 
-        $platformAdmin = User::firstOrCreate(
-            ['email' => 'quiva-platformadmin@yopmail.com'],
-            [
-                'firstname' => 'Platform Admin',
-                'lastname' => 'User',
-                'phone_number' => '08098766544',
-                'country_code' => '+234',
-                '2fa' => true,
-                'is_active' => true,
-                'can_login' => true,
-                'password' => Hash::make('password'),
-            ]
-        );
-        $platformAdmin->assignRole(eRole::PLATFORM_ADMIN->value);
-
-        $systemAdmin = User::firstOrCreate(
-            ['email' => 'quiva-systemadmin@yopmail.com'],
-            [
-                'firstname' => 'System Admin',
-                'lastname' => 'User',
-                'phone_number' => '07099887766',
-                'country_code' => '+234',
-                '2fa' => true,
-                'is_active' => true,
-                'can_login' => true,
-                'password' => Hash::make('password'),
-            ]
-        );
-        $systemAdmin->assignRole(eRole::SYSTEM_ADMIN->value);
-
         $customer = User::firstOrCreate(
-            ['email' => 'quiva-customer@yopmail.com'],
+            ['email' => 'apfspn-customer@yopmail.com'],
             [
                 'firstname' => 'Customer',
                 'lastname' => 'User',
