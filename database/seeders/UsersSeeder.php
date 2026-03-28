@@ -16,7 +16,7 @@ class UsersSeeder extends Seeder
     public function run(): void
     {
         $superAdmin = User::firstOrCreate(
-            ['email' => 'apfspn-superadmin@yopmail.com'],
+            ['email' => strtolower(env('APP_NAME')).'-superadmin@yopmail.com'],
             [
                 'firstname' => 'Super Admin',
                 'lastname' => 'User',
@@ -31,7 +31,7 @@ class UsersSeeder extends Seeder
         $superAdmin->assignRole(eRole::SUPER_ADMIN->value);
 
         $admin = User::firstOrCreate(
-            ['email' => 'apfspn-admin@yopmail.com'],
+            ['email' => strtolower(env('APP_NAME')).'-admin@yopmail.com'],
             [
                 'firstname' => 'Admin',
                 'lastname' => 'User',
@@ -46,7 +46,7 @@ class UsersSeeder extends Seeder
         $admin->assignRole(eRole::ADMIN->value);
 
         $customer = User::firstOrCreate(
-            ['email' => 'apfspn-customer@yopmail.com'],
+            ['email' => strtolower(env('APP_NAME')).'-customer@yopmail.com'],
             [
                 'firstname' => 'Customer',
                 'lastname' => 'User',
