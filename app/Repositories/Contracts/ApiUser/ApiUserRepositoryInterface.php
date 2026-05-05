@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Repositories\Contracts\ApiUser;
 
 use App\Http\Resources\ApiUserResource;

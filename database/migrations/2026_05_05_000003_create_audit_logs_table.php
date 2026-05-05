@@ -10,6 +10,7 @@ return new class extends Migration
     {
         Schema::create('audit_logs', function (Blueprint $table) {
             $table->id();
+            $table->uuid('uuid')->unique();
             $table->string('user_type');
             $table->uuid('user_id')->nullable();
             $table->string('action_module');

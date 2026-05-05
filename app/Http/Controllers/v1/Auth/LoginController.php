@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\v1\Auth;
 
+use App\Enums\CustomerRegistrationStepEnum;
 use App\Enums\eClientType;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
@@ -25,18 +26,23 @@ class LoginController extends Controller
     public function login(LoginRequest $request)
     {
         try {
+            $client = (string) ($request->validated('client') ?? eClientType::MOBILE->value);
             $payload = $this->authService->loginCustomer(
                 (string) $request->input('email'),
                 (string) $request->input('password'),
                 $request,
-                eClientType::MOBILE->value
+                $client
             );
 
             if (isset($payload['access_token'])) {
                 return JsonResponser::send(false, 'Login successful.', AuthResource::make($payload), 200);
             }
 
-            return JsonResponser::send(false, 'Verification code sent.', $payload, 200);
+            $message = ($payload['registration_step'] ?? '') === CustomerRegistrationStepEnum::AWAITING_OTP->value
+                ? 'Please verify your email. A verification code has been sent.'
+                : 'Verification code sent.';
+
+            return JsonResponser::send(false, $message, $payload, 200);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'LoginController@login');
         }
@@ -45,11 +51,12 @@ class LoginController extends Controller
     public function verifyOtp(VerifyOtpRequest $request)
     {
         try {
+            $client = (string) ($request->validated('client') ?? eClientType::MOBILE->value);
             $payload = $this->authService->verifyCustomerLoginOtp(
                 (string) $request->input('challenge_token'),
                 (string) $request->input('otp'),
                 $request,
-                eClientType::MOBILE->value
+                $client
             );
 
             return JsonResponser::send(false, 'Login successful.', AuthResource::make($payload), 200);

@@ -3,7 +3,7 @@
 namespace App\Services\Audit;
 
 use App\Enums\AuditActionEnum;
-use App\Enums\AuditModuleEnum;
+use App\Enums\ModuleEnums;
 use App\Enums\UserTypeEnum;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
@@ -40,7 +40,8 @@ class AuditLogService
         ?string $description,
         ?string $model,
         ?string $modelId,
-        AuditModuleEnum $actionModule
+        ModuleEnums $actionModule,
+        ?int $httpStatus = null,
     ): void {
         AuditLog::create([
             'user_type' => $userType,
@@ -52,6 +53,7 @@ class AuditLogService
             'description' => $description,
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
+            'http_status' => $httpStatus,
             'metadata' => $this->buildMetadata($request, $metadata, $model, $modelId),
         ]);
     }

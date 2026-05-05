@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Http\Controllers\Developer;
 
 use App\Http\Controllers\Controller;
@@ -11,8 +9,8 @@ use App\Http\Resources\EncryptedPayloadResource;
 use App\Repositories\Contracts\ApiUser\ApiUserRepositoryInterface;
 use App\Responser\JsonResponser;
 use App\Services\CryptoService;
-use Illuminate\Http\JsonResponse;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\HeaderBag;
 use Symfony\Component\HttpFoundation\Response as BaseResponse;
 
 /**
@@ -30,7 +28,7 @@ final class ApiCryptoHelperController extends Controller
         private readonly ApiUserRepositoryInterface $apiUsers,
     ) {}
 
-    public function encrypt(CryptoHelperEncryptRequest $request): JsonResponse
+    public function encrypt(CryptoHelperEncryptRequest $request)
     {
         $user = $this->requireApiUser($request->headers);
 
@@ -57,10 +55,10 @@ final class ApiCryptoHelperController extends Controller
             try {
                 $envelopeArray['preview'] = json_decode($plaintext, associative: true, flags: JSON_THROW_ON_ERROR);
             } catch (\JsonException) {
-                $trimmed = strlen($plaintext) > 1024 ? substr($plaintext, 0, 1024) . '…' : $plaintext;
+                $trimmed = strlen($plaintext) > 1024 ? substr($plaintext, 0, 1024).'…' : $plaintext;
                 $envelopeArray['preview'] = [
                     '_note' => 'Plaintext was not valid JSON.',
-                    'raw'   => $trimmed,
+                    'raw' => $trimmed,
                 ];
             }
         }
@@ -69,14 +67,14 @@ final class ApiCryptoHelperController extends Controller
             error: false,
             message: 'Encrypted.',
             data: [
-                'ciphertext'        => $ciphertext,
+                'ciphertext' => $ciphertext,
                 'response_envelope' => $envelopeArray,
             ],
             statusCode: 200,
         );
     }
 
-    public function decrypt(CryptoHelperDecryptRequest $request): JsonResponse
+    public function decrypt(CryptoHelperDecryptRequest $request)
     {
         $user = $this->requireApiUser($request->headers);
 
@@ -107,7 +105,7 @@ final class ApiCryptoHelperController extends Controller
         );
     }
 
-    private function requireApiUser(\Symfony\Component\HttpFoundation\HeaderBag $headers): ApiUserResource
+    private function requireApiUser(HeaderBag $headers)
     {
         if (! config('security.api_user_dev_registration.enabled')) {
             abort(403, 'Disabled.');

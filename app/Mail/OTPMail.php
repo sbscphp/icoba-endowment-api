@@ -34,6 +34,7 @@ class OTPMail extends Mailable
             subject: match ($this->purpose) {
                 OtpPurposeEnum::PASSWORD_RESET => 'Password reset verification code',
                 OtpPurposeEnum::LOGIN => 'Sign-in verification code',
+                OtpPurposeEnum::EMAIL_VERIFICATION => 'Verify your email address',
             },
         );
     }
@@ -51,6 +52,10 @@ class OTPMail extends Mailable
             OtpPurposeEnum::LOGIN => [
                 'Your sign-in code',
                 "Use the code below to complete your sign in. This code expires in {$this->expiresInMinutes} minutes.",
+            ],
+            OtpPurposeEnum::EMAIL_VERIFICATION => [
+                'Verify your email',
+                "Use the code below to verify your email address on the ICOBA Endowment platform. This code expires in {$this->expiresInMinutes} minutes.",
             ],
         };
 

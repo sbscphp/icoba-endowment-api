@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'Laravel'),
+    'name' => env('APP_NAME', 'ICOBA Endowment'),
 
     /*
     |--------------------------------------------------------------------------
@@ -85,6 +85,17 @@ return [
     'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
 
     'frontend_url' => env('FRONTEND_URL', env('APP_URL')),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Frontend login URL (optional)
+    |--------------------------------------------------------------------------
+    |
+    | Defaults to {frontend_url}/login when not set. Override if your SPA uses
+    | a different route (e.g. /auth/login).
+    |
+    */
+    'frontend_login_url' => env('FRONTEND_LOGIN_URL'),
 
     /*
     |--------------------------------------------------------------------------

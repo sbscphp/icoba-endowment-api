@@ -1,14 +1,14 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Models;
 
 use App\Enums\Api\ApiEncryptionMode;
+use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Model;
 
 /**
  * @property int $id
+ * @property string $uuid
  * @property string|null $name
  * @property string $email
  * @property string $client_key
@@ -19,7 +19,9 @@ use Illuminate\Database\Eloquent\Model;
  */
 class ApiUser extends Model
 {
-    protected $guarded = ['id'];
+    use HasUuid;
+
+    protected $guarded = ['id', 'uuid'];
 
     protected function casts(): array
     {

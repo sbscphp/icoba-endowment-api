@@ -105,6 +105,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('api-user-dev-registration', function (Request $request) {
             return Limit::perMinute(5)->by((string) $request->ip());
         });
+
+        RateLimiter::for('customer-register', function (Request $request) {
+            return Limit::perMinute(10)->by((string) $request->ip());
+        });
     }
 
     private function loginThrottleKey(Request $request): string
