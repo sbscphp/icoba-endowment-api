@@ -1,14 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Http\Middleware;
 
 use App\Enums\Api\ApiEncryptionMode;
 use App\Http\Resources\ApiUserResource;
 use App\Http\Resources\EncryptedPayloadResource;
-use App\Responser\JsonResponser;
 use App\Repositories\Contracts\ApiUser\ApiUserRepositoryInterface;
+use App\Responser\JsonResponser;
 use App\Services\CryptoService;
 use Closure;
 use Illuminate\Http\JsonResponse;
@@ -245,6 +243,10 @@ final readonly class RequestResponseEncryptionMiddleware
             return $response;
         }
 
+        if (! $response instanceof JsonResponse) {
+            return $response;
+        }
+
         $body = $response->getContent();
 
         if ($body === false || trim($body) === '') {
@@ -266,11 +268,8 @@ final readonly class RequestResponseEncryptionMiddleware
     }
 
     /**
-     * @throws \JsonException
+     * @throws JsonException
      * @throws InvalidArgumentException
-     */
-    /**
-     * @return mixed
      */
     private function decodeBodyForEncryptionPreview(string $body): mixed
     {
@@ -279,12 +278,12 @@ final readonly class RequestResponseEncryptionMiddleware
         } catch (JsonException) {
             $trimmed = $body;
             if (strlen($trimmed) > 1024) {
-                $trimmed = substr($trimmed, 0, 1024) . '…';
+                $trimmed = substr($trimmed, 0, 1024).'…';
             }
 
             return [
                 '_note' => 'Response body was not valid JSON.',
-                'raw'   => $trimmed,
+                'raw' => $trimmed,
             ];
         }
     }

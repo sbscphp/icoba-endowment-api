@@ -111,9 +111,9 @@
         <tr>
             <td>
                 @if(!empty($logoBase64))
-                    <img src="{{ $logoBase64 }}" alt="Quiva" class="header-logo">
+                    <img src="{{ $logoBase64 }}" alt="{{ config('app.name') }}" class="header-logo">
                 @else
-                    <div class="brand">Quiva</div>
+                    <div class="brand">{{ config('app.name') }}</div>
                     <div class="brand-sub">Report Export</div>
                 @endif
             </td>
@@ -162,6 +162,6 @@
         </tbody>
     </table>
 
-    <p class="footer">Quiva report · Rows shown: {{ number_format(count($rows)) }}</p>
+    <p class="footer">{{ config('app.name') }} report · Rows shown: {{ number_format(count($rows)) }}</p>
 </body>
 </html>

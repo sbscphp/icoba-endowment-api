@@ -3,7 +3,7 @@
 namespace App\Services\Auth;
 
 use App\Enums\AuditActionEnum;
-use App\Enums\AuditModuleEnum;
+use App\Enums\ModuleEnums;
 use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
@@ -36,7 +36,7 @@ class PasswordResetService
             Hash::check(Str::random(16), self::DUMMY_BCRYPT_FOR_TIMING);
             GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::PASSWORD_RESET_REQUESTED, $request, null, [
                 'identifier_hash' => hash('sha256', $email),
-            ], 'Password reset was requested for a customer identifier.', null, null, AuditModuleEnum::AUTHENTICATION);
+            ], 'Password reset was requested for a customer identifier.', null, null, ModuleEnums::authentication, 200);
 
             return [
                 'challenge_token' => Str::random(96),
@@ -54,12 +54,13 @@ class PasswordResetService
             $this->displayName($user).' requested a password reset.',
             User::class,
             $user->uuid,
-            AuditModuleEnum::AUTHENTICATION
+            ModuleEnums::authentication,
+            200,
         );
         GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, $user->uuid, [
             'purpose' => 'PASSWORD_RESET',
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
-        ], 'Password reset OTP was sent.', User::class, $user->uuid, AuditModuleEnum::AUTHENTICATION);
+        ], 'Password reset OTP was sent.', User::class, $user->uuid, ModuleEnums::authentication, 200);
 
         return $payload;
     }
@@ -71,7 +72,7 @@ class PasswordResetService
             'purpose' => 'PASSWORD_RESET',
             'resend' => true,
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
-        ], 'Password reset OTP was resent.', null, null, AuditModuleEnum::AUTHENTICATION);
+        ], 'Password reset OTP was resent.', null, null, ModuleEnums::authentication, 200);
 
         return $payload;
     }
@@ -83,14 +84,14 @@ class PasswordResetService
         } catch (\Throwable $th) {
             GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_FAILED, $request, null, [
                 'purpose' => 'PASSWORD_RESET',
-            ], 'Password reset OTP verification failed.', null, null, AuditModuleEnum::AUTHENTICATION);
+            ], 'Password reset OTP verification failed.', null, null, ModuleEnums::authentication, 422);
 
             throw $th;
         }
 
         GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_VERIFIED, $request, null, [
             'purpose' => 'PASSWORD_RESET',
-        ], 'Password reset OTP verified successfully.', null, null, AuditModuleEnum::AUTHENTICATION);
+        ], 'Password reset OTP verified successfully.', null, null, ModuleEnums::authentication, 200);
 
         return $payload;
     }
@@ -123,7 +124,8 @@ class PasswordResetService
             $this->displayName($subject).' completed password reset.',
             $subject::class,
             $subject->uuid,
-            AuditModuleEnum::AUTHENTICATION
+            ModuleEnums::authentication,
+            200,
         );
     }
 

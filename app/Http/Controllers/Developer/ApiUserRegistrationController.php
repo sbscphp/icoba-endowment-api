@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Http\Controllers\Developer;
 
 use App\Enums\Api\ApiEncryptionMode;
@@ -9,7 +7,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Developer\RegisterApiUserRequest;
 use App\Responser\JsonResponser;
 use App\Services\Api\ApiUserProvisioningService;
-use Illuminate\Http\JsonResponse;
 
 final class ApiUserRegistrationController extends Controller
 {

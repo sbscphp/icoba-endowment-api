@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Auth;
 
+use App\Enums\CustomerRegistrationStepEnum;
 use App\Enums\UserTypeEnum;
 use App\Http\Resources\UserResource;
 use App\Models\Admin;
@@ -17,6 +18,11 @@ class AuthResource extends JsonResource
         return [
             'access_token' => data_get($this->resource, 'access_token'),
             'token_type' => data_get($this->resource, 'token_type'),
+            'registration_step' => data_get(
+                $this->resource,
+                'registration_step',
+                CustomerRegistrationStepEnum::COMPLETED->value
+            ),
             'user_type' => $user instanceof Admin ? UserTypeEnum::ADMIN->value : UserTypeEnum::CUSTOMER->value,
             'user' => $user instanceof Admin ? $this->adminPayload($user) : UserResource::make($user),
         ];

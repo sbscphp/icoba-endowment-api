@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Http\Resources;
 
 use App\Enums\Api\ApiEncryptionMode;
@@ -30,7 +28,8 @@ class ApiUserResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->resource->getKey(),
+            // 'id' => $this->resource->id,
+            'uuid' => $this->resource->uuid,
             'name' => $this->resource->name,
             'email' => $this->resource->email,
             'client_key' => $this->resource->client_key,

@@ -14,7 +14,7 @@ trait HasUuid
         parent::boot();
         static::creating(function ($model) {
             if (empty($model->uuid)) {
-                $model->uuid = Str::uuid();
+                $model->uuid = (string) Str::uuid();
             }
         });
     }

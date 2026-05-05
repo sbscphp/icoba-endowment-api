@@ -56,6 +56,37 @@ class OtpService
         return $this->sendOtp($subject, OtpPurposeEnum::LOGIN, 'login');
     }
 
+    public function sendEmailVerificationOtp(User $user): array
+    {
+        return $this->sendOtp($user, OtpPurposeEnum::EMAIL_VERIFICATION, 'email verification');
+    }
+
+    /**
+     * @throws ApiException
+     */
+    public function verifyEmailVerificationOtp(string $challengeToken, string $otpCode): User
+    {
+        $subject = $this->verifyOtp($challengeToken, $otpCode, OtpPurposeEnum::EMAIL_VERIFICATION);
+
+        if (! $subject instanceof User) {
+            throw new ApiException('Invalid verification session.', 422);
+        }
+
+        return $subject;
+    }
+
+    public function resendEmailVerificationOtp(string $challengeToken): array
+    {
+        $payload = $this->challengeTokenService->decode($challengeToken, OtpPurposeEnum::EMAIL_VERIFICATION);
+        $subject = $this->resolveSubjectFromPayload($payload);
+
+        if (! $subject instanceof User) {
+            throw new ApiException('Invalid verification session.', 422);
+        }
+
+        return $this->sendOtp($subject, OtpPurposeEnum::EMAIL_VERIFICATION, 'email verification');
+    }
+
     public function sendPasswordResetOtp(User|Admin $subject): array
     {
         return $this->sendOtp($subject, OtpPurposeEnum::PASSWORD_RESET, 'password reset');
@@ -68,7 +99,7 @@ class OtpService
         return [
             'reset_token' => encrypt([
                 'subject_type' => $subject instanceof Admin ? UserTypeEnum::ADMIN->value : UserTypeEnum::CUSTOMER->value,
-                'subject_id' => $subject->uuid,
+                'subject_id' => (string) $subject->uuid,
                 'purpose' => 'RESET_PASSWORD',
                 'exp' => now()->addMinutes(self::RESET_TOKEN_EXP_MINUTES)->timestamp,
             ]),
@@ -130,7 +161,7 @@ class OtpService
             $challenge = AuthChallenge::create([
                 'uuid' => (string) Str::uuid(),
                 'subject_type' => $this->subjectType($subject),
-                'subject_id' => $subject->uuid,
+                'subject_id' => (string) $subject->uuid,
                 'purpose' => $purpose,
                 'channel' => 'email',
                 'code_hash' => Hash::make($otp),

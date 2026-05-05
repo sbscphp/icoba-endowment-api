@@ -3,7 +3,7 @@
 namespace App\Helpers;
 
 use App\Enums\AuditActionEnum;
-use App\Enums\AuditModuleEnum;
+use App\Enums\ModuleEnums;
 use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
 use App\Responser\JsonResponser;
@@ -59,7 +59,8 @@ class GeneralHelper
         ?string $description,
         ?string $model,
         ?string $modelId,
-        AuditModuleEnum $actionModule
+        ModuleEnums $actionModule,
+        ?int $httpStatus = null,
     ): void {
         app(AuditLogService::class)->record(
             $userType,
@@ -70,7 +71,8 @@ class GeneralHelper
             $description,
             $model,
             $modelId,
-            $actionModule
+            $actionModule,
+            $httpStatus
         );
     }
 

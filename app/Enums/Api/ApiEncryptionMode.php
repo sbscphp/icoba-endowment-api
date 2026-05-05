@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Enums\Api;
 
 /**
@@ -18,7 +16,7 @@ enum ApiEncryptionMode: string
     /** Inbound payloads are treated as plaintext JSON / query; outbound bodies are encrypted. */
     case ResponseOnly = 'response_only';
 
-    //Returns true if the current mode requires decrypting the incoming request payload.
+    // Returns true if the current mode requires decrypting the incoming request payload.
     public function decryptsInbound(): bool
     {
         return match ($this) {
@@ -27,7 +25,7 @@ enum ApiEncryptionMode: string
         };
     }
 
-    //Returns true if the current mode requires encrypting the outgoing response payload.
+    // Returns true if the current mode requires encrypting the outgoing response payload.
     public function encryptsOutbound(): bool
     {
         return match ($this) {
@@ -36,7 +34,7 @@ enum ApiEncryptionMode: string
         };
     }
 
-    //returning null if the value is invalid or null. Meaning no encryption or decryption is required.
+    // returning null if the value is invalid or null. Meaning no encryption or decryption is required.
     public static function tryFromConfig(?string $value): ?self
     {
         if ($value === null || $value === '') {

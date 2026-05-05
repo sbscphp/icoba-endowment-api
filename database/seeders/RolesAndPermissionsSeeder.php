@@ -2,52 +2,102 @@
 
 namespace Database\Seeders;
 
+use App\Enums\ePermission as PermissionEnum;
+use App\Enums\eRole as RoleEnum;
+use App\Models\Permission;
+use App\Models\Role;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\PermissionRegistrar;
-use App\Models\Role;
-use App\Models\Permission;
-use App\Enums\eRole as RoleEnum;
-use App\Enums\ePermission as PermissionEnum;
 
 class RolesAndPermissionsSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
+    // php artisan db:seed --class=RolesAndPermissionsSeeder
+
+    use WithoutModelEvents;
+
+    private const GUARD = 'api';
+
     public function run(): void
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        // Create permissions
+        $this->syncPermissionsFromEnum();
+        $this->removeObsoletePermissions();
+        $this->upsertAllowableRoles();
+        $this->grantDefaultRolePermissions();
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
+    private function syncPermissionsFromEnum(): void
+    {
         foreach (PermissionEnum::cases() as $perm) {
             Permission::firstOrCreate([
                 'name' => $perm->value,
-                'guard_name' => 'api',
+                'guard_name' => self::GUARD,
             ]);
         }
+    }
 
-        // Create roles
-        $superAdmin = Role::firstOrCreate([
-            'name' => RoleEnum::SUPER_ADMIN->value,
-            'guard_name' => 'api',
-        ]);
+    /**
+     * Remove permission rows not defined in ePermission (e.g. legacy names).
+     */
+    private function removeObsoletePermissions(): void
+    {
+        Permission::query()
+            ->where('guard_name', self::GUARD)
+            ->whereNotIn('name', PermissionEnum::values())
+            ->delete();
+    }
 
-        $admin = Role::firstOrCreate([
-            'name' => RoleEnum::ADMIN->value,
-            'guard_name' => 'api',
-        ]);
+    private function upsertAllowableRoles(): void
+    {
+        foreach (RoleEnum::cases() as $roleEnum) {
+            Role::firstOrCreate([
+                'name' => $roleEnum->value,
+                'guard_name' => self::GUARD,
+            ]);
+        }
+    }
 
-        $customer = Role::firstOrCreate([
-            'name' => RoleEnum::CUSTOMER->value,
-            'guard_name' => 'api',
-        ]);
+    /**
+     * Idempotent: only adds missing permissions (givePermissionTo).
+     * Does not strip custom grants on seeded roles.
+     */
+    private function grantDefaultRolePermissions(): void
+    {
+        $allPermissions = Permission::query()
+            ->where('guard_name', self::GUARD)
+            ->whereIn('name', PermissionEnum::values())
+            ->get();
 
-        // Assign permissions
-        $admin->syncPermissions(
-            array_map(fn($p) => $p->value, PermissionEnum::cases())
-        );
+        $superAdmin = Role::query()
+            ->where('name', RoleEnum::SUPER_ADMIN->value)
+            ->where('guard_name', self::GUARD)
+            ->firstOrFail();
 
-        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        foreach ($allPermissions as $permission) {
+            $superAdmin->givePermissionTo($permission);
+        }
+
+        $adminDenied = [
+            PermissionEnum::ROLES_DELETE->value,
+            PermissionEnum::ADMINS_DELETE->value,
+        ];
+
+        foreach ([RoleEnum::ADMIN] as $roleEnum) {
+            $role = Role::query()
+                ->where('name', $roleEnum->value)
+                ->where('guard_name', self::GUARD)
+                ->firstOrFail();
+
+            foreach ($allPermissions as $permission) {
+                if (in_array($permission->name, $adminDenied, true)) {
+                    continue;
+                }
+                $role->givePermissionTo($permission);
+            }
+        }
     }
 }

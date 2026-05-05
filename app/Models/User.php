@@ -8,6 +8,7 @@ use App\Notifications\Auth\ResetPasswordMail;
 use App\Traits\HasUuid;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -57,6 +58,21 @@ class User extends Authenticatable
             'locked_at' => 'datetime',
             'last_active_at' => 'datetime',
         ];
+    }
+
+    public function donorType(): BelongsTo
+    {
+        return $this->belongsTo(DonorType::class, 'donor_type_uuid', 'uuid');
+    }
+
+    public function corporateCategory(): BelongsTo
+    {
+        return $this->belongsTo(CorporateCategory::class, 'corporate_category_uuid', 'uuid');
+    }
+
+    public function graduationSet(): BelongsTo
+    {
+        return $this->belongsTo(GraduationSet::class, 'graduation_set_uuid', 'uuid');
     }
 
     public function sendPasswordResetNotification($token): void

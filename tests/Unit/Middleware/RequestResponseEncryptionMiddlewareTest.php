@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Tests\Unit\Middleware;
 
 use App\Enums\Api\ApiEncryptionMode;
@@ -9,6 +7,7 @@ use App\Http\Middleware\RequestResponseEncryptionMiddleware;
 use App\Http\Resources\ApiUserResource;
 use App\Repositories\Contracts\ApiUser\ApiUserRepositoryInterface;
 use App\Services\CryptoService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Config;
@@ -50,11 +49,18 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
     }
 
     /**
-     * In-memory stand-in for {@see \App\Models\ApiUser} (no DB / container).
+     * In-memory stand-in for {@see ApiUser} (no DB / container).
      */
     private static function makeStub(ApiEncryptionMode $mode): object
     {
-        return new class ('Test', 'test@example.com', 'test-client-key', self::KEY, self::IV, $mode) {
+        return new class('Test', 'test@example.com', 'test-client-key', self::KEY, self::IV, $mode)
+        {
+            public int $id = 1;
+
+            public string $uuid = '00000000-0000-0000-0000-000000000001';
+
+            public bool $is_active = true;
+
             public function __construct(
                 public ?string $name,
                 public string $email,
@@ -63,19 +69,19 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
                 public string $iv,
                 public ApiEncryptionMode $encryption_mode,
             ) {}
-
-            public function getKey(): int
-            {
-                return 1;
-            }
-
-            public bool $is_active = true;
         };
     }
 
     private function userWithMode(ApiEncryptionMode $mode): ApiUserResource
     {
-        $stub = new class ('Test', 'test2@example.com', 'test-client-key', self::KEY, self::IV, $mode) {
+        $stub = new class('Test', 'test2@example.com', 'test-client-key', self::KEY, self::IV, $mode)
+        {
+            public int $id = 2;
+
+            public string $uuid = '00000000-0000-0000-0000-000000000002';
+
+            public bool $is_active = true;
+
             public function __construct(
                 public ?string $name,
                 public string $email,
@@ -84,13 +90,6 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
                 public string $iv,
                 public ApiEncryptionMode $encryption_mode,
             ) {}
-
-            public function getKey(): int
-            {
-                return 2;
-            }
-
-            public bool $is_active = true;
         };
 
         return new ApiUserResource($stub);
@@ -100,7 +99,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
     public function test_bypass_paths_skip_auth_and_crypto(string $path): void
     {
         $request = Request::create($path, 'POST', content: '{"data":"plain"}');
-        $response = new Response('{"ok":true}');
+        $response = JsonResponse::fromJsonString('{"ok":true}');
 
         $result = $this->middleware->handle($request, fn () => $response);
 
@@ -158,7 +157,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         $this->middleware->handle($request, function (Request $req) use (&$capturedData) {
             $capturedData = $req->input('amount');
 
-            return new Response(json_encode(['status' => 'ok']));
+            return JsonResponse::fromJsonString(json_encode(['status' => 'ok']));
         });
 
         $this->assertSame(5000, $capturedData);
@@ -172,7 +171,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         $request = Request::create('/api/balance', 'GET');
         $request->headers->set('X-ClientKey', 'test-client-key');
 
-        $result = $this->middleware->handle($request, fn () => new Response($plainBody));
+        $result = $this->middleware->handle($request, fn () => JsonResponse::fromJsonString($plainBody));
         $decoded = json_decode($result->getContent(), true);
 
         $this->assertIsArray($decoded);
@@ -192,7 +191,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         $request = Request::create('/api/balance', 'GET');
         $request->headers->set('X-ClientKey', 'test-client-key');
 
-        $result = $this->middleware->handle($request, fn () => new Response($plainBody));
+        $result = $this->middleware->handle($request, fn () => JsonResponse::fromJsonString($plainBody));
         $decoded = json_decode($result->getContent(), true);
 
         $this->assertIsArray($decoded);
@@ -213,7 +212,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         $request = Request::create('/api/balance', 'GET');
         $request->headers->set('X-ClientKey', 'test-client-key');
 
-        $result = $this->middleware->handle($request, fn () => new Response($plainBody));
+        $result = $this->middleware->handle($request, fn () => JsonResponse::fromJsonString($plainBody));
 
         $this->assertSame($plainBody, $result->getContent());
     }
@@ -234,7 +233,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         $result = $this->middleware->handle($request, function (Request $req) use (&$captured, $plainResponse) {
             $captured = $req->input('amount');
 
-            return new Response($plainResponse);
+            return JsonResponse::fromJsonString($plainResponse);
         });
 
         $this->assertSame(100, $captured);
@@ -272,7 +271,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         $this->middleware->handle($request, function (Request $req) use (&$capturedSearch) {
             $capturedSearch = $req->query('search');
 
-            return new Response('{}');
+            return JsonResponse::fromJsonString('{}');
         });
 
         $this->assertSame('scholarships', $capturedSearch);

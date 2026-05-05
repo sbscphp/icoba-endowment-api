@@ -88,6 +88,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Frontend login URL (optional)
+    |--------------------------------------------------------------------------
+    |
+    | Defaults to {frontend_url}/login when not set. Override if your SPA uses
+    | a different route (e.g. /auth/login).
+    |
+    */
+    'frontend_login_url' => env('FRONTEND_LOGIN_URL'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Encryption Key
     |--------------------------------------------------------------------------
     |
