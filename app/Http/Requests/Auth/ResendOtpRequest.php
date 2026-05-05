@@ -2,9 +2,10 @@
 
 namespace App\Http\Requests\Auth;
 
-use Illuminate\Foundation\Http\FormRequest;
+use App\Http\Requests\ApiFormRequest;
+use Illuminate\Contracts\Validation\ValidationRule;
 
-class ResendOtpRequest extends FormRequest
+class ResendOtpRequest extends ApiFormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -17,12 +18,26 @@ class ResendOtpRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
         return [
             'challenge_token' => ['required', 'string'],
         ];
+    }
+
+    public function attributes(): array
+    {
+        return array_merge(parent::attributes(), [
+            'challenge_token' => 'verification session',
+        ]);
+    }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'challenge_token.required' => 'The verification session is required.',
+        ]);
     }
 }

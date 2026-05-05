@@ -4,10 +4,31 @@ namespace App\Responser;
 
 use App\Models\ErrorLog;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\App;
 
 
 class JsonResponser
 {
+    /**
+     * Whether encrypted API responses may include a cleartext "preview" field in the outer
+     * envelope (decoded JSON of the body produced by controllers / JsonResponser::send).
+     * Disabled in production regardless of config; only allowed app environments may opt in.
+     *
+     * @see \App\Http\Middleware\RequestResponseEncryptionMiddleware::encryptOutboundResponse()
+     */
+    public static function encryptedResponsePreviewEnabled(): bool
+    {
+        if (App::isProduction() || App::environment(['production', 'prod'])) {
+            return false;
+        }
+
+        if (! config('security.api_encryption.response_preview')) {
+            return false;
+        }
+
+        return App::environment(['local', 'dev', 'development', 'staging', 'testing']);
+    }
+
 
     /**
      * Return a new JSON response with paginated data

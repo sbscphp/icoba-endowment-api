@@ -2,19 +2,36 @@
 
 namespace App\Http\Requests\Auth;
 
-use Illuminate\Foundation\Http\FormRequest;
+use App\Http\Requests\ApiFormRequest;
 
-class ForgotPasswordRequest extends FormRequest
+class ForgotPasswordRequest extends ApiFormRequest
 {
-    public function authorize(): bool
-    {
-        return true;
-    }
-
     public function rules(): array
     {
         return [
-            'email'  => ['required', 'email'],
+            'email' => ['required', 'email'],
         ];
+    }
+
+    public function attributes(): array
+    {
+        return array_merge(parent::attributes(), [
+            'email' => 'email address',
+        ]);
+    }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'email.required' => 'Please enter your email address.',
+            'email.email' => 'Please enter a valid email address.',
+        ]);
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'email' => strtolower(trim((string) $this->email)),
+        ]);
     }
 }

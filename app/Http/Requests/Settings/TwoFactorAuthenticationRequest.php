@@ -2,11 +2,12 @@
 
 namespace App\Http\Requests\Settings;
 
-use Illuminate\Foundation\Http\FormRequest;
+use App\Http\Requests\ApiFormRequest;
+use Illuminate\Contracts\Validation\ValidationRule;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\InteractsWithTwoFactorState;
 
-class TwoFactorAuthenticationRequest extends FormRequest
+class TwoFactorAuthenticationRequest extends ApiFormRequest
 {
     use InteractsWithTwoFactorState;
 
@@ -21,10 +22,20 @@ class TwoFactorAuthenticationRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
         return [];
+    }
+
+    public function attributes(): array
+    {
+        return parent::attributes();
+    }
+
+    public function messages(): array
+    {
+        return parent::messages();
     }
 }

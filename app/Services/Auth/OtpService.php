@@ -2,170 +2,271 @@
 
 namespace App\Services\Auth;
 
-use App\Models\User;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Carbon;
+use App\Enums\OtpPurposeEnum;
+use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
-use App\Mail\LoginOtpMail;
-use App\Models\OneTimePassword;
-use App\Repositories\Contracts\Auth\OtpRepositoryInterface;
+use App\Helpers\OpaqueMessageHelper;
+use App\Mail\OTPMail;
+use App\Models\Admin;
+use App\Models\AuthChallenge;
+use App\Models\User;
 use App\Services\Theme\ThemeResolver;
+use App\Services\ThirdParty\SMS\SmsService;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class OtpService
 {
-    private const PURPOSE_LOGIN = 'login';
-    private const OTP_EXP_MINUTES = 10;
-    private const RESEND_COOLDOWN_SECONDS = 60;
-    private const RESEND_WINDOW_MINUTES = 10;
-    private const MAX_RESENDS_IN_WINDOW = 3;
+    private const RESET_TOKEN_EXP_MINUTES = 15;
 
+    private const MAX_ATTEMPTS = 5;
 
-    public function __construct(private OtpRepositoryInterface $otpService) {}
+    public function __construct(
+        private readonly ChallengeTokenService $challengeTokenService,
+        private readonly SmsService $smsService,
+    ) {}
 
-    public function sendLoginOtp(User $user): array
+    private function otpExpiryMinutes(): int
     {
-        $this->otpService->invalidateAll($user->id, 'login');
-
-        $otp = (string) random_int(100000, 999999);
-
-        $oneTimePassword = $this->otpService->create([
-            'user_id' => $user->id,
-            'purpose' => 'login',
-            'code_hash' => Hash::make($otp),
-            'expires_at' => now()->addMinutes(10),
-        ]);
-
-        $theme = app(ThemeResolver::class)->resolveForMail();
-
-        Mail::to("damilolasbsc@yopmail.com")->send(new LoginOtpMail($otp, 10, $theme));
-
-        // TODO SMS: integrate provider (Termii, Twilio, etc.)
-        // $this->sms->send($user->phone, "Your OTP is {$otp}");
-
-        $challengeToken = encrypt([
-            'uid' => $user->id,
-            'uuid' => $oneTimePassword->uuid,
-            'purpose' => 'login',
-            'exp' => now()->addMinutes(10)->timestamp,
-        ]);
-
-        return [
-            'challenge_token' => $challengeToken,
-            'expires_in' => 600,
-        ];
+        return max(1, (int) config('security.otp_minutes', 5));
     }
 
-    public function verifyLoginOtp(string $challengeToken, string $otpCode): User
+    private function otpSendCooldownSeconds(): int
     {
-        $payload = decrypt($challengeToken);
+        return max(1, (int) config('security.otp_send_cooldown_seconds'));
+    }
 
-        if (($payload['purpose'] ?? null) !== 'login') {
-            throw new ApiException('Invalid challenge token.', 422);
-        }
+    public function sendLoginOtp(User|Admin $subject): array
+    {
+        return $this->sendOtp($subject, OtpPurposeEnum::LOGIN, 'login');
+    }
 
-        if (now()->timestamp > (int) ($payload['exp'] ?? 0)) {
-            throw new ApiException('OTP token has expired.', 422);
-        }
-
-        $uuid = $payload['uuid'] ?? null;
-        $userId = $payload['uid'] ?? null;
-
-        if (! $uuid || ! $userId) {
-            throw new ApiException('Malformed challenge token.', 422);
-        }
-
-        $otp = $this->otpService->findByUuid($uuid);
-
-        if (! $otp || now()->greaterThan($otp->expires_at) || $otp->used_at) {
-            throw new ApiException('OTP expired or not found.', 422);
-        }
-
-        if ($otp->attempts >= 5) {
-            throw new ApiException('Too many attempts. Request a new OTP.', 422);
-        }
-
-        $this->otpService->incrementAttempts($otp->id);
-
-        if (! Hash::check($otpCode, $otp->code_hash)) {
-            throw new ApiException('Invalid OTP.', 422);
-        }
-
-        $this->otpService->markUsed($otp->id);
-
-        return User::findOrFail($userId);
+    public function verifyLoginOtp(string $challengeToken, string $otpCode): User|Admin
+    {
+        return $this->verifyOtp($challengeToken, $otpCode, OtpPurposeEnum::LOGIN);
     }
 
     public function resendLoginOtp(string $challengeToken): array
     {
-        $payload = decrypt($challengeToken);
+        $payload = $this->challengeTokenService->decode($challengeToken, OtpPurposeEnum::LOGIN);
+        $subject = $this->resolveSubjectFromPayload($payload);
 
-        if (($payload['purpose'] ?? null) !== self::PURPOSE_LOGIN) {
-            throw new ApiException('Invalid challenge token.', 422);
-        }
+        return $this->sendOtp($subject, OtpPurposeEnum::LOGIN, 'login');
+    }
 
-        if (now()->timestamp > (int) ($payload['exp'] ?? 0)) {
-            throw new ApiException('OTP challenge expired. Please login again.', 422);
-        }
+    public function sendPasswordResetOtp(User|Admin $subject): array
+    {
+        return $this->sendOtp($subject, OtpPurposeEnum::PASSWORD_RESET, 'password reset');
+    }
 
-        $uuid = $payload['uuid'] ?? null;
-        $userId = $payload['uid'] ?? null;
-
-        if (! $uuid || ! $userId) {
-            throw new ApiException('Malformed challenge token.', 422);
-        }
-
-        $otp = $this->otpService->findByUuid($uuid);
-
-        if (! $otp || $otp->used_at || now()->greaterThan($otp->expires_at)) {
-            throw new ApiException('OTP expired or already used. Please login again.', 422);
-        }
-
-        $secondsSinceLastSend = now()->diffInSeconds($otp->created_at);
-        if ($secondsSinceLastSend < self::RESEND_COOLDOWN_SECONDS) {
-            $wait = self::RESEND_COOLDOWN_SECONDS - $secondsSinceLastSend;
-            throw new ApiException("Please wait {$wait} seconds before requesting a new OTP.", 422);
-        }
-
-        $count = $this->otpService->countRecentResends($userId, self::PURPOSE_LOGIN, self::RESEND_WINDOW_MINUTES);
-        if ($count >= self::MAX_RESENDS_IN_WINDOW) {
-            throw new ApiException('Too many OTP requests. Please try again later.', 429);
-        }
-
-        $this->otpService->invalidateById($otp->id);
-
-        $newOtpCode = (string) random_int(100000, 999999);
-
-        $newOtp = $this->otpService->create([
-            'user_id' => $userId,
-            'purpose' => self::PURPOSE_LOGIN,
-            'code_hash' => Hash::make($newOtpCode),
-            'expires_at' => now()->addMinutes(self::OTP_EXP_MINUTES),
-        ]);
-
-        $user = User::findOrFail($userId);
-        $theme = app(ThemeResolver::class)->resolveForMail();
-
-        // Log::info('OtpService@resendLoginOtp: OTP resent', [
-        //     'email' => $user->email,
-        //     'otp' => $newOtpCode,
-        // ]);
-
-        Mail::to($user->email)->send(new LoginOtpMail($newOtpCode, 10, $theme));
-        // $user->notify(new \App\Notifications\LoginOtpNotification($newOtpCode));
-        // SMS provider call here too
-     
-        $newToken = encrypt([
-            'uuid' => $newOtp->uuid,
-            'uid' => $userId,
-            'purpose' => self::PURPOSE_LOGIN,
-            'exp' => now()->addMinutes(self::OTP_EXP_MINUTES)->timestamp,
-        ]);
+    public function verifyPasswordResetOtp(string $challengeToken, string $otpCode): array
+    {
+        $subject = $this->verifyOtp($challengeToken, $otpCode, OtpPurposeEnum::PASSWORD_RESET);
 
         return [
-            'challenge_token' => $newToken,
-            'expires_in' => self::OTP_EXP_MINUTES * 60,
+            'reset_token' => encrypt([
+                'subject_type' => $subject instanceof Admin ? UserTypeEnum::ADMIN->value : UserTypeEnum::CUSTOMER->value,
+                'subject_id' => $subject->uuid,
+                'purpose' => 'RESET_PASSWORD',
+                'exp' => now()->addMinutes(self::RESET_TOKEN_EXP_MINUTES)->timestamp,
+            ]),
+            'expires_in' => self::RESET_TOKEN_EXP_MINUTES * 60,
         ];
+    }
+
+    public function resendPasswordResetOtp(string $challengeToken): array
+    {
+        $payload = $this->challengeTokenService->decode($challengeToken, OtpPurposeEnum::PASSWORD_RESET);
+        $subject = $this->resolveSubjectFromPayload($payload);
+
+        return $this->sendOtp($subject, OtpPurposeEnum::PASSWORD_RESET, 'password reset');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function sendOtp(User|Admin $subject, OtpPurposeEnum $purpose, string $purposeLabel): array
+    {
+        $gate = $this->evaluateOtpSendGate($subject, $purpose);
+
+        if ($gate['mode'] === 'blocked') {
+            throw new ApiException(
+                OpaqueMessageHelper::MESSAGE_OTP_COOLDOWN_ACTIVE,
+                429,
+                [
+                    'retry_after_seconds' => $gate['retry_after_seconds'],
+                    'retry_after_human' => OpaqueMessageHelper::humanizeSecondsRemaining($gate['retry_after_seconds']),
+                    'cooldown_active' => true,
+                ]
+            );
+        }
+
+        if ($gate['mode'] === 'reuse') {
+            /** @var AuthChallenge $challenge */
+            $challenge = $gate['challenge'];
+            $ttlRemaining = max(1, $challenge->expires_at->getTimestamp() - time());
+
+            return [
+                'challenge_token' => $this->challengeTokenService->issue($challenge, $ttlRemaining),
+                'expires_in' => $ttlRemaining,
+                'cooldown_active' => true,
+                'retry_after_seconds' => $gate['retry_after_seconds'],
+                'retry_after_human' => OpaqueMessageHelper::humanizeSecondsRemaining($gate['retry_after_seconds']),
+            ];
+        }
+
+        [$plainOtp, $challenge] = DB::transaction(function () use ($subject, $purpose) {
+            AuthChallenge::query()
+                ->where('subject_type', $this->subjectType($subject))
+                ->where('subject_id', $subject->uuid)
+                ->where('purpose', $purpose->value)
+                ->whereNull('used_at')
+                ->update(['used_at' => now()]);
+
+            $otp = (string) random_int(100000, 999999);
+
+            $challenge = AuthChallenge::create([
+                'uuid' => (string) Str::uuid(),
+                'subject_type' => $this->subjectType($subject),
+                'subject_id' => $subject->uuid,
+                'purpose' => $purpose,
+                'channel' => 'email',
+                'code_hash' => Hash::make($otp),
+                'expires_at' => now()->addMinutes($this->otpExpiryMinutes()),
+            ]);
+
+            return [$otp, $challenge];
+        });
+
+        $theme = app(ThemeResolver::class)->resolveForMail();
+        Mail::to($subject->email)->send(new OTPMail($plainOtp, $this->otpExpiryMinutes(), $theme, $purpose));
+
+        $this->smsService->sendOtp(
+            data_get($subject, 'country_code'),
+            data_get($subject, 'phone_number'),
+            $plainOtp,
+            $this->otpExpiryMinutes(),
+            $purposeLabel
+        );
+
+        $ttlSeconds = $this->otpExpiryMinutes() * 60;
+
+        return [
+            'challenge_token' => $this->challengeTokenService->issue($challenge, $ttlSeconds),
+            'expires_in' => $ttlSeconds,
+            'cooldown_active' => false,
+        ];
+    }
+
+    /**
+     * @return array{
+     *     mode: 'send_new'|'reuse'|'blocked',
+     *     challenge?: AuthChallenge,
+     *     retry_after_seconds?: int
+     * }
+     */
+    private function evaluateOtpSendGate(User|Admin $subject, OtpPurposeEnum $purpose): array
+    {
+        $cooldownSec = $this->otpSendCooldownSeconds();
+        $subjectType = $this->subjectType($subject);
+
+        $last = AuthChallenge::query()
+            ->where('subject_type', $subjectType)
+            ->where('subject_id', $subject->uuid)
+            ->where('purpose', $purpose->value)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($last === null) {
+            return ['mode' => 'send_new'];
+        }
+
+        $elapsed = now()->getTimestamp() - $last->created_at->getTimestamp();
+        if ($elapsed >= $cooldownSec) {
+            return ['mode' => 'send_new'];
+        }
+
+        $retryAfter = max(1, $cooldownSec - $elapsed);
+
+        $active = AuthChallenge::query()
+            ->where('subject_type', $subjectType)
+            ->where('subject_id', $subject->uuid)
+            ->where('purpose', $purpose->value)
+            ->whereNull('used_at')
+            ->where('expires_at', '>', now())
+            ->orderByDesc('id')
+            ->first();
+
+        if ($active !== null) {
+            return ['mode' => 'reuse', 'challenge' => $active, 'retry_after_seconds' => $retryAfter];
+        }
+
+        return ['mode' => 'blocked', 'retry_after_seconds' => $retryAfter];
+    }
+
+    private function verifyOtp(string $challengeToken, string $otpCode, OtpPurposeEnum $purpose): User|Admin
+    {
+        $payload = $this->challengeTokenService->decode($challengeToken, $purpose);
+
+        $challenge = AuthChallenge::query()
+            ->where('uuid', $payload['challenge_uuid'])
+            ->where('subject_type', $payload['subject_type'])
+            ->where('subject_id', $payload['subject_id'])
+            ->where('purpose', $purpose->value)
+            ->first();
+
+        if (! $challenge || $challenge->used_at || now()->greaterThan($challenge->expires_at)) {
+            throw new ApiException('Invalid or expired verification code.', 422);
+        }
+
+        $latest = AuthChallenge::query()
+            ->where('subject_type', $challenge->subject_type)
+            ->where('subject_id', $challenge->subject_id)
+            ->where('purpose', $purpose->value)
+            ->whereNull('used_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $latest || $latest->id !== $challenge->id || $challenge->attempts >= self::MAX_ATTEMPTS) {
+            throw new ApiException('Invalid or expired verification code.', 422);
+        }
+
+        $challenge->increment('attempts');
+
+        if (! Hash::check($otpCode, $challenge->code_hash)) {
+            throw new ApiException('Invalid or expired verification code.', 422);
+        }
+
+        $challenge->forceFill(['used_at' => now()])->save();
+
+        return $this->resolveSubject($challenge);
+    }
+
+    private function subjectType(User|Admin $subject): string
+    {
+        return $subject instanceof Admin ? UserTypeEnum::ADMIN->value : UserTypeEnum::CUSTOMER->value;
+    }
+
+    private function resolveSubject(AuthChallenge $challenge): User|Admin
+    {
+        if ($challenge->subject_type === UserTypeEnum::ADMIN->value) {
+            return Admin::query()->where('uuid', $challenge->subject_id)->firstOrFail();
+        }
+
+        return User::query()->where('uuid', $challenge->subject_id)->firstOrFail();
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function resolveSubjectFromPayload(array $payload): User|Admin
+    {
+        if ($payload['subject_type'] === UserTypeEnum::ADMIN->value) {
+            return Admin::query()->where('uuid', $payload['subject_id'])->firstOrFail();
+        }
+
+        return User::query()->where('uuid', $payload['subject_id'])->firstOrFail();
     }
 }

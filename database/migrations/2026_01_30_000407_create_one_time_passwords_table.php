@@ -18,7 +18,7 @@ return new class extends Migration
             $table->string('purpose')->default('login');
             $table->string('channel')->nullable();
             $table->string('code_hash');
-            $table->timestamp('expires_at');
+            $table->timestamp('expires_at')->nullable();
             $table->unsignedTinyInteger('attempts')->default(0);
             $table->timestamp('used_at')->nullable();
             $table->boolean('used')->default(false);

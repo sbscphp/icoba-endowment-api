@@ -1,0 +1,14 @@
+<?php
+
+namespace App\Enums;
+
+enum AuditActionEnum: string
+{
+    case LOGIN_SUCCESS = 'LOGIN_SUCCESS';
+    case LOGIN_FAILED = 'LOGIN_FAILED';
+    case OTP_SENT = 'OTP_SENT';
+    case OTP_VERIFIED = 'OTP_VERIFIED';
+    case OTP_FAILED = 'OTP_FAILED';
+    case PASSWORD_RESET_REQUESTED = 'PASSWORD_RESET_REQUESTED';
+    case PASSWORD_RESET_COMPLETED = 'PASSWORD_RESET_COMPLETED';
+}

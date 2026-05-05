@@ -3,10 +3,10 @@
 namespace App\Http\Requests\Settings;
 
 use App\Concerns\PasswordValidationRules;
+use App\Http\Requests\ApiFormRequest;
 use Illuminate\Contracts\Validation\ValidationRule;
-use Illuminate\Foundation\Http\FormRequest;
 
-class PasswordUpdateRequest extends FormRequest
+class PasswordUpdateRequest extends ApiFormRequest
 {
     use PasswordValidationRules;
 
@@ -21,5 +21,21 @@ class PasswordUpdateRequest extends FormRequest
             'current_password' => $this->currentPasswordRules(),
             'password' => $this->passwordRules(),
         ];
+    }
+
+    public function attributes(): array
+    {
+        return array_merge(parent::attributes(), [
+            'password' => 'new password',
+        ]);
+    }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'current_password.required' => 'Please enter your current password.',
+            'password.required' => 'Please enter your new password.',
+            'password.confirmed' => 'The password confirmation does not match.',
+        ]);
     }
 }

@@ -35,4 +35,18 @@ return [
         ],
     ],
 
+    'sms' => [
+        'driver' => env('SMS_PROVIDER', 'log'),
+        'infobip' => [
+            'base_url' => env('INFOBIP_BASE_URL'),
+            'api_key' => env('INFOBIP_API_KEY'),
+            'sender' => env('INFOBIP_SENDER', env('APP_NAME', 'Laravel')),
+        ],
+        'termii' => [
+            'base_url' => env('TERMII_BASE_URL'),
+            'api_key' => env('TERMII_API_KEY'),
+            'sender' => env('TERMII_SENDER', env('APP_NAME', 'Laravel')),
+        ],
+    ],
+
 ];

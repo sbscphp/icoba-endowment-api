@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers\v1\Auth;
 
+use App\Exceptions\ApiException;
+use App\Helpers\GeneralHelper;
+use App\Helpers\OpaqueMessageHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\ForgotPasswordRequest;
+use App\Http\Requests\Auth\ResendOtpRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
+use App\Http\Requests\Auth\VerifyResetOtpRequest;
 use App\Responser\JsonResponser;
 use App\Services\Auth\PasswordResetService;
-use Illuminate\Support\Facades\Log;
 
 class PasswordController extends Controller
 {
@@ -15,30 +19,70 @@ class PasswordController extends Controller
 
     public function forgotPassword(ForgotPasswordRequest $request)
     {
-        $data = $request->validated();
+        try {
+            $payload = $this->passwordResetService->requestReset((string) $request->input('email'), $request);
 
-        $this->passwordResetService->sendResetLink($data['email']);
+            $message = OpaqueMessageHelper::authOpaqueEnabled('forgot_password')
+                ? 'If an account matches what you entered, a verification code will be sent.'
+                : 'Verification code sent.';
 
-        return JsonResponser::send(false, 'If your email exists, a reset link has been sent.', null, 200);
+            return JsonResponser::send(false, $message, $payload, 200);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'PasswordController@forgotPassword');
+        }
+    }
+
+    public function forgotPasswordResend(ResendOtpRequest $request)
+    {
+        try {
+            $payload = $this->passwordResetService->resendResetOtp((string) $request->input('challenge_token'), $request);
+
+            return JsonResponser::send(false, 'If the verification session is valid, a new code will be sent.', $payload, 200);
+        } catch (ApiException $e) {
+            if ($e->status === 429 && $e->payload !== null) {
+                return JsonResponser::send(true, $e->getMessage(), $e->payload, 429);
+            }
+
+            if (! OpaqueMessageHelper::authOpaqueEnabled('forgot_password')) {
+                throw $e;
+            }
+
+            return JsonResponser::send(false, 'If the verification session is valid, a new code will be sent.', [
+                'challenge_token' => null,
+                'expires_in' => null,
+            ], 200);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'PasswordController@forgotPasswordResend');
+        }
+    }
+
+    public function forgotPasswordVerify(VerifyResetOtpRequest $request)
+    {
+        try {
+            $payload = $this->passwordResetService->verifyResetOtp(
+                (string) $request->input('challenge_token'),
+                (string) $request->input('otp'),
+                $request
+            );
+
+            return JsonResponser::send(false, 'Code verified. You may now reset your password.', $payload, 200);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'PasswordController@forgotPasswordVerify');
+        }
     }
 
     public function resetPassword(ResetPasswordRequest $request)
     {
         try {
-            $data = $request->validated();
-
             $this->passwordResetService->resetPassword(
-                $data['email'],
-                $data['token'],
-                $data['password']
+                (string) $request->input('reset_token'),
+                (string) $request->input('password'),
+                $request
             );
 
             return JsonResponser::send(false, 'Password reset successful.', null, 200);
-        } catch (\Exception $e) {
-            return JsonResponser::send(true, $e->getMessage(), null, 422);
         } catch (\Throwable $th) {
-            Log::error('PasswordController@resetPassword: ' . $th->getMessage(), ['trace' => $th->getTraceAsString()]);
-            return JsonResponser::send(true, 'An error occurred. Please try again later.', null, 500, $th);
+            return GeneralHelper::handleControllerThrowable($th, 'PasswordController@resetPassword');
         }
     }
 }

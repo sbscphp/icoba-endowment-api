@@ -5,7 +5,7 @@ namespace App\Enums;
 enum eClientType: string
 {
     case MOBILE = 'mobile';
-    case ADMIN  = 'admin';
+    case WEB = 'web';
 
     /**
      * Values array for validation

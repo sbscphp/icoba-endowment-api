@@ -15,5 +15,5 @@ jobs:
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ftp.jkp.mje.mybluehost.me
-          username: developer@apfspn-api.sbscuk.co.uk
-          password: ^a]_^]F#5XXg
+          username: developer@api.icoba-endowment.sbscuk.co.uk
+          password: A2$,RtXLQ8s@

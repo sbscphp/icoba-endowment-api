@@ -4,20 +4,20 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 
+use App\Notifications\Auth\ResetPasswordMail;
 use App\Traits\HasUuid;
+use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
-use App\Notifications\Auth\ResetPasswordMail;
 
 class User extends Authenticatable
 {
-
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable, TwoFactorAuthenticatable, HasUuid, HasRoles;
+    /** @use HasFactory<UserFactory> */
+    use HasApiTokens, HasFactory, HasRoles, HasUuid, Notifiable, TwoFactorAuthenticatable;
 
     /**
      * The attributes that are mass assignable.
@@ -36,6 +36,7 @@ class User extends Authenticatable
         'two_factor_secret',
         'two_factor_recovery_codes',
         'remember_token',
+        '2fa_expires_at',
     ];
 
     /**
@@ -47,16 +48,22 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            '2fa' => 'boolean',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
+            'last_login_at' => 'datetime',
+            'login_attempts' => 'integer',
+            'is_locked' => 'boolean',
+            'locked_at' => 'datetime',
+            'last_active_at' => 'datetime',
         ];
     }
 
     public function sendPasswordResetNotification($token): void
     {
         $resetUrl = config('app.frontend_url')
-            . '/reset-password?token=' . $token
-            . '&email=' . urlencode($this->email);
+            .'/reset-password?token='.$token
+            .'&email='.urlencode($this->email);
 
         $this->notify(new ResetPasswordMail($token, $resetUrl));
     }
