@@ -142,6 +142,36 @@ API_USER_DEV_REGISTRATION_SECRET=change-me
 
 ### Client Integration Guide
 
+#### Frontend/Client Key Usage (What to Share with Integrators)
+
+- `X-ClientKey` is a client identifier header. It tells the API which API user profile to resolve.
+- `encryption_key` and `iv` are private cryptographic materials used to encrypt/decrypt payload content.
+- The server uses `X-ClientKey` to fetch the matching encryption settings before decrypting/encrypting.
+
+Header contract for encrypted calls:
+
+```http
+Content-Type: application/json
+X-ClientKey: <client_key>
+Authorization: Bearer <token>   # where endpoint requires auth
+```
+
+Encrypted request/response flow:
+
+1. Build normal JSON payload.
+2. Serialize (`JSON.stringify` or equivalent).
+3. Encrypt with `encryption_key` + `iv`.
+4. Send `{ "payload": "<base64-ciphertext>" }` with `X-ClientKey` header.
+5. Receive `{ "response": "<base64-ciphertext>" }`.
+6. Decrypt `response` with the same `encryption_key` + `iv`.
+7. Parse decrypted JSON.
+
+Security architecture note:
+
+- Browser apps cannot keep `encryption_key`/`iv` truly secret if shipped in client bundles.
+- Recommended for web: use a BFF/proxy backend to hold cryptographic secrets and perform encryption/decryption server-side.
+- Native mobile apps may store secrets in platform secure storage (Keychain/Keystore), but must still treat them as sensitive.
+
 #### 1) Send Encrypted Request (mode: `both` / `request_only`)
 
 1. Serialize payload to JSON string.
