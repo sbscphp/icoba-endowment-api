@@ -121,6 +121,24 @@ class AuthService
 
         $this->resetLoginLockState($admin);
 
+        if (! $this->adminRequiresLoginOtp($admin)) {
+            $payload = $this->issueToken($admin, $client, ['admin']);
+            $admin->forceFill(['last_login_at' => now()])->save();
+            GeneralHelper::storeAuditLog(
+                UserTypeEnum::ADMIN,
+                AuditActionEnum::LOGIN_SUCCESS,
+                $request,
+                $admin->uuid,
+                ['two_factor' => false],
+                $this->displayName($admin).' logged in successfuly.',
+                Admin::class,
+                $admin->uuid,
+                AuditModuleEnum::AUTHENTICATION
+            );
+
+            return $payload;
+        }
+
         $payload = $this->otpService->sendLoginOtp($admin);
         GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_SENT, $request, $admin->uuid, [
             'purpose' => 'LOGIN',
@@ -385,5 +403,10 @@ class AuthService
     private function customerRequiresLoginOtp(User $user): bool
     {
         return (bool) $user->{'2fa'};
+    }
+
+    private function adminRequiresLoginOtp(Admin $admin): bool
+    {
+        return (bool) $admin->{'2fa'};
     }
 }

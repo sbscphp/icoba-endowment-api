@@ -15,6 +15,7 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+            $table->boolean('2fa')->default(false)->comment('True, False');
             $table->boolean('is_active')->default(true)->index();
             $table->boolean('can_login')->default(true)->index();
             $table->timestamp('last_login_at')->nullable()->index();

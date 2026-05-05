@@ -28,6 +28,7 @@ class Admin extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            '2fa' => 'boolean',
             'is_active' => 'boolean',
             'can_login' => 'boolean',
             'last_login_at' => 'datetime',
