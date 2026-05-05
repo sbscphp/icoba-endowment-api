@@ -30,7 +30,7 @@ final class ApiCryptoHelperController extends Controller
         private readonly ApiUserRepositoryInterface $apiUsers,
     ) {}
 
-    public function encrypt(CryptoHelperEncryptRequest $request): JsonResponse
+    public function encrypt(CryptoHelperEncryptRequest $request)
     {
         $user = $this->requireApiUser($request->headers);
 
@@ -76,7 +76,7 @@ final class ApiCryptoHelperController extends Controller
         );
     }
 
-    public function decrypt(CryptoHelperDecryptRequest $request): JsonResponse
+    public function decrypt(CryptoHelperDecryptRequest $request)
     {
         $user = $this->requireApiUser($request->headers);
 
@@ -107,7 +107,7 @@ final class ApiCryptoHelperController extends Controller
         );
     }
 
-    private function requireApiUser(\Symfony\Component\HttpFoundation\HeaderBag $headers): ApiUserResource
+    private function requireApiUser(\Symfony\Component\HttpFoundation\HeaderBag $headers)
     {
         if (! config('security.api_user_dev_registration.enabled')) {
             abort(403, 'Disabled.');
