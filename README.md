@@ -1,4 +1,4 @@
-# apfspn-api
+# icoba-endowment-api
 
 ## Authentication & Security
 
