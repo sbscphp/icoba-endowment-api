@@ -33,6 +33,7 @@ class Admin extends Authenticatable
             'push_notifications_enabled' => 'boolean',
             'is_active' => 'boolean',
             'can_login' => 'boolean',
+            'must_reset_password' => 'boolean',
             'last_login_at' => 'datetime',
             'login_attempts' => 'integer',
             'is_locked' => 'boolean',

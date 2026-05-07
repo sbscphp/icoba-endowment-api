@@ -42,6 +42,7 @@ class AuthResource extends JsonResource
             'push_notifications_enabled' => (bool) $admin->push_notifications_enabled,
             'is_active' => $admin->is_active,
             'can_login' => $admin->can_login,
+            'must_reset_password' => (bool) $admin->must_reset_password,
             'last_login_at' => $admin->last_login_at,
             'last_active_at' => $admin->last_active_at,
             'created_at' => $admin->created_at,

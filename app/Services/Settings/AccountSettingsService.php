@@ -35,6 +35,7 @@ class AccountSettingsService
             '2fa' => (bool) $admin->{'2fa'},
             'is_active' => (bool) $admin->is_active,
             'can_login' => (bool) $admin->can_login,
+            'must_reset_password' => (bool) $admin->must_reset_password,
             'email_notifications_enabled' => (bool) $admin->email_notifications_enabled,
             'push_notifications_enabled' => (bool) $admin->push_notifications_enabled,
             'roles' => $admin->roles->pluck('name')->values(),
@@ -52,11 +53,15 @@ class AccountSettingsService
 
         if (Hash::check($newPassword, (string) $authenticatable->password)) {
             throw new ApiException('You cannot reuse your current password.', 422);
-        }
-
-        $authenticatable->forceFill([
+        }        $updates = [
             'password' => $newPassword,
-        ])->save();
+        ];
+
+        if ($authenticatable instanceof Admin) {
+            $updates['must_reset_password'] = false;
+    \}
+
+        $authenticatable->forceFill($updates)->save();
     }
 
     /**

@@ -12,8 +12,8 @@ use App\Models\AuditLog;
 use App\Responser\JsonResponser;
 use App\Services\Audit\AuditTrailQueryService;
 use App\Support\ListingQuery;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
-use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AuditTrailController extends Controller
@@ -23,7 +23,7 @@ class AuditTrailController extends Controller
         private readonly PDFReportHelper $pdfReportHelper,
     ) {}
 
-    public function index(AuditTrailListingRequest $request): SymfonyResponse
+    public function index(AuditTrailListingRequest $request)
     {
         try {
             $listing = ListingQuery::fromValidated($request->validated());
@@ -32,22 +32,27 @@ class AuditTrailController extends Controller
             return match ($export) {
                 'csv' => $this->respondCsv($listing),
                 'pdf' => $this->respondPdf($listing),
-                default => JsonResponser::send(
-                    false,
-                    'Audit logs retrieved.',
-                    AuditLogResource::collection(
-                        $this->auditTrailQuery
-                            ->queryForListing($listing)
-                            ->paginate(perPage: $listing->perPage, page: $listing->page)
-                    )->resolve(),
-                ),
+                default => $this->respondPaginated($listing),
             };
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\AuditTrail\AuditTrailController@index');
         }
     }
 
-    private function respondCsv(ListingQuery $listing): StreamedResponse|SymfonyResponse
+    private function respondPaginated(ListingQuery $listing)
+    {
+        $paginator = $this->auditTrailQuery
+            ->queryForListing($listing)
+            ->paginate(perPage: $listing->perPage, page: $listing->page);
+
+        return JsonResponser::send(
+            false,
+            'Audit logs retrieved.',
+            $this->paginatedPayload($paginator)
+        );
+    }
+
+    private function respondCsv(ListingQuery $listing): StreamedResponse
     {
         /** @var Collection<int, AuditLog> $collection */
         [$collection, $truncated] = $this->auditTrailQuery->exportCollection($listing);
@@ -89,7 +94,7 @@ class AuditTrailController extends Controller
         ]);
     }
 
-    private function respondPdf(ListingQuery $listing): SymfonyResponse
+    private function respondPdf(ListingQuery $listing)
     {
         /** @var Collection<int, AuditLog> $collection */
         [$collection, $truncated] = $this->auditTrailQuery->exportCollection($listing);
@@ -204,5 +209,16 @@ class AuditTrailController extends Controller
         }
 
         return substr($text, 0, $max).'…';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function paginatedPayload(LengthAwarePaginator $paginator): array
+    {
+        $payload = $paginator->toArray();
+        $payload['data'] = AuditLogResource::collection($paginator)->resolve();
+
+        return $payload;
     }
 }
