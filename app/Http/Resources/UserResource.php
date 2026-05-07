@@ -45,12 +45,16 @@ class UserResource extends JsonResource
      */
     private function donorPayload(): array
     {
+        $donorType = $this->relationLoaded('donorType') ? $this->donorType : $this->donorType()->first();
+        $graduationSet = $this->relationLoaded('graduationSet') ? $this->graduationSet : $this->graduationSet()->first();
+        $corporateCategory = $this->relationLoaded('corporateCategory') ? $this->corporateCategory : $this->corporateCategory()->first();
+
         $type = null;
 
-        if ($this->relationLoaded('donorType') && $this->donorType !== null) {
+        if ($donorType !== null) {
             $type = [
-                'slug' => $this->donorType->slug,
-                'label' => $this->donorType->label,
+                'slug' => $donorType->slug,
+                'label' => $donorType->label,
             ];
         } elseif (! empty($this->organization_name)) {
             $type = [
@@ -73,11 +77,11 @@ class UserResource extends JsonResource
             'type' => $type,
             'organization_name' => $this->organization_name,
             'alumni_identifier' => $this->alumni_identifier,
-            'set' => $this->relationLoaded('graduationSet') && $this->graduationSet !== null
-                ? $this->graduationSet->only(['uuid', 'name', 'set_number', 'public_id'])
+            'set' => $graduationSet !== null
+                ? $graduationSet->only(['uuid', 'name', 'set_number', 'public_id'])
                 : null,
-            'corporate_category' => $this->relationLoaded('corporateCategory') && $this->corporateCategory !== null
-                ? $this->corporateCategory->only(['uuid', 'name'])
+            'corporate_category' => $corporateCategory !== null
+                ? $corporateCategory->only(['uuid', 'name'])
                 : null,
         ];
     }

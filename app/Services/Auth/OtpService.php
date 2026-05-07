@@ -145,6 +145,7 @@ class OtpService
                 'cooldown_active' => true,
                 'retry_after_seconds' => $gate['retry_after_seconds'],
                 'retry_after_human' => OpaqueMessageHelper::humanizeSecondsRemaining($gate['retry_after_seconds']),
+                'otp_purpose' => $purpose->value,
             ];
         }
 
@@ -188,6 +189,7 @@ class OtpService
             'challenge_token' => $this->challengeTokenService->issue($challenge, $ttlSeconds),
             'expires_in' => $ttlSeconds,
             'cooldown_active' => false,
+            'otp_purpose' => $purpose->value,
         ];
     }
 

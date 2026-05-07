@@ -37,6 +37,8 @@ Route::prefix('v1/admin')->group(function () {
     Route::prefix('settings')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/profile', [SettingsController::class, 'profile']);
         Route::patch('/password', [SettingsController::class, 'changePassword']);
+        Route::post('/password', [SettingsController::class, 'changePassword']);
         Route::patch('/notifications', [SettingsController::class, 'updateNotificationPreferences']);
+        Route::post('/notifications', [SettingsController::class, 'updateNotificationPreferences']);
     });
 });

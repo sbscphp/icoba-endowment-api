@@ -38,8 +38,8 @@ class UpdateNotificationPreferencesRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            'email_notifications_enabled' => ['sometimes', 'boolean', 'required_without:push_notifications_enabled'],
-            'push_notifications_enabled' => ['sometimes', 'boolean', 'required_without:email_notifications_enabled'],
+            'email_notifications_enabled' => ['required_without:push_notifications_enabled', 'boolean'],
+            'push_notifications_enabled' => ['required_without:email_notifications_enabled', 'boolean'],
         ];
     }
 }

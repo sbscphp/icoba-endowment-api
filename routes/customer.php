@@ -38,6 +38,8 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->prefix('settings')->group(function () {
         Route::get('/profile', [SettingsController::class, 'profile']);
         Route::patch('/password', [SettingsController::class, 'changePassword']);
+        Route::post('/password', [SettingsController::class, 'changePassword']);
         Route::patch('/notifications', [SettingsController::class, 'updateNotificationPreferences']);
+        Route::post('/notifications', [SettingsController::class, 'updateNotificationPreferences']);
     });
 });
