@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\v1\Auth;
+namespace App\Http\Controllers\v1\Customer\Auth;
 
 use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
@@ -28,7 +28,7 @@ class PasswordController extends Controller
 
             return JsonResponser::send(false, $message, $payload, 200);
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'PasswordController@forgotPassword');
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Auth\PasswordController@forgotPassword');
         }
     }
 
@@ -52,7 +52,7 @@ class PasswordController extends Controller
                 'expires_in' => null,
             ], 200);
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'PasswordController@forgotPasswordResend');
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Auth\PasswordController@forgotPasswordResend');
         }
     }
 
@@ -67,7 +67,7 @@ class PasswordController extends Controller
 
             return JsonResponser::send(false, 'Code verified. You may now reset your password.', $payload, 200);
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'PasswordController@forgotPasswordVerify');
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Auth\PasswordController@forgotPasswordVerify');
         }
     }
 
@@ -82,7 +82,7 @@ class PasswordController extends Controller
 
             return JsonResponser::send(false, 'Password reset successful.', null, 200);
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'PasswordController@resetPassword');
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Auth\PasswordController@resetPassword');
         }
     }
 }

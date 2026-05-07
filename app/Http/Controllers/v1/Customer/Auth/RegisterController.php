@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\v1\Auth;
+namespace App\Http\Controllers\v1\Customer\Auth;
 
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
@@ -29,7 +29,7 @@ class RegisterController extends Controller
                 200
             );
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'RegisterController@metadata');
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Auth\RegisterController@metadata');
         }
     }
 
@@ -48,7 +48,7 @@ class RegisterController extends Controller
                 201
             );
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'RegisterController@store');
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Auth\RegisterController@store');
         }
     }
 }
