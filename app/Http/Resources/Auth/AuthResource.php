@@ -38,6 +38,8 @@ class AuthResource extends JsonResource
             'name' => $admin->name,
             'email' => $admin->email,
             'email_verified_at' => $admin->email_verified_at,
+            'email_notifications_enabled' => (bool) $admin->email_notifications_enabled,
+            'push_notifications_enabled' => (bool) $admin->push_notifications_enabled,
             'is_active' => $admin->is_active,
             'can_login' => $admin->can_login,
             'last_login_at' => $admin->last_login_at,

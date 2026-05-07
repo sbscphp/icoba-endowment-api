@@ -3,6 +3,7 @@
 use App\Http\Controllers\v1\Admin\AuditTrail\AuditTrailController;
 use App\Http\Controllers\v1\Admin\Auth\AdminLoginController;
 use App\Http\Controllers\v1\Admin\Notification\NotificationController;
+use App\Http\Controllers\v1\Admin\Settings\SettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1/admin')->group(function () {
@@ -31,5 +32,11 @@ Route::prefix('v1/admin')->group(function () {
 
     Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
         Route::get('/users', fn () => 'admin only');
+    });
+
+    Route::prefix('settings')->middleware(['auth:sanctum'])->group(function () {
+        Route::get('/profile', [SettingsController::class, 'profile']);
+        Route::patch('/password', [SettingsController::class, 'changePassword']);
+        Route::patch('/notifications', [SettingsController::class, 'updateNotificationPreferences']);
     });
 });

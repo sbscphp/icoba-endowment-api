@@ -41,7 +41,7 @@ class GenericDatabaseNotification extends Notification implements ShouldQueue
     {
         $channels = ['database'];
 
-        if ($this->sendMail) {
+        if ($this->sendMail && $this->canSendMailTo($notifiable)) {
             $channels[] = 'mail';
         }
 
@@ -82,5 +82,10 @@ class GenericDatabaseNotification extends Notification implements ShouldQueue
             'send_mail' => $this->sendMail,
             'send_push' => $this->sendPush,
         ];
+    }
+
+    private function canSendMailTo(object $notifiable): bool
+    {
+        return (bool) data_get($notifiable, 'email_notifications_enabled', true);
     }
 }

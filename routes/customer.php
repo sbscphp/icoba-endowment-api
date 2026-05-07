@@ -5,6 +5,7 @@ use App\Http\Controllers\v1\Customer\Auth\LoginController;
 use App\Http\Controllers\v1\Customer\Auth\PasswordController;
 use App\Http\Controllers\v1\Customer\Auth\RegisterController;
 use App\Http\Controllers\v1\Customer\Notification\NotificationController;
+use App\Http\Controllers\v1\Customer\Settings\SettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -32,5 +33,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/{id}', [NotificationController::class, 'show']);
         Route::patch('/{id}/read', [NotificationController::class, 'markRead']);
         Route::patch('/{id}/unread', [NotificationController::class, 'markUnread']);
+    });
+
+    Route::middleware('auth:sanctum')->prefix('settings')->group(function () {
+        Route::get('/profile', [SettingsController::class, 'profile']);
+        Route::patch('/password', [SettingsController::class, 'changePassword']);
+        Route::patch('/notifications', [SettingsController::class, 'updateNotificationPreferences']);
     });
 });

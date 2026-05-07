@@ -51,6 +51,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             '2fa' => 'boolean',
             'password' => 'hashed',
+            'email_notifications_enabled' => 'boolean',
+            'push_notifications_enabled' => 'boolean',
             'two_factor_confirmed_at' => 'datetime',
             'last_login_at' => 'datetime',
             'login_attempts' => 'integer',
