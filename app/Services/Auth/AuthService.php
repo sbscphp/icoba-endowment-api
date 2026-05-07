@@ -219,6 +219,14 @@ class AuthService
 
         $this->resetLoginLockState($admin);
 
+        if ((bool) $admin->must_reset_password) {
+            throw new ApiException(
+                'Password reset is required before you can continue.',
+                403,
+                ['must_reset_password' => true]
+            );
+        }
+
         if (! $this->adminRequiresLoginOtp($admin)) {
             $payload = $this->issueToken($admin, $client, ['admin']);
             $admin->forceFill(['last_login_at' => now()])->save();
@@ -392,6 +400,14 @@ class AuthService
                     ? OpaqueMessageHelper::MESSAGE_GENERIC_LOGIN_OTP_VERIFY_FAILURE
                     : 'Invalid or expired verification code.',
                 422
+            );
+        }
+
+        if ((bool) $admin->must_reset_password) {
+            throw new ApiException(
+                'Password reset is required before you can continue.',
+                403,
+                ['must_reset_password' => true]
             );
         }
 

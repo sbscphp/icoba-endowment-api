@@ -4,9 +4,9 @@ namespace App\Enums;
 
 enum eRole: string
 {
-    case ADMIN = 'admin';
-    case CUSTOMER = 'customer';
-    case SUPER_ADMIN = 'super_admin';
+    case ADMIN = 'Admin';
+    case CUSTOMER = 'Customer';
+    case SUPER_ADMIN = 'Super Admin';
 
     /**
      * Role names synced by the roles/permissions database seeder.

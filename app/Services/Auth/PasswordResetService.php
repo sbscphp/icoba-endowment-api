@@ -65,10 +65,74 @@ class PasswordResetService
         return $payload;
     }
 
+    public function requestAdminReset(string $email, Request $request): array
+    {
+        $admin = Admin::query()->where('email', $email)->first();
+
+        if (! $admin) {
+            if (! OpaqueMessageHelper::authOpaqueEnabled('forgot_password')) {
+                throw new ApiException('No account found for this email address.', 404);
+            }
+
+            Hash::check(Str::random(16), self::DUMMY_BCRYPT_FOR_TIMING);
+            GeneralHelper::storeAuditLog(
+                UserTypeEnum::ADMIN,
+                AuditActionEnum::PASSWORD_RESET_REQUESTED,
+                $request,
+                null,
+                ['identifier_hash' => hash('sha256', $email)],
+                'Password reset was requested for an admin identifier.',
+                Admin::class,
+                null,
+                ModuleEnums::authentication,
+                200
+            );
+
+            return [
+                'challenge_token' => Str::random(96),
+                'expires_in' => max(1, (int) config('security.otp_minutes', 5)) * 60,
+            ];
+        }
+
+        $payload = $this->otpService->sendPasswordResetOtp($admin);
+
+        GeneralHelper::storeAuditLog(
+            UserTypeEnum::ADMIN,
+            AuditActionEnum::PASSWORD_RESET_REQUESTED,
+            $request,
+            $admin->uuid,
+            [],
+            $this->displayName($admin).' requested a password reset.',
+            Admin::class,
+            $admin->uuid,
+            ModuleEnums::authentication,
+            200
+        );
+
+        GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_SENT, $request, $admin->uuid, [
+            'purpose' => 'PASSWORD_RESET',
+            'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
+        ], 'Password reset OTP was sent.', Admin::class, $admin->uuid, ModuleEnums::authentication, 200);
+
+        return $payload;
+    }
+
     public function resendResetOtp(string $challengeToken, Request $request): array
     {
         $payload = $this->otpService->resendPasswordResetOtp($challengeToken);
         GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, null, [
+            'purpose' => 'PASSWORD_RESET',
+            'resend' => true,
+            'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
+        ], 'Password reset OTP was resent.', null, null, ModuleEnums::authentication, 200);
+
+        return $payload;
+    }
+
+    public function resendAdminResetOtp(string $challengeToken, Request $request): array
+    {
+        $payload = $this->otpService->resendPasswordResetOtp($challengeToken);
+        GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_SENT, $request, null, [
             'purpose' => 'PASSWORD_RESET',
             'resend' => true,
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
@@ -96,6 +160,25 @@ class PasswordResetService
         return $payload;
     }
 
+    public function verifyAdminResetOtp(string $challengeToken, string $otp, Request $request): array
+    {
+        try {
+            $payload = $this->otpService->verifyPasswordResetOtp($challengeToken, $otp);
+        } catch (\Throwable $th) {
+            GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_FAILED, $request, null, [
+                'purpose' => 'PASSWORD_RESET',
+            ], 'Password reset OTP verification failed.', null, null, ModuleEnums::authentication, 422);
+
+            throw $th;
+        }
+
+        GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_VERIFIED, $request, null, [
+            'purpose' => 'PASSWORD_RESET',
+        ], 'Password reset OTP verified successfully.', null, null, ModuleEnums::authentication, 200);
+
+        return $payload;
+    }
+
     public function resetPassword(string $resetToken, string $password, Request $request): void
     {
         $payload = $this->decodeResetToken($resetToken);
@@ -106,10 +189,14 @@ class PasswordResetService
             throw new ApiException('Your new password must be different from your current password.', 422);
         }
 
-        $subject->forceFill([
+        $updates = [
             'password' => Hash::make($password),
             'remember_token' => Str::random(60),
-        ])->save();
+        ];
+        if ($subject instanceof Admin) {
+            $updates['must_reset_password'] = false;
+        }
+        $subject->forceFill($updates)->save();
 
         $subject->tokens()->delete();
         event(new PasswordReset($subject));
@@ -127,6 +214,19 @@ class PasswordResetService
             ModuleEnums::authentication,
             200,
         );
+    }
+
+    public function issueResetTokenFor(User|Admin $subject): string
+    {
+        $expiresMinutes = (int) config('auth.passwords.'.($subject instanceof Admin ? 'admins' : 'users').'.expire', 60);
+        $exp = now()->addMinutes(max(1, $expiresMinutes))->timestamp;
+
+        return encrypt([
+            'purpose' => 'RESET_PASSWORD',
+            'exp' => $exp,
+            'subject_type' => $subject instanceof Admin ? UserTypeEnum::ADMIN->value : UserTypeEnum::CUSTOMER->value,
+            'subject_id' => $subject->uuid,
+        ]);
     }
 
     /**
@@ -171,4 +271,5 @@ class PasswordResetService
 
         return trim($subject->firstname.' '.$subject->lastname) ?: $subject->email;
     }
+
 }
