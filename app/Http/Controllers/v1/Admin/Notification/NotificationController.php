@@ -1,0 +1,95 @@
+<?php
+
+namespace App\Http\Controllers\v1\Admin\Notification;
+
+use App\Helpers\GeneralHelper;
+use App\Http\Controllers\Controller;
+use App\Http\Resources\DatabaseNotificationResource;
+use App\Models\Admin;
+use App\Responser\JsonResponser;
+use App\Services\Notifications\NotificationInboxService;
+use Illuminate\Http\Request;
+
+class NotificationController extends Controller
+{
+    public function __construct(private readonly NotificationInboxService $inbox) {}
+
+    public function index(Request $request)
+    {
+        try {
+            $admin = $this->requireAdmin($request);
+
+            $perPage = min(max((int) $request->query('per_page', 15), 1), 100);
+
+            $paginator = $this->inbox->paginate($admin, $perPage);
+
+            $notifications = DatabaseNotificationResource::collection($paginator)->resource;
+    
+            return JsonResponser::send(
+                false,
+                'Notifications retrieved.',
+                $notifications
+            );
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\Notification\NotificationController@index');
+        }
+    }
+
+    public function show(Request $request, string $id)
+    {
+        try {
+            $admin = $this->requireAdmin($request);
+            $notification = $this->inbox->findForRecipient($admin, $id);
+
+            return JsonResponser::send(false, 'Notification retrieved.', DatabaseNotificationResource::make($notification)->resolve());
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\Notification\NotificationController@show');
+        }
+    }
+
+    public function markAllRead(Request $request)
+    {
+        try {
+            $admin = $this->requireAdmin($request);
+            $this->inbox->markAllRead($admin);
+
+            return JsonResponser::send(false, 'All notifications marked as read.', null);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\Notification\NotificationController@markAllRead');
+        }
+    }
+
+    public function markRead(Request $request, string $id)
+    {
+        try {
+            $admin = $this->requireAdmin($request);
+            $notification = $this->inbox->markRead($admin, $id);
+
+            return JsonResponser::send(false, 'Notification marked as read.', DatabaseNotificationResource::make($notification)->resolve());
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\Notification\NotificationController@markRead');
+        }
+    }
+
+    public function markUnread(Request $request, string $id)
+    {
+        try {
+            $admin = $this->requireAdmin($request);
+            $notification = $this->inbox->markUnread($admin, $id);
+
+            return JsonResponser::send(false, 'Notification marked as unread.', DatabaseNotificationResource::make($notification)->resolve());
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\Notification\NotificationController@markUnread');
+        }
+    }
+
+    private function requireAdmin(Request $request): Admin
+    {
+        $admin = $request->user();
+        if (! $admin instanceof Admin) {
+            abort(403, 'Forbidden.');
+        }
+
+        return $admin;
+    }
+}

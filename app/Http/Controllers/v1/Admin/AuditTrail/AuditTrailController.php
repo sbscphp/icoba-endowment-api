@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\v1\Admin;
+namespace App\Http\Controllers\v1\Admin\AuditTrail;
 
 use App\Enums\UserTypeEnum;
 use App\Helpers\GeneralHelper;
@@ -43,7 +43,7 @@ class AuditTrailController extends Controller
                 ),
             };
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'AuditTrailController@index');
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\AuditTrail\AuditTrailController@index');
         }
     }
 

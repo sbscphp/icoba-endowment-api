@@ -16,7 +16,9 @@ use App\Models\Admin;
 use App\Models\DonorType;
 use App\Models\GraduationSet;
 use App\Models\User;
+use App\Notifications\GenericDatabaseNotification;
 use App\Repositories\Contracts\User\UserRepositoryInterface;
+use App\Services\Notifications\NotificationDispatchService;
 use App\Services\Theme\ThemeResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -33,6 +35,7 @@ class AuthService
     public function __construct(
         private readonly UserRepositoryInterface $userRepository,
         private readonly OtpService $otpService,
+        private readonly NotificationDispatchService $notificationDispatchService,
     ) {}
 
     public function register(array $data)
@@ -160,6 +163,7 @@ class AuthService
         if (! $this->customerRequiresLoginOtp($user)) {
             $payload = $this->issueToken($user, $client, ['customer']);
             $user->forceFill(['last_login_at' => now()])->save();
+            $this->sendLoginSuccessNotification($user, $request, $client, false);
             GeneralHelper::storeAuditLog(
                 UserTypeEnum::CUSTOMER,
                 AuditActionEnum::LOGIN_SUCCESS,
@@ -218,6 +222,7 @@ class AuthService
         if (! $this->adminRequiresLoginOtp($admin)) {
             $payload = $this->issueToken($admin, $client, ['admin']);
             $admin->forceFill(['last_login_at' => now()])->save();
+            $this->sendLoginSuccessNotification($admin, $request, $client, false);
             GeneralHelper::storeAuditLog(
                 UserTypeEnum::ADMIN,
                 AuditActionEnum::LOGIN_SUCCESS,
@@ -270,6 +275,7 @@ class AuthService
         );
 
         $user->forceFill(['last_login_at' => now()])->save();
+        $this->sendLoginSuccessNotification($user, $request, $client, true);
         GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_VERIFIED, $request, $user->uuid, [
             'purpose' => 'LOGIN',
         ], $this->displayName($user).' verified login OTP successfully.', User::class, $user->uuid, ModuleEnums::authentication, 200);
@@ -339,6 +345,7 @@ class AuthService
             CustomerRegistrationStepEnum::COMPLETED
         );
         $user->forceFill(['last_login_at' => now()])->save();
+        $this->sendLoginSuccessNotification($user, $request, $client, false);
         GeneralHelper::storeAuditLog(
             UserTypeEnum::CUSTOMER,
             AuditActionEnum::LOGIN_SUCCESS,
@@ -391,6 +398,7 @@ class AuthService
         $payload = $this->issueToken($admin, $client, ['admin']);
 
         $admin->forceFill(['last_login_at' => now()])->save();
+        $this->sendLoginSuccessNotification($admin, $request, $client, true);
         GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_VERIFIED, $request, $admin->uuid, [
             'purpose' => 'LOGIN',
         ], $this->displayName($admin).' verified login OTP successfully.', Admin::class, $admin->uuid, ModuleEnums::authentication, 200);
@@ -583,6 +591,38 @@ class AuthService
         }
 
         return trim($authenticatable->firstname.' '.$authenticatable->lastname) ?: $authenticatable->email;
+    }
+
+    private function sendLoginSuccessNotification(User|Admin $authenticatable, Request $request, string $client, bool $viaOtp): void
+    {
+        $notification = new GenericDatabaseNotification(
+            module: ModuleEnums::authentication->value,
+            event: 'login_success',
+            title: 'Successful login',
+            message: 'Your account just logged in successfully.',
+            meta: [
+                'via_otp' => $viaOtp,
+                'client' => $client,
+                'ip_address' => $request->ip(),
+                'user_agent' => (string) $request->userAgent(),
+                'logged_in_at' => now()->toIso8601String(),
+            ],
+            actionUrl: null,
+            mailSubject: null,
+            icon: '/icons/login-success.png',
+            severity: 'info',
+            tags: ['auth', 'login'],
+            sendMail: false,
+            sendPush: false,
+        );
+
+        if ($authenticatable instanceof Admin) {
+            $this->notificationDispatchService->notifyAdminsByUuids([$authenticatable->uuid], $notification);
+
+            return;
+        }
+
+        $this->notificationDispatchService->notifyUsersByUuids([$authenticatable->uuid], $notification);
     }
 
     private function sendEndowmentWelcomeMail(User $user): void

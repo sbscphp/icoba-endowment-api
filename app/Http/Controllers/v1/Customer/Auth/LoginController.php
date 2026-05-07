@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\v1\Auth;
+namespace App\Http\Controllers\v1\Customer\Auth;
 
 use App\Enums\CustomerRegistrationStepEnum;
 use App\Enums\eClientType;
@@ -44,7 +44,7 @@ class LoginController extends Controller
 
             return JsonResponser::send(false, $message, $payload, 200);
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'LoginController@login');
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Auth\LoginController@login');
         }
     }
 
@@ -61,7 +61,7 @@ class LoginController extends Controller
 
             return JsonResponser::send(false, 'Login successful.', AuthResource::make($payload), 200);
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'LoginController@verifyOtp');
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Auth\LoginController@verifyOtp');
         }
     }
 
@@ -72,7 +72,7 @@ class LoginController extends Controller
 
             return JsonResponser::send(false, 'Verification code sent.', $payload, 200);
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'LoginController@resendOtp');
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Auth\LoginController@resendOtp');
         }
     }
 
@@ -83,7 +83,7 @@ class LoginController extends Controller
 
             return JsonResponser::send(false, 'Logged out successfully!', null, 200);
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'LoginController@logout');
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Auth\LoginController@logout');
         }
     }
 }

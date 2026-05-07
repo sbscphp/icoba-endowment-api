@@ -10,6 +10,9 @@ class PasswordRules
     {
         return Password::min(12)
             ->mixedCase()
-            ->numbers();
+            ->letters()
+            ->numbers()
+            ->symbols()
+            ->uncompromised();
     }
 }

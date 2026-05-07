@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\v1\Auth;
+namespace App\Http\Controllers\v1\Customer\Auth;
 
 use App\Enums\eClientType;
 use App\Helpers\GeneralHelper;
@@ -34,7 +34,7 @@ class EmailVerificationController extends Controller
 
             return JsonResponser::send(false, 'Sign-in code sent. Please verify to complete login.', $payload, 200);
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'EmailVerificationController@verify');
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Auth\EmailVerificationController@verify');
         }
     }
 
@@ -48,7 +48,7 @@ class EmailVerificationController extends Controller
 
             return JsonResponser::send(false, 'Verification code sent.', $payload, 200);
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'EmailVerificationController@resend');
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Auth\EmailVerificationController@resend');
         }
     }
 }
