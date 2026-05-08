@@ -7,6 +7,7 @@ use App\Http\Controllers\v1\Admin\Campaign\CampaignController;
 use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateController;
 use App\Http\Controllers\v1\Admin\EmailCampaign\EmailCampaignController;
 use App\Http\Controllers\v1\Admin\Notification\NotificationController;
+use App\Http\Controllers\v1\Admin\Report\ReportController;
 use App\Http\Controllers\v1\Admin\Settings\SettingsController;
 use App\Http\Controllers\v1\Admin\TierConfiguration\TierConfigurationController;
 use App\Http\Controllers\v1\Admin\Transaction\TransactionController;
@@ -174,6 +175,13 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:transactions.read']);
             Route::get('/{transactionId}', [TransactionController::class, 'show'])
                 ->middleware(['permission:transactions.read']);
+        });
+
+        Route::prefix('reports')->group(function () {
+            Route::get('/types', [ReportController::class, 'reportTypes'])
+                ->middleware(['permission:reports.read']);
+            Route::get('/generate', [ReportController::class, 'generate'])
+                ->middleware(['permission:reports.read']);
         });
 
         Route::prefix('email-campaigns')->group(function () {
