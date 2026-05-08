@@ -8,6 +8,7 @@ use App\Helpers\PermissionModuleMapper;
 use App\Models\Role;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Pagination\LengthAwarePaginator;
 
@@ -95,6 +96,26 @@ class RoleService
     public function findRole(string $roleId): Role
     {
         return $this->resolveRole($roleId);
+    }
+
+    /**
+     * @return Collection<int, Role>
+     */
+    public function dropdown(string $status = 'active'): Collection
+    {
+        $query = Role::query()
+            ->where('guard_name', 'api')
+            ->where('name', '!=', eRole::CUSTOMER->value);
+
+        if ($status === 'active') {
+            $query->where('is_active', true);
+        } elseif ($status === 'inactive') {
+            $query->where('is_active', false);
+        }
+
+        return $query
+            ->orderBy('name')
+            ->get(['uuid', 'name', 'is_active']);
     }
 
     /**
