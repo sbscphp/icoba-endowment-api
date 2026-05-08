@@ -81,6 +81,39 @@ class UserManagementController extends Controller
         }
     }
 
+    public function roleDropdown(?string $status = null)
+    {
+        try {
+            $roles = $this->roleService->dropdown($status ?? 'active');
+            $payload = $roles->map(fn ($role) => [
+                'role_id' => $role->uuid,
+                'name' => $role->name,
+                'is_active' => (bool) $role->is_active,
+            ])->values()->all();
+
+            return JsonResponser::send(false, 'Role dropdown retrieved.', $payload);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\UserManagement\UserManagementController@roleDropdown');
+        }
+    }
+
+    public function adminDropdown(?string $status = null)
+    {
+        try {
+            $admins = $this->adminUserService->dropdown($status ?? 'active');
+            $payload = $admins->map(fn ($admin) => [
+                'admin_id' => $admin->uuid,
+                'name' => $admin->name,
+                'email' => $admin->email,
+                'is_active' => (bool) $admin->is_active,
+            ])->values()->all();
+
+            return JsonResponser::send(false, 'Admin dropdown retrieved.', $payload);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\UserManagement\UserManagementController@adminDropdown');
+        }
+    }
+
     public function createAdmin(CreateAdminRequest $request)
     {
         try {

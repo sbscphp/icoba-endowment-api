@@ -9,6 +9,7 @@ use App\Notifications\Auth\ResetPasswordMail;
 use App\Services\Auth\PasswordResetService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class AdminUserService
@@ -113,6 +114,24 @@ class AdminUserService
     public function findAdmin(string $adminId): Admin
     {
         return $this->resolveAdmin($adminId);
+    }
+
+    /**
+     * @return Collection<int, Admin>
+     */
+    public function dropdown(string $status = 'active'): Collection
+    {
+        $query = Admin::query();
+
+        if ($status === 'active') {
+            $query->where('is_active', true);
+        } elseif ($status === 'inactive') {
+            $query->where('is_active', false);
+        }
+
+        return $query
+            ->orderBy('name')
+            ->get(['uuid', 'name', 'email', 'is_active']);
     }
 
     /**
