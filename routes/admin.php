@@ -9,6 +9,7 @@ use App\Http\Controllers\v1\Admin\EmailCampaign\EmailCampaignController;
 use App\Http\Controllers\v1\Admin\Notification\NotificationController;
 use App\Http\Controllers\v1\Admin\Settings\SettingsController;
 use App\Http\Controllers\v1\Admin\TierConfiguration\TierConfigurationController;
+use App\Http\Controllers\v1\Admin\Transaction\TransactionController;
 use App\Http\Controllers\v1\Admin\UserManagement\UserManagementController;
 use Illuminate\Support\Facades\Route;
 
@@ -164,6 +165,15 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:campaigns.read']);
             Route::post('/{campaignId}/transition', [CampaignController::class, 'transition'])
                 ->middleware(['permission:campaigns.publish']);
+        });
+
+        Route::prefix('transactions')->group(function () {
+            Route::get('/stats', [TransactionController::class, 'stats'])
+                ->middleware(['permission:transactions.read']);
+            Route::get('/', [TransactionController::class, 'index'])
+                ->middleware(['permission:transactions.read']);
+            Route::get('/{transactionId}', [TransactionController::class, 'show'])
+                ->middleware(['permission:transactions.read']);
         });
 
         Route::prefix('email-campaigns')->group(function () {
