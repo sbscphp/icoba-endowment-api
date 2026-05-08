@@ -9,6 +9,7 @@ use App\Traits\HasUuid;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -75,6 +76,11 @@ class User extends Authenticatable
     public function graduationSet(): BelongsTo
     {
         return $this->belongsTo(GraduationSet::class, 'graduation_set_uuid', 'uuid');
+    }
+
+    public function transactions(): HasMany
+    {
+        return $this->hasMany(Transaction::class, 'user_uuid', 'uuid');
     }
 
     public function sendPasswordResetNotification($token): void

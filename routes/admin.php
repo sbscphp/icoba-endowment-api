@@ -3,7 +3,9 @@
 use App\Http\Controllers\v1\Admin\AuditTrail\AuditTrailController;
 use App\Http\Controllers\v1\Admin\Auth\AdminLoginController;
 use App\Http\Controllers\v1\Admin\Auth\PasswordController as AdminPasswordController;
+use App\Http\Controllers\v1\Admin\Campaign\CampaignController;
 use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateController;
+use App\Http\Controllers\v1\Admin\EmailCampaign\EmailCampaignController;
 use App\Http\Controllers\v1\Admin\Notification\NotificationController;
 use App\Http\Controllers\v1\Admin\Settings\SettingsController;
 use App\Http\Controllers\v1\Admin\TierConfiguration\TierConfigurationController;
@@ -39,7 +41,7 @@ Route::prefix('v1/admin')->group(function () {
     });
 
     Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
-        Route::get('/users', fn () => 'admin only');
+        Route::get('/users', fn() => 'admin only');
     });
 
     Route::prefix('settings')->middleware(['auth:sanctum'])->group(function () {
@@ -131,6 +133,61 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:certificate_templates.update']);
             Route::delete('/{templateId}', [CertificateTemplateController::class, 'destroy'])
                 ->middleware(['permission:certificate_templates.delete']);
+        });
+
+        Route::prefix('campaigns')->group(function () {
+            Route::get('/categories/options', [CampaignController::class, 'categoryOptions'])
+                ->middleware(['permission:campaigns.read']);
+            Route::get('/currencies/options', [CampaignController::class, 'currencyOptions'])
+                ->middleware(['permission:campaigns.read']);
+            Route::get('/applicable-options/{status?}', [CampaignController::class, 'applicableOptions'])
+                ->where('status', 'active|inactive|all')
+                ->middleware(['permission:campaigns.read']);
+            Route::get('/dropdown/{status?}', [CampaignController::class, 'dropdown'])
+                ->where('status', 'draft|active|paused|completed|deactivated|all')
+                ->middleware(['permission:campaigns.read']);
+            Route::get('/stats', [CampaignController::class, 'stats'])
+                ->middleware(['permission:campaigns.read']);
+            Route::get('/', [CampaignController::class, 'index'])
+                ->middleware(['permission:campaigns.read']);
+            Route::post('/', [CampaignController::class, 'store'])
+                ->middleware(['permission:campaigns.create']);
+            Route::get('/{campaignId}', [CampaignController::class, 'show'])
+                ->middleware(['permission:campaigns.read']);
+            Route::patch('/{campaignId}', [CampaignController::class, 'update'])
+                ->middleware(['permission:campaigns.update']);
+            Route::delete('/{campaignId}', [CampaignController::class, 'destroy'])
+                ->middleware(['permission:campaigns.delete']);
+            Route::get('/{campaignId}/status-logs', [CampaignController::class, 'statusLogs'])
+                ->middleware(['permission:campaigns.read']);
+            Route::get('/{campaignId}/report', [CampaignController::class, 'report'])
+                ->middleware(['permission:campaigns.read']);
+            Route::post('/{campaignId}/transition', [CampaignController::class, 'transition'])
+                ->middleware(['permission:campaigns.publish']);
+        });
+
+        Route::prefix('email-campaigns')->group(function () {
+            Route::get('/dropdown/{status?}', [EmailCampaignController::class, 'dropdown'])
+                ->where('status', 'draft|queued|sent|partially_sent|failed|all')
+                ->middleware(['permission:email_campaigns.read']);
+            Route::get('/design-templates/options', [EmailCampaignController::class, 'designTemplateOptions'])
+                ->middleware(['permission:email_campaigns.read']);
+            Route::get('/audiences/options', [EmailCampaignController::class, 'audienceOptions'])
+                ->middleware(['permission:email_campaigns.read']);
+            Route::get('/', [EmailCampaignController::class, 'index'])
+                ->middleware(['permission:email_campaigns.read']);
+            Route::post('/', [EmailCampaignController::class, 'store'])
+                ->middleware(['permission:email_campaigns.create']);
+            Route::get('/{emailId}', [EmailCampaignController::class, 'show'])
+                ->middleware(['permission:email_campaigns.read']);
+            Route::patch('/{emailId}', [EmailCampaignController::class, 'update'])
+                ->middleware(['permission:email_campaigns.update']);
+            Route::delete('/{emailId}', [EmailCampaignController::class, 'destroy'])
+                ->middleware(['permission:email_campaigns.delete']);
+            Route::patch('/{emailId}/set-active', [EmailCampaignController::class, 'setActive'])
+                ->middleware(['permission:email_campaigns.update']);
+            Route::post('/{emailId}/send', [EmailCampaignController::class, 'send'])
+                ->middleware(['permission:email_campaigns.send']);
         });
     });
 });
