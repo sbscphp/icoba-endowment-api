@@ -10,6 +10,11 @@ use Illuminate\Validation\Rule;
 
 class TransactionListRequest extends ApiFormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        ListingFilterRules::applyPeriodDateRangeToRequest($this);
+    }
+
     public function rules(): array
     {
         return array_merge(

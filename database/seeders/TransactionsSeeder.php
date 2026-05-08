@@ -17,7 +17,7 @@ use Illuminate\Database\Seeder;
  */
 class TransactionsSeeder extends Seeder
 {
-    private const COUNT = 60;
+    private const COUNT = 10;
 
     /** Naira-equivalent rates (stub) per non-NGN currency. */
     private const RATES = [

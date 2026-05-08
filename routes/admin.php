@@ -5,6 +5,7 @@ use App\Http\Controllers\v1\Admin\Auth\AdminLoginController;
 use App\Http\Controllers\v1\Admin\Auth\PasswordController as AdminPasswordController;
 use App\Http\Controllers\v1\Admin\Campaign\CampaignController;
 use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateController;
+use App\Http\Controllers\v1\Admin\Dashboard\DashboardController;
 use App\Http\Controllers\v1\Admin\EmailCampaign\EmailCampaignController;
 use App\Http\Controllers\v1\Admin\Notification\NotificationController;
 use App\Http\Controllers\v1\Admin\Report\ReportController;
@@ -182,6 +183,21 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:reports.read']);
             Route::get('/generate', [ReportController::class, 'generate'])
                 ->middleware(['permission:reports.read']);
+        });
+
+        Route::prefix('dashboard')->group(function () {
+            Route::get('/overview', [DashboardController::class, 'overview'])
+                ->middleware(['permission:dashboard.read']);
+            Route::get('/campaign-contribution-trend', [DashboardController::class, 'campaignContributionTrend'])
+                ->middleware(['permission:dashboard.read']);
+            Route::get('/donation-by-user-type', [DashboardController::class, 'donationByUserType'])
+                ->middleware(['permission:dashboard.read']);
+            Route::get('/donation-by-donation-type', [DashboardController::class, 'donationByDonationType'])
+                ->middleware(['permission:dashboard.read']);
+            Route::get('/donation-by-contribution-tier', [DashboardController::class, 'donationByContributionTier'])
+                ->middleware(['permission:dashboard.read']);
+            Route::get('/campaigns/active', [DashboardController::class, 'activeCampaigns'])
+                ->middleware(['permission:dashboard.read']);
         });
 
         Route::prefix('email-campaigns')->group(function () {
