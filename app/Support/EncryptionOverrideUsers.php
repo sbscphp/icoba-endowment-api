@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support;
 
 use Illuminate\Http\Request;
+use JsonException;
 use Laravel\Sanctum\PersonalAccessToken;
 
 /**
@@ -71,12 +72,51 @@ final class EncryptionOverrideUsers
         return $accessToken?->tokenable;
     }
 
+    /**
+     * Email supplied on auth routes (login, etc.) before a Bearer token exists.
+     */
+    public static function emailFromRequest(Request $request): ?string
+    {
+        $email = $request->input('email');
+
+        if (is_string($email) && $email !== '') {
+            return self::normaliseEmail($email);
+        }
+
+        $raw = $request->getContent();
+
+        if (! is_string($raw) || trim($raw) === '') {
+            return null;
+        }
+
+        try {
+            $data = json_decode($raw, associative: true, flags: JSON_THROW_ON_ERROR);
+
+            if (is_array($data) && isset($data['email']) && is_string($data['email'])) {
+                return self::normaliseEmail($data['email']);
+            }
+        } catch (JsonException) {
+            // Encrypted envelope or non-JSON body (e.g. multipart form).
+        }
+
+        return null;
+    }
+
     public static function requestHasOverrideUser(Request $request): bool
     {
         if (! self::enabled()) {
             return false;
         }
 
-        return self::isOverrideUser(self::resolveUserFromRequest($request));
+        if (self::isOverrideUser(self::resolveUserFromRequest($request))) {
+            return true;
+        }
+
+        return self::isOverrideEmail(self::emailFromRequest($request));
+    }
+
+    private static function normaliseEmail(string $email): string
+    {
+        return trim($email, " \t\n\r\0\x0B\"'");
     }
 }

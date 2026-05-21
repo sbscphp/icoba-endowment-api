@@ -210,10 +210,14 @@ final readonly class RequestResponseEncryptionMiddleware
             return;
         }
 
-        $data = json_decode($raw, associative: true, flags: JSON_THROW_ON_ERROR);
+        try {
+            $data = json_decode($raw, associative: true, flags: JSON_THROW_ON_ERROR);
 
-        if (is_array($data)) {
-            $request->replace($data);
+            if (is_array($data)) {
+                $request->replace($data);
+            }
+        } catch (JsonException) {
+            // Multipart / form-urlencoded bodies are already parsed into the request bag.
         }
     }
 
