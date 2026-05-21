@@ -52,6 +52,20 @@ class ReceiptPdfService
         );
     }
 
+    public function renderDonationReceiptBinary(Transaction $transaction): string
+    {
+        if ($transaction->status !== TransactionStatus::SUCCESSFUL) {
+            throw new \InvalidArgumentException('Receipt available only for successful payments.');
+        }
+
+        $this->receiptService->getOrCreateReceiptRecord($transaction);
+
+        return $this->renderPdf(
+            'pdf.donation-receipt',
+            $this->receiptService->donationReceiptViewData($transaction),
+        );
+    }
+
     /**
      * @param  array<string, mixed>  $viewData
      */

@@ -73,6 +73,9 @@ Route::prefix('v1')->group(function () {
     Route::post('donations/stripe/checkout/guest', [StripeCheckoutController::class, 'guest'])
         ->middleware(['throttle:60,1']);
 
+    Route::post('donations/stripe/checkout/verify', [StripeCheckoutController::class, 'verify'])
+        ->middleware(['throttle:60,1']);
+
     Route::post('donations/stripe/checkout', [StripeCheckoutController::class, 'member'])
         ->middleware(['auth:sanctum', 'throttle:60,1']);
 });

@@ -20,6 +20,7 @@ class TierConfigurationResource extends JsonResource
             'tier_id' => $this->uuid,
             'name' => $this->name,
             'description' => $this->description,
+            'tier_badge_url' => $this->tier_badge_url,
             'min_amount' => $this->min_amount !== null ? (float) $this->min_amount : null,
             'max_amount' => $this->max_amount !== null ? (float) $this->max_amount : null,
             'members_count' => 0,

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Customer\Donation;
 
+use App\Enums\Currency;
 use App\Http\Requests\ApiFormRequest;
 use App\Http\Requests\Concerns\MergesCurrencyFromPledge;
 use App\Models\User;
@@ -19,7 +20,7 @@ class DonationIntentRequest extends ApiFormRequest
                 Rule::requiredIf(fn () => ! $this->filled('pledge_uuid')),
                 'nullable',
                 'string',
-                'max:8',
+                Rule::in(Currency::values()),
             ],
             'campaign_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:campaigns,uuid'],
             'pledge_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:pledges,uuid'],

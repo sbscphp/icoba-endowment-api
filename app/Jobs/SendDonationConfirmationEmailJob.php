@@ -2,7 +2,8 @@
 
 namespace App\Jobs;
 
-use App\Mail\DonationTaxReceiptMail;
+use App\Enums\TransactionStatus;
+use App\Mail\DonationConfirmationMail;
 use App\Models\Transaction;
 use App\Services\Receipt\ReceiptPdfService;
 use App\Services\Receipt\ReceiptService;
@@ -16,7 +17,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
-class SendDonationTaxReceiptEmailJob implements ShouldBeUnique, ShouldQueue
+class SendDonationConfirmationEmailJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -28,7 +29,7 @@ class SendDonationTaxReceiptEmailJob implements ShouldBeUnique, ShouldQueue
 
     public function uniqueId(): string
     {
-        return $this->transactionUuid;
+        return 'donation-confirmation:'.$this->transactionUuid;
     }
 
     public function handle(
@@ -38,10 +39,10 @@ class SendDonationTaxReceiptEmailJob implements ShouldBeUnique, ShouldQueue
     ): void {
         $transaction = Transaction::query()
             ->where('uuid', $this->transactionUuid)
-            ->with('donor')
+            ->with(['donor', 'campaign'])
             ->first();
 
-        if ($transaction === null || ! $receiptService->isEligibleForTaxReceipt($transaction)) {
+        if ($transaction === null || $transaction->status !== TransactionStatus::SUCCESSFUL) {
             return;
         }
 
@@ -51,21 +52,25 @@ class SendDonationTaxReceiptEmailJob implements ShouldBeUnique, ShouldQueue
         }
 
         try {
-            $corporate = $receiptService->corporateDetails($transaction);
-            $recipientName = $corporate['organization_name'] ?? $receiptService->donorDisplayLine($transaction) ?? 'Donor';
+            $transaction = $receiptService->ensurePublicReceiptAccess($transaction);
+            $recipientName = $receiptService->donorDisplayLine($transaction) ?? 'Donor';
             $theme = $themeResolver->resolveForMail();
-            $pdfBinary = $receiptPdfService->renderTaxReceiptBinary($transaction);
+            $pdfBinary = $receiptPdfService->renderDonationReceiptBinary($transaction);
+            $taxReceiptDownloadUrl = $receiptService->isEligibleForTaxReceipt($transaction)
+                ? $receiptService->guestTaxReceiptDownloadUrl($transaction)
+                : null;
 
-            Mail::to($recipientEmail)->send(new DonationTaxReceiptMail(
+            Mail::to($recipientEmail)->send(new DonationConfirmationMail(
                 transaction: $transaction,
                 mailTheme: $theme,
                 recipientName: $recipientName,
-                taxReceiptDownloadUrl: $receiptService->guestTaxReceiptDownloadUrl($transaction),
+                campaignName: $transaction->campaign?->name ?? 'General Endowment Fund',
                 donationReceiptDownloadUrl: $receiptService->guestDonationReceiptDownloadUrl($transaction),
+                taxReceiptDownloadUrl: $taxReceiptDownloadUrl,
                 pdfBinary: $pdfBinary,
             ));
         } catch (\Throwable $e) {
-            Log::warning('Donation tax receipt email failed: '.$e->getMessage(), [
+            Log::warning('Donation confirmation email failed: '.$e->getMessage(), [
                 'transaction_uuid' => $this->transactionUuid,
                 'to' => $recipientEmail,
             ]);

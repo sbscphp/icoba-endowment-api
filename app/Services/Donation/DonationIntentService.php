@@ -2,6 +2,7 @@
 
 namespace App\Services\Donation;
 
+use App\Enums\Currency;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
 use App\Helpers\GeneralHelper;
@@ -9,13 +10,18 @@ use App\Models\Campaign;
 use App\Models\Pledge;
 use App\Models\Transaction;
 use App\Services\Pledge\PledgeBalanceService;
+use App\Services\Transaction\TransactionNgnSnapshotService;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class DonationIntentService
 {
     public function __construct(
         private readonly PledgeBalanceService $pledgeBalance,
+        private readonly TransactionNgnSnapshotService $transactionNgnSnapshot,
+        private readonly GuestDonorProfileSnapshotService $guestDonorProfileSnapshot,
+        private readonly DonationCurrencyValidator $donationCurrencyValidator,
     ) {}
 
     /**
@@ -37,9 +43,13 @@ class DonationIntentService
             }
         }
 
+        $guestSnapshot = $this->shouldBuildGuestDonorProfile($data)
+            ? $this->guestDonorProfileSnapshot->build($data)
+            : null;
+
         $v = Validator::make($data, [
             'amount' => ['required', 'numeric', 'min:0.01'],
-            'currency' => ['required', 'string', 'max:8'],
+            'currency' => ['required', 'string', Rule::in(Currency::values())],
             'campaign_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:campaigns,uuid'],
             'pledge_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:pledges,uuid'],
             'user_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:users,uuid'],
@@ -62,8 +72,12 @@ class DonationIntentService
         $clean = $v->validated();
         $amount = (float) $clean['amount'];
         $currency = strtoupper((string) $clean['currency']);
-        $rate = isset($clean['exchange_rate_to_naira']) ? (float) $clean['exchange_rate_to_naira'] : null;
-        $amountNgn = $rate !== null ? round($amount * $rate, 2) : null;
+        $explicitRate = array_key_exists('exchange_rate_to_naira', $data) && $data['exchange_rate_to_naira'] !== null
+            ? (float) $data['exchange_rate_to_naira']
+            : null;
+        $ngnSnapshot = $this->transactionNgnSnapshot->resolve($amount, $currency, $explicitRate);
+        $rate = $ngnSnapshot['exchange_rate_to_naira'];
+        $amountNgn = $ngnSnapshot['amount_in_naira'];
 
         $pledgeUuid = $clean['pledge_uuid'] ?? null;
         $metadata = [];
@@ -114,11 +128,21 @@ class DonationIntentService
             $tin = null;
         }
 
+        if ($guestSnapshot !== null) {
+            $donorName = $guestSnapshot['donor_name'] ?? $donorName;
+            $organizationName = $guestSnapshot['organization_name'] ?? $organizationName;
+            $rcNumber = $guestSnapshot['rc_number'] ?? $rcNumber;
+            $tin = $guestSnapshot['tin'] ?? $tin;
+            $metadata['guest_donor_profile'] = $guestSnapshot['guest_donor_profile'];
+        }
+
         $campaignUuid = $clean['campaign_uuid'] ?? null;
         if ($campaignUuid === null && $pledgeUuid !== null) {
             $pledge = $pledge ?? Pledge::query()->where('uuid', $pledgeUuid)->firstOrFail();
             $campaignUuid = $pledge->campaign_uuid;
         }
+
+        $this->donationCurrencyValidator->assertAllowed($currency, $campaignUuid);
 
         $transactionId = GeneralHelper::getModelUniqueRandomId([
             'modelNamespace' => Transaction::class,
@@ -136,13 +160,13 @@ class DonationIntentService
             'campaign_uuid' => $campaignUuid ?? Campaign::defaultCampaign()->uuid,
             'pledge_uuid' => $pledgeUuid,
             'user_uuid' => $clean['user_uuid'] ?? null,
-            'donor_type_uuid' => $clean['donor_type_uuid'] ?? null,
+            'donor_type_uuid' => $guestSnapshot['donor_type_uuid'] ?? ($clean['donor_type_uuid'] ?? null),
             'donor_name' => $donorName,
             'organization_name' => $organizationName,
             'rc_number' => $rcNumber,
             'tin' => $tin,
             'donor_email' => $clean['donor_email'] ?? null,
-            'donor_phone' => $clean['donor_phone'] ?? null,
+            'donor_phone' => $guestSnapshot['donor_phone'] ?? ($clean['donor_phone'] ?? null),
             'is_anonymous' => (bool) ($clean['is_anonymous'] ?? false),
             'amount' => $amount,
             'currency' => $currency,
@@ -153,5 +177,20 @@ class DonationIntentService
             'application_type' => $applicationType,
             'metadata' => array_merge((array) ($data['metadata'] ?? []), $metadata),
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function shouldBuildGuestDonorProfile(array $data): bool
+    {
+        if (! empty($data['user_uuid'])) {
+            return false;
+        }
+
+        return ! empty($data['donor_type'])
+            || ! empty($data['donor_type_uuid'])
+            || ! empty($data['firstname'])
+            || ! empty($data['organization_name']);
     }
 }

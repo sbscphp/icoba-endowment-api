@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Enums\CustomerRegistrationStepEnum;
 use App\Enums\DonorTypeSlug;
+use App\Services\Customer\CustomerTierService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -12,6 +13,7 @@ class UserResource extends JsonResource
     public function toArray(Request $request): array
     {
         $role = $this->roles->first();
+        $tiers = app(CustomerTierService::class)->tiersForUser($this->resource);
 
         return [
             'uuid' => $this->uuid,
@@ -38,6 +40,8 @@ class UserResource extends JsonResource
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
             'donor' => $this->donorPayload(),
+            'donation_tier' => $tiers['donation_tier'],
+            'pledge_tier' => $tiers['pledge_tier'],
         ];
     }
 

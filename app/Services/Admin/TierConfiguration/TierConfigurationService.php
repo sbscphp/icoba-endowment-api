@@ -3,15 +3,18 @@
 namespace App\Services\Admin\TierConfiguration;
 
 use App\Exceptions\ApiException;
+use App\Helpers\FileUploadHelper;
 use App\Models\TierConfiguration;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Pagination\LengthAwarePaginator;
+use InvalidArgumentException;
 
 class TierConfigurationService
 {
+    private const UPLOAD_FOLDER = 'tier-badges';
     /**
      * @param  array<string, mixed>  $payload
      */
@@ -24,6 +27,7 @@ class TierConfigurationService
         $tier = TierConfiguration::query()->create([
             'name' => (string) $payload['name'],
             'description' => $payload['description'] ?? null,
+            'tier_badge_url' => $this->uploadBadgeIfPresent($payload['tier_badge_url'] ?? null),
             'min_amount' => $minAmount,
             'max_amount' => $maxAmount,
             'benefits' => array_values(array_filter((array) ($payload['benefits'] ?? []), fn ($v) => is_string($v) && trim($v) !== '')),
@@ -108,6 +112,10 @@ class TierConfigurationService
             }
         }
 
+        if (array_key_exists('tier_badge_url', $payload)) {
+            $updates['tier_badge_url'] = $this->uploadBadgeIfPresent($payload['tier_badge_url']);
+        }
+
         if (array_key_exists('min_amount', $payload)) {
             $updates['min_amount'] = (float) $payload['min_amount'];
         }
@@ -177,7 +185,7 @@ class TierConfigurationService
         return $query
             ->orderBy('sort_order')
             ->orderBy('name')
-            ->get(['uuid', 'name', 'is_active']);
+            ->get(['uuid', 'name', 'tier_badge_url', 'is_active']);
     }
 
     private function resolveTier(string $tierId): TierConfiguration
@@ -212,6 +220,19 @@ class TierConfigurationService
 
         if ($endDate !== null) {
             $query->where($column, '<=', $endDate);
+        }
+    }
+
+    private function uploadBadgeIfPresent(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        try {
+            return FileUploadHelper::smartSingleFileUpload($value, self::UPLOAD_FOLDER);
+        } catch (InvalidArgumentException $e) {
+            throw new ApiException('Tier badge upload failed: '.$e->getMessage(), 422);
         }
     }
 
