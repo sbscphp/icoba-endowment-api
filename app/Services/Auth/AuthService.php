@@ -195,7 +195,9 @@ class AuthService
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
         ], $this->displayName($user).' requested a login OTP.', User::class, $user->uuid, ModuleEnums::authentication, 200);
 
-        return $this->withRegistrationStep($payload, CustomerRegistrationStepEnum::COMPLETED);
+        return $this->withLoginTwoFactor(
+            $this->withRegistrationStep($payload, CustomerRegistrationStepEnum::COMPLETED)
+        );
     }
 
     public function loginAdmin(string $email, string $password, Request $request, string $client = eClientType::WEB->value): array
@@ -262,7 +264,7 @@ class AuthService
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
         ], $this->displayName($admin).' requested a login OTP.', Admin::class, $admin->uuid, ModuleEnums::authentication, 200);
 
-        return $payload;
+        return $this->withLoginTwoFactor($payload);
     }
 
     public function verifyCustomerLoginOtp(string $challengeToken, string $otp, Request $request, string $client = eClientType::MOBILE->value): array
@@ -354,7 +356,9 @@ class AuthService
                 'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
             ], $this->displayName($user).' was sent a login OTP after email verification.', User::class, $user->uuid, ModuleEnums::authentication, 200);
 
-            return $this->withRegistrationStep($payload, CustomerRegistrationStepEnum::COMPLETED);
+            return $this->withLoginTwoFactor(
+                $this->withRegistrationStep($payload, CustomerRegistrationStepEnum::COMPLETED)
+            );
         }
 
         $payload = $this->withRegistrationStep(
@@ -453,7 +457,9 @@ class AuthService
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
         ], 'Customer login OTP was resent.', null, null, ModuleEnums::authentication, 200);
 
-        return $this->withRegistrationStep($payload, CustomerRegistrationStepEnum::COMPLETED);
+        return $this->withLoginTwoFactor(
+            $this->withRegistrationStep($payload, CustomerRegistrationStepEnum::COMPLETED)
+        );
     }
 
     public function resendAdminLoginOtp(string $challengeToken, Request $request): array
@@ -465,7 +471,7 @@ class AuthService
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
         ], 'Admin login OTP was resent.', null, null, ModuleEnums::authentication, 200);
 
-        return $payload;
+        return $this->withLoginTwoFactor($payload);
     }
 
     public function logout($user): void
@@ -496,6 +502,17 @@ class AuthService
     {
         return array_merge($payload, [
             'registration_step' => $step->value,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function withLoginTwoFactor(array $payload): array
+    {
+        return array_merge($payload, [
+            '2fa' => true,
         ]);
     }
 

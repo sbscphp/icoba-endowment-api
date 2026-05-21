@@ -8,6 +8,7 @@ use App\Http\Resources\EncryptedPayloadResource;
 use App\Repositories\Contracts\ApiUser\ApiUserRepositoryInterface;
 use App\Responser\JsonResponser;
 use App\Services\CryptoService;
+use App\Support\EncryptionOverrideUsers;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -117,6 +118,10 @@ final readonly class RequestResponseEncryptionMiddleware
 
         $response = $next($request);
 
+        if (EncryptionOverrideUsers::requestHasOverrideUser($request)) {
+            return $response;
+        }
+
         try {
             return $this->encryptOutboundResponse($response, $apiUser);
         } catch (RuntimeException $e) {
@@ -168,6 +173,12 @@ final readonly class RequestResponseEncryptionMiddleware
      */
     private function decryptInboundRequest(Request $request, ApiUserResource $apiUser): void
     {
+        if (EncryptionOverrideUsers::requestHasOverrideUser($request)) {
+            $this->normalisePlainInboundRequest($request);
+
+            return;
+        }
+
         $mode = $apiUser->getEncryptionMode();
         $method = strtoupper($request->method());
 
@@ -179,6 +190,34 @@ final readonly class RequestResponseEncryptionMiddleware
 
         if (in_array($method, ['POST', 'PUT', 'PATCH'], strict: true)) {
             $this->decryptInboundBody($request, $apiUser, $mode);
+        }
+    }
+
+    /**
+     * @throws JsonException
+     */
+    private function normalisePlainInboundRequest(Request $request): void
+    {
+        $method = strtoupper($request->method());
+
+        if (! in_array($method, ['POST', 'PUT', 'PATCH'], strict: true)) {
+            return;
+        }
+
+        $raw = $request->getContent();
+
+        if (blank($raw)) {
+            return;
+        }
+
+        try {
+            $data = json_decode($raw, associative: true, flags: JSON_THROW_ON_ERROR);
+
+            if (is_array($data)) {
+                $request->replace($data);
+            }
+        } catch (JsonException) {
+            // Multipart / form-urlencoded bodies are already parsed into the request bag.
         }
     }
 
