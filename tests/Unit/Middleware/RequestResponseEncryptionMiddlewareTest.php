@@ -361,4 +361,23 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         $this->assertSame(2500, $captured);
         $this->assertSame($plainResponse, $result->getContent());
     }
+
+    public function test_login_request_with_override_email_receives_plaintext_response(): void
+    {
+        Config::set('security.override_users.enabled', true);
+
+        $this->repo->shouldReceive('findByClientKey')->with('test-client-key')->once()->andReturn($this->userResourceBoth);
+
+        $plainResponse = json_encode(['error' => false, 'message' => 'ok', 'data' => ['access_token' => 'token']]);
+        $request = Request::create('/api/v1/auth/login', 'POST', [
+            'email' => 'customer-override@yopmail.com',
+            'password' => 'password',
+            'client' => 'web',
+        ]);
+        $request->headers->set('X-ClientKey', 'test-client-key');
+
+        $result = $this->middleware->handle($request, fn () => new Response($plainResponse));
+
+        $this->assertSame($plainResponse, $result->getContent());
+    }
 }
