@@ -2,10 +2,13 @@
 
 namespace App\Services\Settings;
 
+use App\Enums\DonorTypeSlug;
 use App\Exceptions\ApiException;
 use App\Http\Resources\UserResource;
 use App\Models\Admin;
+use App\Models\GraduationSet;
 use App\Models\User;
+use App\Support\CustomerProfileUpdateFields;
 use App\Support\PasswordRules;
 use Illuminate\Support\Facades\Hash;
 
@@ -53,15 +56,119 @@ class AccountSettingsService
 
         if (Hash::check($newPassword, (string) $authenticatable->password)) {
             throw new ApiException('You cannot reuse your current password.', 422);
-        }        $updates = [
+        }
+
+        $updates = [
             'password' => $newPassword,
         ];
 
         if ($authenticatable instanceof Admin) {
             $updates['must_reset_password'] = false;
-    \}
+        }
 
         $authenticatable->forceFill($updates)->save();
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public function updateCustomerProfile(User $user, array $data): array
+    {
+        $user->loadMissing('donorType');
+        $slug = $user->donorType?->slug;
+        $data = CustomerProfileUpdateFields::filterForDonorType($slug, $data);
+        $updates = [];
+
+        foreach (['phone_number', 'country_code'] as $field) {
+            if (array_key_exists($field, $data)) {
+                $updates[$field] = $data[$field];
+            }
+        }
+
+        match ($slug) {
+            DonorTypeSlug::ICOBA_ALUMNI->value => $updates = array_merge($updates, $this->alumniProfileUpdates($data)),
+            DonorTypeSlug::CORPORATE_DONOR->value => $updates = array_merge($updates, $this->corporateProfileUpdates($data)),
+            DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value => $updates = array_merge($updates, $this->individualProfileUpdates($data)),
+            default => null,
+        };
+
+        if ($updates !== []) {
+            $user->forceFill($updates)->save();
+        }
+
+        return $this->customerProfile($user->fresh() ?? $user);
+    }
+
+    /**
+     * @return array{2fa: bool}
+     */
+    public function toggleCustomerTwoFactor(User $user, bool $enabled): array
+    {
+        $user->forceFill(['2fa' => $enabled])->save();
+
+        return [
+            '2fa' => (bool) $user->{'2fa'},
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function alumniProfileUpdates(array $data): array
+    {
+        $updates = $this->individualProfileUpdates($data);
+
+        if (array_key_exists('alumni_identifier', $data)) {
+            $updates['alumni_identifier'] = filled($data['alumni_identifier']) ? $data['alumni_identifier'] : null;
+        }
+
+        if (array_key_exists('set_number', $data)) {
+            $updates['graduation_set_uuid'] = GraduationSet::query()
+                ->where('set_number', $data['set_number'])
+                ->value('uuid');
+        }
+
+        return $updates;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function corporateProfileUpdates(array $data): array
+    {
+        $updates = [];
+
+        foreach (['organization_name', 'rc_number', 'tin', 'corporate_category_uuid'] as $field) {
+            if (array_key_exists($field, $data)) {
+                $updates[$field] = $data[$field];
+            }
+        }
+
+        if (array_key_exists('organization_name', $data)) {
+            $updates['firstname'] = $data['organization_name'];
+        }
+
+        return $updates;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function individualProfileUpdates(array $data): array
+    {
+        $updates = [];
+
+        foreach (['firstname', 'lastname', 'middlename'] as $field) {
+            if (array_key_exists($field, $data)) {
+                $updates[$field] = $data[$field];
+            }
+        }
+
+        return $updates;
     }
 
     /**
