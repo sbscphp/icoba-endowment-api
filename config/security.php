@@ -124,8 +124,9 @@ return [
     | Encryption override users (dev / support)
     |--------------------------------------------------------------------------
     |
-    | When OVERRIDE_USERS is true, authenticated users with the emails below
-    | send and receive plaintext JSON even when API encryption is enabled.
+    | When OVERRIDE_USERS is true, configured emails receive plaintext payloads only
+    | on authenticated requests (valid Bearer token). Login and other auth routes
+    | remain fully encrypted.
     |
     */
     'override_users' => [

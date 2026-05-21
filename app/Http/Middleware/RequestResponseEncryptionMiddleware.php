@@ -115,7 +115,7 @@ final readonly class RequestResponseEncryptionMiddleware
 
         $response = $next($request);
 
-        if (EncryptionOverrideUsers::requestHasOverrideUser($request)) {
+        if (EncryptionOverrideUsers::shouldBypassOutboundEncryption($request)) {
             return $response;
         }
 
@@ -170,7 +170,7 @@ final readonly class RequestResponseEncryptionMiddleware
      */
     private function decryptInboundRequest(Request $request, ApiUserResource $apiUser): void
     {
-        if (EncryptionOverrideUsers::requestHasOverrideUser($request)) {
+        if (EncryptionOverrideUsers::shouldBypassInboundDecryption($request)) {
             $this->normalisePlainInboundRequest($request);
 
             return;

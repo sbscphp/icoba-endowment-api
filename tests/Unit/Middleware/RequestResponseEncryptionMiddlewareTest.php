@@ -362,7 +362,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         $this->assertSame($plainResponse, $result->getContent());
     }
 
-    public function test_login_request_with_override_email_receives_plaintext_response(): void
+    public function test_login_with_override_email_still_receives_encrypted_response(): void
     {
         Config::set('security.override_users.enabled', true);
 
@@ -378,6 +378,30 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
 
         $result = $this->middleware->handle($request, fn () => new Response($plainResponse));
 
-        $this->assertSame($plainResponse, $result->getContent());
+        $decoded = json_decode($result->getContent(), true);
+
+        $this->assertIsArray($decoded);
+        $this->assertArrayHasKey('response', $decoded);
+    }
+
+    public function test_non_auth_request_with_override_email_in_body_still_encrypts_response(): void
+    {
+        Config::set('security.override_users.enabled', true);
+
+        $this->repo->shouldReceive('findByClientKey')->with('test-client-key')->once()->andReturn($this->userResourceBoth);
+
+        $plainResponse = json_encode(['created' => true]);
+        $request = Request::create('/api/v1/users', 'POST', [
+            'email' => 'customer-override@yopmail.com',
+            'name' => 'Test',
+        ]);
+        $request->headers->set('X-ClientKey', 'test-client-key');
+
+        $result = $this->middleware->handle($request, fn () => new Response($plainResponse));
+
+        $decoded = json_decode($result->getContent(), true);
+
+        $this->assertIsArray($decoded);
+        $this->assertArrayHasKey('response', $decoded);
     }
 }
