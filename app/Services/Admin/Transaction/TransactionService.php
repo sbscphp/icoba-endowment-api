@@ -5,6 +5,7 @@ namespace App\Services\Admin\Transaction;
 use App\Enums\TransactionStatus;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
+use App\Services\Tier\TierResolutionService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -13,6 +14,10 @@ use Illuminate\Pagination\LengthAwarePaginator;
 
 class TransactionService
 {
+    public function __construct(
+        private readonly TierResolutionService $tierResolution,
+    ) {}
+
     public const MAX_EXPORT_ROWS = 5000;
 
     /**
@@ -31,7 +36,7 @@ class TransactionService
             $base->where('created_at', '<=', $end);
         }
 
-        $successful = (clone $base)->where('status', TransactionStatus::SUCCESSFUL);
+        $successful = (clone $base)->countableTowardRevenue();
 
         return [
             'start_date' => $startDate,
@@ -41,6 +46,7 @@ class TransactionService
             'pending_count' => (clone $base)->where('status', TransactionStatus::PENDING)->count(),
             'failed_count' => (clone $base)->where('status', TransactionStatus::FAILED)->count(),
             'reversed_count' => (clone $base)->where('status', TransactionStatus::REVERSED)->count(),
+            'superseded_count' => (clone $base)->where('status', TransactionStatus::SUPERSEDED)->count(),
             'anonymous_count' => (clone $base)->where('is_anonymous', true)->count(),
             'unique_donors_count' => (clone $successful)->whereNotNull('user_uuid')->distinct('user_uuid')->count('user_uuid'),
             'total_volume_naira' => (string) ((clone $successful)->sum('amount_in_naira') ?: '0'),
@@ -97,19 +103,7 @@ class TransactionService
      */
     public function resolveTierForAmount(?float $amountInNaira): ?TierConfiguration
     {
-        if ($amountInNaira === null) {
-            return null;
-        }
-
-        return TierConfiguration::query()
-            ->where('is_active', true)
-            ->where('min_amount', '<=', $amountInNaira)
-            ->where(function (Builder $builder) use ($amountInNaira): void {
-                $builder->whereNull('max_amount')
-                    ->orWhere('max_amount', '>=', $amountInNaira);
-            })
-            ->orderBy('sort_order')
-            ->first();
+        return $this->tierResolution->resolveTierForAmount($amountInNaira);
     }
 
     /**
@@ -121,6 +115,7 @@ class TransactionService
             'campaign:uuid,name,campaign_id',
             'donor:uuid,firstname,lastname,middlename,email,phone_number,country_code,graduation_set_uuid',
             'donor.graduationSet:uuid,name,set_number',
+            'pledge:uuid,committed_amount,currency,committed_amount_ngn,status',
         ];
     }
 
@@ -133,7 +128,18 @@ class TransactionService
             'campaign:uuid,name,campaign_id',
             'donor:uuid,firstname,lastname,middlename,graduation_set_uuid',
             'donor.graduationSet:uuid,name,set_number',
+            'pledge:uuid,committed_amount,currency,committed_amount_ngn,status',
         ]);
+
+        $includeSuperseded = filter_var(data_get($validated, 'filters.include_superseded'), FILTER_VALIDATE_BOOLEAN);
+        if (! $includeSuperseded) {
+            $query->where('status', '!=', TransactionStatus::SUPERSEDED);
+        }
+
+        $pledgeUuid = data_get($validated, 'filters.pledge_uuid');
+        if (is_string($pledgeUuid) && $pledgeUuid !== '') {
+            $query->where('pledge_uuid', $pledgeUuid);
+        }
 
         $dateColumn = data_get($validated, 'filters.date_field') === 'paid_at' ? 'paid_at' : 'created_at';
         $this->applyDateRange($query, $validated, $dateColumn);

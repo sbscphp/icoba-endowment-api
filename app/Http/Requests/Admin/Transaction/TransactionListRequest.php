@@ -55,6 +55,8 @@ class TransactionListRequest extends ApiFormRequest
                 'filters.min_amount' => ['sometimes', 'nullable', 'numeric', 'min:0'],
                 'filters.max_amount' => ['sometimes', 'nullable', 'numeric', 'gte:filters.min_amount'],
                 'filters.date_field' => ['sometimes', 'nullable', Rule::in(['created_at', 'paid_at'])],
+                'filters.pledge_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:pledges,uuid'],
+                'filters.include_superseded' => ['sometimes', 'boolean'],
             ]
         );
     }

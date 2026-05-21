@@ -23,7 +23,7 @@ class ApiUserCredentialsMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Your API credentials — '.config('app.name'),
+            subject: 'Your API credentials — '.$this->mailTheme->brand_name,
         );
     }
 

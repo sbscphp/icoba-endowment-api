@@ -49,7 +49,6 @@ final class ApiUserRegistrationController extends Controller
             error: false,
             message: 'API user created. Credentials were sent by email.',
             data: [
-                'id' => $user->id,
                 'email' => $user->email,
                 'client_key' => $user->client_key,
                 'encryption_mode' => $user->encryption_mode->value,

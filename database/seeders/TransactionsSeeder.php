@@ -19,15 +19,6 @@ class TransactionsSeeder extends Seeder
 {
     private const COUNT = 10;
 
-    /** Naira-equivalent rates (stub) per non-NGN currency. */
-    private const RATES = [
-        'NGN' => 1.0,
-        'USD' => 1500.0,
-        'GBP' => 1900.0,
-        'EUR' => 1650.0,
-        'GHS' => 130.0,
-    ];
-
     private const GATEWAYS = ['Stripe', 'Paystack', 'Flutterwave', 'Manual'];
 
     private const PAYMENT_METHODS = ['Card', 'Bank Transfer', 'USSD', 'Wallet'];
@@ -48,8 +39,9 @@ class TransactionsSeeder extends Seeder
             $useExistingUser = $users->isNotEmpty() && random_int(0, 99) < 70;
             $isAnonymous = ! $useExistingUser && random_int(0, 99) < 25;
 
-            $currency = collect(Currency::values())->random();
-            $rate = self::RATES[$currency] ?? 1.0;
+            $currencyEnum = collect(Currency::cases())->random();
+            $currency = $currencyEnum->value;
+            $rate = $currencyEnum->referenceNairaRatePerUnit();
             $amount = (float) random_int(500, 250_000) / 100; // 5.00 .. 2,500.00
             if ($currency === 'NGN') {
                 $amount = (float) random_int(500_000, 50_000_000) / 100; // 5,000 .. 500,000 NGN

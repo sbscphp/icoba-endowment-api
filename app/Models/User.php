@@ -35,6 +35,7 @@ class User extends Authenticatable
      */
     protected $hidden = [
         'password',
+        'stripe_customer_id',
         'two_factor_secret',
         'two_factor_recovery_codes',
         'remember_token',
@@ -81,6 +82,25 @@ class User extends Authenticatable
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class, 'user_uuid', 'uuid');
+    }
+
+    public function pledges(): HasMany
+    {
+        return $this->hasMany(Pledge::class, 'user_uuid', 'uuid');
+    }
+
+    public function displayName(): string
+    {
+        if (filled($this->organization_name)) {
+            return trim((string) $this->organization_name);
+        }
+
+        $name = trim(implode(' ', array_filter([
+            (string) ($this->firstname ?? ''),
+            (string) ($this->lastname ?? ''),
+        ])));
+
+        return $name !== '' ? $name : (string) $this->email;
     }
 
     public function sendPasswordResetNotification($token): void

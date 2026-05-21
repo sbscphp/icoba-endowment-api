@@ -23,7 +23,7 @@ class WelcomeToEndowmentPortalMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Welcome to the ICOBA Endowment portal',
+            subject: 'Welcome to the '.$this->mailTheme->brand_name.' portal',
         );
     }
 
@@ -33,8 +33,8 @@ class WelcomeToEndowmentPortalMail extends Mailable
             view: 'emails.auth.welcome-endowment',
             with: [
                 'recipientName' => $this->recipientName,
-                'theme' => $this->mailTheme,
                 'loginUrl' => $this->loginUrl,
+                'theme' => $this->mailTheme,
             ],
         );
     }

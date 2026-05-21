@@ -15,19 +15,14 @@ class OTPMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    /**
-     * Create a new message instance.
-     */
     public function __construct(
         public readonly string $otp,
         public readonly int $expiresInMinutes,
+        public readonly string $recipientName,
         public readonly Theme $mailTheme,
         public readonly OtpPurposeEnum $purpose = OtpPurposeEnum::LOGIN,
     ) {}
 
-    /**
-     * Get the message envelope.
-     */
     public function envelope(): Envelope
     {
         return new Envelope(
@@ -39,41 +34,21 @@ class OTPMail extends Mailable
         );
     }
 
-    /**
-     * Get the message content definition.
-     */
     public function content(): Content
     {
-        [$heading, $body] = match ($this->purpose) {
-            OtpPurposeEnum::PASSWORD_RESET => [
-                'Your password reset code',
-                "Use the code below to reset your password. This code expires in {$this->expiresInMinutes} minutes.",
-            ],
-            OtpPurposeEnum::LOGIN => [
-                'Your sign-in code',
-                "Use the code below to complete your sign in. This code expires in {$this->expiresInMinutes} minutes.",
-            ],
-            OtpPurposeEnum::EMAIL_VERIFICATION => [
-                'Verify your email',
-                "Use the code below to verify your email address on the ICOBA Endowment platform. This code expires in {$this->expiresInMinutes} minutes.",
-            ],
-        };
-
         return new Content(
             view: 'emails.auth.otp',
             with: [
                 'otp' => $this->otp,
                 'expiresInMinutes' => $this->expiresInMinutes,
+                'recipientName' => $this->recipientName,
+                'purpose' => $this->purpose,
                 'theme' => $this->mailTheme,
-                'heading' => $heading,
-                'body' => $body,
             ],
         );
     }
 
     /**
-     * Get the attachments for the message.
-     *
      * @return array<int, Attachment>
      */
     public function attachments(): array

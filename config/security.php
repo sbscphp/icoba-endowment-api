@@ -35,6 +35,17 @@ return [
     'otp_verify_max_per_window' => max(1, (int) env('OTP_VERIFY_MAX_PER_WINDOW', 20)),
 
     /*
+    | When false (default), SMS-channel OTPs use otp_sms_stub_code and no provider is called.
+    | Set OTP_SMS_DISPATCH_ENABLED=true when ready to bill SMS providers (infobip/termii via SMS_PROVIDER).
+    */
+    'otp_sms_dispatch_enabled' => filter_var(env('OTP_SMS_DISPATCH_ENABLED', false), FILTER_VALIDATE_BOOL),
+
+    /*
+    | Fixed OTP used for SMS channel while otp_sms_dispatch_enabled is false (local/staging only).
+    */
+    'otp_sms_stub_code' => (string) env('OTP_SMS_STUB_CODE', '123456'),
+
+    /*
     |--------------------------------------------------------------------------
     | Global Auth Error Opacity Override
     |--------------------------------------------------------------------------

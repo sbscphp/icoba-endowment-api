@@ -6,6 +6,7 @@ use App\Enums\AuditActionEnum;
 use App\Enums\ModuleEnums;
 use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
+use App\Models\Theme;
 use App\Responser\JsonResponser;
 use App\Services\Audit\AuditLogService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -17,6 +18,44 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class GeneralHelper
 {
+    public static function getLogoPath(): string
+    {
+        $slug = Str::slug((string) config('app.name'));
+
+        return public_path('assets/logo/'.$slug.'.png');
+    }
+
+    public static function getLogoAssetUrl(): string
+    {
+        $slug = Str::slug((string) config('app.name'));
+
+        return rtrim((string) config('app.url'), '/').'/assets/logo/'.$slug.'.png';
+    }
+
+    public static function resolveMailLogoPath(?Theme $theme = null): string
+    {
+        if ($theme?->logo_path) {
+            $path = str_starts_with($theme->logo_path, DIRECTORY_SEPARATOR)
+                ? $theme->logo_path
+                : public_path($theme->logo_path);
+
+            if (is_file($path)) {
+                return $path;
+            }
+        }
+
+        return self::getLogoPath();
+    }
+
+    public static function resolveMailLogoUrl(?Theme $theme = null): string
+    {
+        if (filled($theme?->logo_url)) {
+            return (string) $theme->logo_url;
+        }
+
+        return self::getLogoAssetUrl();
+    }
+
     public static function handleControllerThrowable(\Throwable $th, string $context)
     {
         if ($th instanceof ApiException) {

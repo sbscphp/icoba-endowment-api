@@ -10,6 +10,7 @@ enum ReportType: string
     case ROLES = 'roles';
     case CAMPAIGNS = 'campaigns';
     case EMAIL_CAMPAIGNS = 'email_campaigns';
+    case PLEDGES = 'pledges';
 
     /**
      * @return list<string>
@@ -28,6 +29,7 @@ enum ReportType: string
             self::ROLES => 'Roles',
             self::CAMPAIGNS => 'Campaigns',
             self::EMAIL_CAMPAIGNS => 'Email campaigns',
+            self::PLEDGES => 'Pledges',
         };
     }
 }

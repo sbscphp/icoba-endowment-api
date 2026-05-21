@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\v1\Customer\Auth;
 
+use App\Enums\OtpChannelEnum;
 use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
 use App\Helpers\OpaqueMessageHelper;
@@ -20,7 +21,8 @@ class PasswordController extends Controller
     public function forgotPassword(ForgotPasswordRequest $request)
     {
         try {
-            $payload = $this->passwordResetService->requestReset((string) $request->input('email'), $request);
+            $channel = OtpChannelEnum::tryFromRequest($request->input('otp_channel'));
+            $payload = $this->passwordResetService->requestReset((string) $request->input('email'), $channel, $request);
 
             $message = OpaqueMessageHelper::authOpaqueEnabled('forgot_password')
                 ? 'If an account matches what you entered, a verification code will be sent.'
@@ -35,7 +37,8 @@ class PasswordController extends Controller
     public function forgotPasswordResend(ResendOtpRequest $request)
     {
         try {
-            $payload = $this->passwordResetService->resendResetOtp((string) $request->input('challenge_token'), $request);
+            $channel = OtpChannelEnum::tryFromRequest($request->input('otp_channel'), null);
+            $payload = $this->passwordResetService->resendResetOtp((string) $request->input('challenge_token'), $channel, $request);
 
             return JsonResponser::send(false, 'If the verification session is valid, a new code will be sent.', $payload, 200);
         } catch (ApiException $e) {

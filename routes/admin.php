@@ -8,6 +8,8 @@ use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateControl
 use App\Http\Controllers\v1\Admin\Dashboard\DashboardController;
 use App\Http\Controllers\v1\Admin\EmailCampaign\EmailCampaignController;
 use App\Http\Controllers\v1\Admin\Notification\NotificationController;
+use App\Http\Controllers\v1\Admin\Pledge\PledgeController;
+use App\Http\Controllers\v1\Admin\Reconciliation\ReconciliationController;
 use App\Http\Controllers\v1\Admin\Report\ReportController;
 use App\Http\Controllers\v1\Admin\Settings\SettingsController;
 use App\Http\Controllers\v1\Admin\TierConfiguration\TierConfigurationController;
@@ -44,7 +46,7 @@ Route::prefix('v1/admin')->group(function () {
     });
 
     Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
-        Route::get('/users', fn() => 'admin only');
+        Route::get('/users', fn () => 'admin only');
     });
 
     Route::prefix('settings')->middleware(['auth:sanctum'])->group(function () {
@@ -177,6 +179,20 @@ Route::prefix('v1/admin')->group(function () {
             Route::get('/{transactionId}', [TransactionController::class, 'show'])
                 ->middleware(['permission:transactions.read']);
         });
+
+        Route::prefix('pledges')->group(function () {
+            Route::get('/stats', [PledgeController::class, 'stats'])
+                ->middleware(['permission:pledges.read']);
+            Route::get('/', [PledgeController::class, 'index'])
+                ->middleware(['permission:pledges.read']);
+            Route::post('/', [PledgeController::class, 'store'])
+                ->middleware(['permission:pledges.create']);
+            Route::get('/{pledgeUuid}', [PledgeController::class, 'show'])
+                ->middleware(['permission:pledges.read']);
+        });
+
+        Route::post('reconciliation/link-donation-to-pledge', [ReconciliationController::class, 'linkDonationToPledge'])
+            ->middleware(['permission:reconciliation.update']);
 
         Route::prefix('reports')->group(function () {
             Route::get('/types', [ReportController::class, 'reportTypes'])

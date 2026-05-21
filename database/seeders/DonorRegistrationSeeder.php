@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\DonorTypeSlug;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -14,9 +15,10 @@ class DonorRegistrationSeeder extends Seeder
         $now = Carbon::now();
 
         $donorTypes = [
-            ['id' => 1, 'slug' => 'icoba_alumni', 'label' => 'ICOBA Alumni', 'description' => 'Donate as an old boy of Igbobi College, Lagos', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 2, 'slug' => 'corporate_donor', 'label' => 'Corporate Donor', 'description' => 'Donate to Igbobi College as an organization, company or foundation.', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 3, 'slug' => 'friends_relatives', 'label' => 'Friends & Relatives of ICOBA', 'description' => 'Donate to Igbobi College as a friend or relative to an Igbobi college alumnus.', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 1, 'slug' => DonorTypeSlug::ICOBA_ALUMNI->value, 'label' => DonorTypeSlug::ICOBA_ALUMNI->label(), 'description' => DonorTypeSlug::ICOBA_ALUMNI->description(), 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 2, 'slug' => DonorTypeSlug::CORPORATE_DONOR->value, 'label' => DonorTypeSlug::CORPORATE_DONOR->label(), 'description' => DonorTypeSlug::CORPORATE_DONOR->description(), 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 3, 'slug' => DonorTypeSlug::FRIENDS_OF_ICOBA->value, 'label' => DonorTypeSlug::FRIENDS_OF_ICOBA->label(), 'description' => DonorTypeSlug::FRIENDS_OF_ICOBA->description(), 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 4, 'slug' => DonorTypeSlug::RELATIVES_OF_ICOBA->value, 'label' => DonorTypeSlug::RELATIVES_OF_ICOBA->label(), 'description' => DonorTypeSlug::RELATIVES_OF_ICOBA->description(), 'created_at' => $now, 'updated_at' => $now],
         ];
 
         foreach ($donorTypes as &$row) {

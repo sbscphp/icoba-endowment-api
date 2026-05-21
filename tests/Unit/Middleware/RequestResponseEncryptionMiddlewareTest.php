@@ -114,6 +114,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
             'paystack callback' => ['/api/payment/paystack/callback'],
             'flutterwave webhook' => ['/api/payment/flutterwave/webhook'],
             'flutterwave callback' => ['/api/payment/flutterwave/callback'],
+            'stripe webhook' => ['/api/v1/payment/stripe/webhook'],
             'admin api users' => ['/api/admin/apiusers'],
             'crypto helper' => ['/api/crypto'],
             'dev api registration' => ['/api/v1/dev/api-users'],

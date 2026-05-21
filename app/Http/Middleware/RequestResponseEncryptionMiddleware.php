@@ -35,6 +35,7 @@ final readonly class RequestResponseEncryptionMiddleware
         '/paystack/callback',
         '/flutterwave/webhook',
         '/flutterwave/callback',
+        '/stripe/webhook',
     ];
 
     /**
@@ -47,6 +48,10 @@ final readonly class RequestResponseEncryptionMiddleware
         '/api/crypto',
         '/dev/api-users',
         '/dev/crypto',
+        '/api/v1/public/',
+        '/api/v1/receipts/',
+        '/api/v1/donations/intent',
+        '/api/v1/donations/stripe',
     ];
 
     public function __construct(

@@ -2,7 +2,9 @@
 
 namespace App\Http\Resources;
 
+use App\Models\TierConfiguration;
 use App\Models\Transaction;
+use App\Services\Receipt\ReceiptService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -17,10 +19,11 @@ class TransactionResource extends JsonResource
     public function toArray(Request $request): array
     {
         $set = $this->donor?->graduationSet;
-        /** @var \App\Models\TierConfiguration|null $tier */
+        /** @var TierConfiguration|null $tier */
         $tier = $this->resource->getAttribute('matched_tier');
 
         $metadata = is_array($this->metadata) ? $this->metadata : [];
+        $receiptLinks = $this->resolveReceiptLinks();
 
         return [
             'transaction_uuid' => $this->uuid,
@@ -61,8 +64,49 @@ class TransactionResource extends JsonResource
             'amount_in_naira' => $this->amount_in_naira !== null ? (string) $this->amount_in_naira : null,
             'exchange_rate_to_naira' => $this->exchange_rate_to_naira !== null ? (string) $this->exchange_rate_to_naira : null,
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
+            'pledge_uuid' => $this->pledge_uuid,
+            'application_type' => $this->application_type instanceof \BackedEnum ? $this->application_type->value : $this->application_type,
+            'superseded_by_transaction_uuid' => $this->superseded_by_transaction_uuid,
+            'organization_name' => $this->organization_name,
+            'rc_number' => $this->rc_number,
+            'tin' => $this->tin,
+            'receipt_number' => $this->receipt_number,
+            'receipt_download_url' => $receiptLinks['donation'] ?? null,
+            'tax_receipt_download_url' => $receiptLinks['tax'] ?? null,
             'metadata' => $metadata,
         ];
+    }
+
+    /**
+     * @return array{donation?: string, tax?: string}
+     */
+    private function resolveReceiptLinks(): array
+    {
+        if ($this->status !== \App\Enums\TransactionStatus::SUCCESSFUL) {
+            return [];
+        }
+
+        if ($this->receipt_token === null || $this->receipt_token === '') {
+            return [];
+        }
+
+        if ($this->receipt_number === null || $this->receipt_number === '') {
+            return [];
+        }
+
+        $receiptService = app(ReceiptService::class);
+        $token = urlencode((string) $this->receipt_token);
+        $base = rtrim((string) config('app.url'), '/').'/api/v1/receipts/'.$this->receipt_number;
+
+        $links = [
+            'donation' => $base.'/download?token='.$token,
+        ];
+
+        if ($receiptService->isEligibleForTaxReceipt($this->resource)) {
+            $links['tax'] = $base.'/tax/download?token='.$token;
+        }
+
+        return $links;
     }
 
     private function resolveDonorName(): ?string

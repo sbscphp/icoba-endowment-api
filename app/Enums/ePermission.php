@@ -26,7 +26,11 @@ enum ePermission: string
     case TIER_CONFIGURATION_UPDATE = 'tier_configuration.update';
     case TIER_CONFIGURATION_DELETE = 'tier_configuration.delete';
 
-    // 5. Reconciliation
+    // 5. Pledges
+    case PLEDGES_READ = 'pledges.read';
+    case PLEDGES_CREATE = 'pledges.create';
+
+    // 6. Reconciliation
     case RECONCILIATION_READ = 'reconciliation.read';
     case RECONCILIATION_UPDATE = 'reconciliation.update';
 

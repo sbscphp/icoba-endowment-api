@@ -6,6 +6,7 @@ use App\Enums\ReportType;
 use App\Models\Admin;
 use App\Models\Campaign;
 use App\Models\CampaignEmail;
+use App\Models\Pledge;
 use App\Models\Role;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
@@ -82,6 +83,7 @@ class ReportService
             ReportType::ROLES => Role::query()->where('guard_name', 'api')->withCount('admins as users_count'),
             ReportType::CAMPAIGNS => Campaign::query(),
             ReportType::EMAIL_CAMPAIGNS => CampaignEmail::query()->with('campaign:uuid,name,campaign_id'),
+            ReportType::PLEDGES => Pledge::query()->with(['campaign:uuid,name,campaign_id', 'donor:uuid,firstname,lastname,email']),
         };
 
         $this->applyDateRange($query, $validated);
@@ -93,7 +95,6 @@ class ReportService
     }
 
     /**
-     * @param  mixed  $row
      * @return array<string,mixed>
      */
     private function transformRow(ReportType $type, mixed $row): array
@@ -148,11 +149,26 @@ class ReportService
                 'recipients' => (int) ($row->total_recipients ?? 0),
                 'created_at' => $row->created_at,
             ],
+            ReportType::PLEDGES => [
+                'uuid' => $row->uuid,
+                'donor_name' => (bool) $row->is_anonymous ? 'Anonymous' : ($row->donor_name ?? trim((string) (($row->donor?->firstname ?? '').' '.($row->donor?->lastname ?? '')))),
+                'donor_email' => $row->donor_email ?? $row->donor?->email,
+                'donor_phone' => $row->donor_phone,
+                'campaign' => $row->campaign?->name,
+                'committed_amount' => (string) $row->committed_amount,
+                'currency' => $row->currency,
+                'committed_amount_ngn' => $row->committed_amount_ngn !== null ? (string) $row->committed_amount_ngn : '',
+                'exchange_rate_to_naira' => $row->exchange_rate_to_naira !== null ? (string) $row->exchange_rate_to_naira : '',
+                'payment_plan_type' => $row->payment_plan_type instanceof \BackedEnum ? $row->payment_plan_type->value : $row->payment_plan_type,
+                'installment_count' => $row->installment_count,
+                'status' => $row->status instanceof \BackedEnum ? $row->status->value : $row->status,
+                'is_anonymous' => (bool) $row->is_anonymous,
+                'created_at' => $row->created_at,
+            ],
         };
     }
 
     /**
-     * @param  mixed  $row
      * @return list<mixed>
      */
     private function rowValuesForExport(ReportType $type, mixed $row): array
@@ -174,6 +190,7 @@ class ReportService
             ReportType::ROLES => ['Name', 'Description', 'Users Count', 'Active', 'Created At'],
             ReportType::CAMPAIGNS => ['Campaign ID', 'Name', 'Status', 'Target Amount', 'Base Currency', 'Created At'],
             ReportType::EMAIL_CAMPAIGNS => ['Title', 'Campaign', 'Status', 'Is Active', 'Recipients', 'Created At'],
+            ReportType::PLEDGES => ['UUID', 'Donor Name', 'Donor Email', 'Donor Phone', 'Campaign', 'Committed Amount', 'Currency', 'Committed Amount (NGN)', 'FX to NGN', 'Payment Plan', 'Installments', 'Status', 'Anonymous', 'Created At'],
         };
     }
 
@@ -214,6 +231,10 @@ class ReportService
                 ReportType::ROLES => $builder->where('name', 'like', $like)->orWhere('description', 'like', $like),
                 ReportType::CAMPAIGNS => $builder->where('name', 'like', $like)->orWhere('campaign_id', 'like', $like),
                 ReportType::EMAIL_CAMPAIGNS => $builder->where('title', 'like', $like),
+                ReportType::PLEDGES => $builder->where('uuid', 'like', $like)
+                    ->orWhere('donor_name', 'like', $like)
+                    ->orWhere('donor_email', 'like', $like)
+                    ->orWhere('donor_phone', 'like', $like),
             };
         });
     }
@@ -224,7 +245,7 @@ class ReportService
     private function applyFilters(Builder $query, ReportType $type, array $validated): void
     {
         $status = data_get($validated, 'filters.status');
-        if (is_string($status) && $status !== '' && in_array($type, [ReportType::TRANSACTIONS, ReportType::CAMPAIGNS, ReportType::EMAIL_CAMPAIGNS], true)) {
+        if (is_string($status) && $status !== '' && in_array($type, [ReportType::TRANSACTIONS, ReportType::CAMPAIGNS, ReportType::EMAIL_CAMPAIGNS, ReportType::PLEDGES], true)) {
             $query->where('status', $status);
         }
 
@@ -238,6 +259,34 @@ class ReportService
             $currency = data_get($validated, 'filters.currency');
             if (is_string($currency) && $currency !== '') {
                 $query->where('currency', $currency);
+            }
+        }
+
+        if ($type === ReportType::PLEDGES) {
+            $currency = data_get($validated, 'filters.currency');
+            if (is_string($currency) && $currency !== '') {
+                $query->where('currency', strtoupper($currency));
+            }
+
+            $campaignUuid = data_get($validated, 'filters.campaign_uuid');
+            if (is_string($campaignUuid) && $campaignUuid !== '') {
+                $query->where('campaign_uuid', $campaignUuid);
+            }
+
+            $userUuid = data_get($validated, 'filters.user_uuid');
+            if (is_string($userUuid) && $userUuid !== '') {
+                $query->where('user_uuid', $userUuid);
+            }
+
+            $plan = data_get($validated, 'filters.payment_plan_type');
+            if (is_string($plan) && $plan !== '') {
+                $query->where('payment_plan_type', $plan);
+            }
+
+            $anonymous = data_get($validated, 'filters.is_anonymous');
+            if ($anonymous !== null && $anonymous !== '') {
+                $truthy = in_array($anonymous, ['1', 1, true, 'true'], true);
+                $query->where('is_anonymous', $truthy);
             }
         }
     }
@@ -271,6 +320,7 @@ class ReportService
             ReportType::ROLES => ['is_active'],
             ReportType::CAMPAIGNS => ['status'],
             ReportType::EMAIL_CAMPAIGNS => ['status', 'is_active'],
+            ReportType::PLEDGES => ['status', 'currency', 'campaign_uuid', 'user_uuid', 'payment_plan_type', 'is_anonymous'],
         };
     }
 
@@ -286,6 +336,7 @@ class ReportService
             ReportType::ROLES => ['name', 'users_count', 'is_active', 'created_at', 'updated_at'],
             ReportType::CAMPAIGNS => ['name', 'campaign_id', 'status', 'target_amount', 'created_at', 'updated_at'],
             ReportType::EMAIL_CAMPAIGNS => ['title', 'status', 'is_active', 'sent_at', 'created_at', 'updated_at'],
+            ReportType::PLEDGES => ['uuid', 'committed_amount', 'committed_amount_ngn', 'exchange_rate_to_naira', 'currency', 'status', 'payment_plan_type', 'installment_count', 'created_at', 'updated_at'],
         };
     }
 }

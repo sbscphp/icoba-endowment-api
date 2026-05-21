@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Enums\BulkEmailStatus;
 use App\Mail\CampaignBulkEmailMail;
 use App\Models\CampaignEmail;
+use App\Services\Theme\ThemeResolver;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -36,7 +37,8 @@ class SendCampaignBulkEmailJob implements ShouldQueue
         }
 
         try {
-            Mail::to($this->toEmail)->send(new CampaignBulkEmailMail($row, $row->campaign, $this->toEmail, $this->toName));
+            $theme = app(ThemeResolver::class)->resolveForMail();
+            Mail::to($this->toEmail)->send(new CampaignBulkEmailMail($row, $row->campaign, $this->toEmail, $theme, $this->toName));
             $this->recordDeliveryResult($this->campaignEmailUuid, true);
         } catch (\Throwable $e) {
             Log::warning('Bulk email send failed: '.$e->getMessage(), [

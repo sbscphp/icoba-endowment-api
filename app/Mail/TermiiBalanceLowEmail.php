@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Models\Theme;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -12,31 +13,30 @@ class TermiiBalanceLowEmail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public $data;
+    public function __construct(
+        public readonly array $data,
+        public readonly Theme $mailTheme,
+    ) {}
 
-    public function __construct(array $data)
-    {
-        $this->data = $data;
-    }
-
-    public function envelope()
+    public function envelope(): Envelope
     {
         return new Envelope(
             subject: 'Termii Balance Low Alert',
         );
     }
 
-    public function content()
+    public function content(): Content
     {
         return new Content(
-            text: 'emails.termii-balance-low',
+            view: 'emails.termii-balance-low',
             with: [
                 'data' => $this->data,
+                'theme' => $this->mailTheme,
             ],
         );
     }
 
-    public function attachments()
+    public function attachments(): array
     {
         return [];
     }

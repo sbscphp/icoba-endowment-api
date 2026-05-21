@@ -4,9 +4,9 @@ namespace App\Services\Admin\Dashboard;
 
 use App\Enums\CampaignStatus;
 use App\Enums\Currency;
-use App\Enums\TransactionStatus;
 use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\Campaign;
+use App\Models\Pledge;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
 use Carbon\Carbon;
@@ -24,7 +24,7 @@ class DashboardService
         $query = $this->successfulTransactionsQuery($filters);
         $period = ListingFilterRules::resolveDateWindow($filters);
         $amountColumn = $this->amountColumn($filters);
-        $current = $this->overviewMetrics($query, $amountColumn);
+        $current = $this->overviewMetrics($query, $amountColumn, $filters);
         $previous = $this->previousOverviewMetrics($filters, $period, $amountColumn);
 
         return [
@@ -282,8 +282,7 @@ class DashboardService
      */
     private function successfulTransactionsQuery(array $filters): Builder
     {
-        $query = Transaction::query()
-            ->where('transactions.status', TransactionStatus::SUCCESSFUL);
+        $query = Transaction::query()->countableTowardRevenue();
 
         $currency = $this->resolvedCurrency($filters);
         if ($currency !== Currency::NGN->value) {
@@ -307,8 +306,7 @@ class DashboardService
      */
     private function successfulTransactionsQueryWithoutDateWindow(array $filters): Builder
     {
-        $query = Transaction::query()
-            ->where('status', TransactionStatus::SUCCESSFUL);
+        $query = Transaction::query()->countableTowardRevenue();
 
         $currency = $this->resolvedCurrency($filters);
         if ($currency !== Currency::NGN->value) {
@@ -324,8 +322,7 @@ class DashboardService
      */
     private function successfulTransactionsQueryWithoutCurrency(array $filters): Builder
     {
-        $query = Transaction::query()
-            ->where('transactions.status', TransactionStatus::SUCCESSFUL);
+        $query = Transaction::query()->countableTowardRevenue();
 
         $range = ListingFilterRules::resolveDateWindow($filters);
         if ($range['start'] !== null) {
@@ -360,13 +357,19 @@ class DashboardService
      * @param  Builder<Transaction>  $query
      * @return array<string, int|float|string>
      */
-    private function overviewMetrics(Builder $query, string $amountColumn): array
+    private function overviewMetrics(Builder $query, string $amountColumn, array $filters): array
     {
         $fundRaised = (float) ((clone $query)->sum($amountColumn) ?? 0);
         $transactions = (int) ((clone $query)->count());
-        $pledges = (int) ((clone $query)
-            ->whereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.donation_type'))) like ?", ['%pledge%'])
-            ->count());
+        $range = ListingFilterRules::resolveDateWindow($filters);
+        $pledgeQ = Pledge::query();
+        if ($range['start'] !== null) {
+            $pledgeQ->where('created_at', '>=', $range['start']);
+        }
+        if ($range['end'] !== null) {
+            $pledgeQ->where('created_at', '<=', $range['end']);
+        }
+        $pledges = (int) $pledgeQ->count();
         $donors = $this->uniqueDonorsCount((clone $query));
 
         return [
@@ -406,7 +409,7 @@ class DashboardService
         $previousFilters['end_date'] = $previousEnd->toDateString();
         $previousFilters['period'] = 'custom';
 
-        return $this->overviewMetrics($this->successfulTransactionsQuery($previousFilters), $amountColumn);
+        return $this->overviewMetrics($this->successfulTransactionsQuery($previousFilters), $amountColumn, $previousFilters);
     }
 
     private function changePercent(float|int $current, float|int $previous): float

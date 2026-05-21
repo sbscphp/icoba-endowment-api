@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\CustomerRegistrationStepEnum;
+use App\Enums\DonorTypeSlug;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -58,24 +59,21 @@ class UserResource extends JsonResource
             ];
         } elseif (! empty($this->organization_name)) {
             $type = [
-                'slug' => 'corporate_donor',
-                'label' => 'Corporate Donor',
+                'slug' => DonorTypeSlug::CORPORATE_DONOR->value,
+                'label' => DonorTypeSlug::CORPORATE_DONOR->label(),
             ];
         } elseif (! empty($this->graduation_set_uuid) || ! empty($this->alumni_identifier)) {
             $type = [
-                'slug' => 'icoba_alumni',
-                'label' => 'ICOBA Alumni',
-            ];
-        } else {
-            $type = [
-                'slug' => 'friends_relatives',
-                'label' => 'Friends & Relatives',
+                'slug' => DonorTypeSlug::ICOBA_ALUMNI->value,
+                'label' => DonorTypeSlug::ICOBA_ALUMNI->label(),
             ];
         }
 
         return [
             'type' => $type,
             'organization_name' => $this->organization_name,
+            'rc_number' => $this->rc_number,
+            'tin' => $this->tin,
             'alumni_identifier' => $this->alumni_identifier,
             'set' => $graduationSet !== null
                 ? $graduationSet->only(['uuid', 'name', 'set_number', 'public_id'])

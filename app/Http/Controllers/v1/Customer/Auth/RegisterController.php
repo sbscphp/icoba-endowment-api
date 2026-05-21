@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\v1\Customer\Auth;
 
+use App\Enums\OtpChannelEnum;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\DonorRegisterRequest;
@@ -17,7 +18,7 @@ class RegisterController extends Controller
     ) {}
 
     /**
-     * Donor registration metadata (types, corporate categories, graduation sets).
+     * Donor registration metadata (types, corporate categories, graduation sets, countries).
      */
     public function metadata()
     {
@@ -41,9 +42,11 @@ class RegisterController extends Controller
                 $request
             );
 
+            $channel = OtpChannelEnum::tryFrom($payload['otp_channel'] ?? '') ?? OtpChannelEnum::EMAIL;
+
             return JsonResponser::send(
                 false,
-                'Please verify your email. A verification code has been sent.',
+                'Please verify your account. '.$channel->deliveryMessage(),
                 $payload,
                 201
             );

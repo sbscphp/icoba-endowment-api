@@ -4,7 +4,12 @@ use App\Http\Controllers\v1\Customer\Auth\EmailVerificationController;
 use App\Http\Controllers\v1\Customer\Auth\LoginController;
 use App\Http\Controllers\v1\Customer\Auth\PasswordController;
 use App\Http\Controllers\v1\Customer\Auth\RegisterController;
+use App\Http\Controllers\v1\Customer\CustomerDashboardController;
+use App\Http\Controllers\v1\Customer\Donation\CustomerReceiptController;
+use App\Http\Controllers\v1\Customer\Donation\DonationIntentController;
+use App\Http\Controllers\v1\Customer\Donation\StripeCheckoutController;
 use App\Http\Controllers\v1\Customer\Notification\NotificationController;
+use App\Http\Controllers\v1\Customer\Pledge\CustomerPledgeController;
 use App\Http\Controllers\v1\Customer\Settings\SettingsController;
 use Illuminate\Support\Facades\Route;
 
@@ -42,4 +47,28 @@ Route::prefix('v1')->group(function () {
         Route::patch('/notifications', [SettingsController::class, 'updateNotificationPreferences']);
         Route::post('/notifications', [SettingsController::class, 'updateNotificationPreferences']);
     });
+
+    Route::middleware('auth:sanctum')->prefix('me')->group(function () {
+        Route::get('/dashboard/summary', [CustomerDashboardController::class, 'summary']);
+        Route::get('/transactions', [CustomerDashboardController::class, 'transactionHistory']);
+        Route::get('/transactions/{transactionUuid}/receipt', [CustomerReceiptController::class, 'download']);
+        Route::get('/transactions/{transactionUuid}/tax-receipt', [CustomerReceiptController::class, 'downloadTax']);
+
+        Route::get('/pledges/stats', [CustomerPledgeController::class, 'stats']);
+        Route::get('/pledges', [CustomerPledgeController::class, 'index']);
+        Route::post('/pledges', [CustomerPledgeController::class, 'store']);
+        Route::get('/pledges/{pledgeUuid}', [CustomerPledgeController::class, 'show'])
+            ->whereUuid('pledgeUuid');
+        Route::post('/donations/intent', [DonationIntentController::class, 'store'])
+            ->middleware(['throttle:60,1']);
+    });
+
+    Route::post('donations/intent', [DonationIntentController::class, 'store'])
+        ->middleware(['throttle:60,1']);
+
+    Route::post('donations/stripe/checkout/guest', [StripeCheckoutController::class, 'guest'])
+        ->middleware(['throttle:60,1']);
+
+    Route::post('donations/stripe/checkout', [StripeCheckoutController::class, 'member'])
+        ->middleware(['auth:sanctum', 'throttle:60,1']);
 });
