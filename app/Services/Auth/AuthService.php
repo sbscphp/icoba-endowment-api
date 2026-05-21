@@ -4,6 +4,8 @@ namespace App\Services\Auth;
 
 use App\Enums\AuditActionEnum;
 use App\Enums\CustomerRegistrationStepEnum;
+use App\Enums\DonorTypeSlug;
+use App\Enums\OtpChannelEnum;
 use App\Enums\eClientType;
 use App\Enums\eRole;
 use App\Enums\ModuleEnums;
@@ -13,6 +15,7 @@ use App\Helpers\GeneralHelper;
 use App\Helpers\OpaqueMessageHelper;
 use App\Mail\WelcomeToEndowmentPortalMail;
 use App\Models\Admin;
+use App\Models\Country;
 use App\Models\DonorType;
 use App\Models\GraduationSet;
 use App\Models\User;
@@ -72,11 +75,13 @@ class AuthService
             201,
         );
 
-        $otpPayload = $this->otpService->sendEmailVerificationOtp($user);
+        $channel = OtpChannelEnum::tryFromRequest($validated['otp_channel'] ?? null);
+        $otpPayload = $this->otpService->sendEmailVerificationOtp($user, $channel);
         GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, $user->uuid, [
             'purpose' => 'EMAIL_VERIFICATION',
+            'otp_channel' => $channel->value,
             'reuse_active_challenge' => (bool) ($otpPayload['cooldown_active'] ?? false),
-        ], $this->displayName($user).' was sent an email verification code.', User::class, $user->uuid, ModuleEnums::authentication, 200);
+        ], $this->displayName($user).' was sent a verification code.', User::class, $user->uuid, ModuleEnums::authentication, 200);
 
         return $this->withRegistrationStep($otpPayload, CustomerRegistrationStepEnum::AWAITING_OTP);
     }
@@ -91,28 +96,32 @@ class AuthService
             'email' => $validated['email'],
             'password' => $validated['password'],
             'phone_number' => $validated['phone_number'],
-            'country_code' => $validated['country_code'] ?? '+234',
+            'country_code' => $validated['country_code'] ?? Country::defaultDialCode(),
             'donor_type_uuid' => $donorType->uuid,
             'corporate_category_uuid' => null,
             'graduation_set_uuid' => null,
             'organization_name' => null,
+            'rc_number' => null,
+            'tin' => null,
             'alumni_identifier' => null,
         ];
 
         return match ($donorType->slug) {
-            'icoba_alumni' => array_merge($row, [
+            DonorTypeSlug::ICOBA_ALUMNI->value => array_merge($row, [
                 'firstname' => $validated['firstname'],
                 'lastname' => $validated['lastname'],
                 'graduation_set_uuid' => GraduationSet::query()->where('set_number', $validated['set_number'])->value('uuid'),
                 'alumni_identifier' => ! empty($validated['alumni_identifier']) ? $validated['alumni_identifier'] : null,
             ]),
-            'corporate_donor' => array_merge($row, [
+            DonorTypeSlug::CORPORATE_DONOR->value => array_merge($row, [
                 'organization_name' => $validated['organization_name'],
                 'corporate_category_uuid' => $validated['corporate_category_uuid'],
+                'rc_number' => $validated['rc_number'],
+                'tin' => $validated['tin'],
                 'firstname' => $validated['organization_name'],
-                'lastname' => 'Organization',
+                'lastname' => '', //Organization
             ]),
-            'friends_relatives' => array_merge($row, [
+            DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value => array_merge($row, [
                 'firstname' => $validated['firstname'],
                 'lastname' => $validated['lastname'],
             ]),
@@ -370,14 +379,15 @@ class AuthService
         return $payload;
     }
 
-    public function resendCustomerEmailVerificationOtp(string $challengeToken, Request $request): array
+    public function resendCustomerEmailVerificationOtp(string $challengeToken, ?OtpChannelEnum $channel, Request $request): array
     {
-        $payload = $this->otpService->resendEmailVerificationOtp($challengeToken);
+        $payload = $this->otpService->resendEmailVerificationOtp($challengeToken, $channel);
         GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, null, [
             'purpose' => 'EMAIL_VERIFICATION',
+            'otp_channel' => $payload['otp_channel'] ?? $channel?->value,
             'resend' => true,
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
-        ], 'Customer email verification OTP was resent.', null, null, ModuleEnums::authentication, 200);
+        ], 'Customer verification OTP was resent.', null, null, ModuleEnums::authentication, 200);
 
         return $this->withRegistrationStep($payload, CustomerRegistrationStepEnum::AWAITING_OTP);
     }
@@ -606,7 +616,7 @@ class AuthService
             return $authenticatable->name;
         }
 
-        return trim($authenticatable->firstname.' '.$authenticatable->lastname) ?: $authenticatable->email;
+        return $authenticatable->displayName();
     }
 
     private function sendLoginSuccessNotification(User|Admin $authenticatable, Request $request, string $client, bool $viaOtp): void

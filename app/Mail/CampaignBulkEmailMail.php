@@ -2,9 +2,9 @@
 
 namespace App\Mail;
 
-use App\Enums\EmailDesignTemplate;
 use App\Models\Campaign;
 use App\Models\CampaignEmail;
+use App\Models\Theme;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Attachment;
@@ -20,6 +20,7 @@ class CampaignBulkEmailMail extends Mailable
         public readonly CampaignEmail $campaignEmail,
         public readonly Campaign $campaign,
         public readonly string $recipientEmail,
+        public readonly Theme $mailTheme,
         public readonly ?string $recipientName = null,
     ) {}
 
@@ -32,20 +33,13 @@ class CampaignBulkEmailMail extends Mailable
 
     public function content(): Content
     {
-        $template = $this->campaignEmail->design_template;
-        $view = match ($template) {
-            EmailDesignTemplate::BENTO => 'mail.campaign.bento',
-            EmailDesignTemplate::CORE => 'mail.campaign.core',
-            EmailDesignTemplate::MINIMAL => 'mail.campaign.minimal',
-            default => 'mail.campaign.classic',
-        };
-
         return new Content(
-            view: $view,
+            view: 'mail.campaign.message',
             with: [
                 'campaignName' => $this->campaign->name,
                 'recipientName' => $this->recipientName,
                 'bodyHtml' => $this->campaignEmail->content,
+                'theme' => $this->mailTheme,
             ],
         );
     }

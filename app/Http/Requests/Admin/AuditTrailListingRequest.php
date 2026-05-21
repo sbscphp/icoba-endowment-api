@@ -37,6 +37,8 @@ class AuditTrailListingRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        ListingFilterRules::applyPeriodDateRangeToRequest($this);
+
         if ($this->has('sort_direction') && is_string($this->input('sort_direction'))) {
             $this->merge([
                 'sort_direction' => strtolower($this->input('sort_direction')),

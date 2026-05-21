@@ -4,6 +4,7 @@ namespace App\Services\Auth;
 
 use App\Enums\AuditActionEnum;
 use App\Enums\ModuleEnums;
+use App\Enums\OtpChannelEnum;
 use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
@@ -23,7 +24,7 @@ class PasswordResetService
         private readonly OtpService $otpService,
     ) {}
 
-    public function requestReset(string $email, Request $request): array
+    public function requestReset(string $email, OtpChannelEnum $channel, Request $request): array
     {
         $user = User::query()->where('email', $email)->first();
 
@@ -44,13 +45,13 @@ class PasswordResetService
             ];
         }
 
-        $payload = $this->otpService->sendPasswordResetOtp($user);
+        $payload = $this->otpService->sendPasswordResetOtp($user, $channel);
         GeneralHelper::storeAuditLog(
             UserTypeEnum::CUSTOMER,
             AuditActionEnum::PASSWORD_RESET_REQUESTED,
             $request,
             $user->uuid,
-            [],
+            ['otp_channel' => $channel->value],
             $this->displayName($user).' requested a password reset.',
             User::class,
             $user->uuid,
@@ -59,6 +60,7 @@ class PasswordResetService
         );
         GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, $user->uuid, [
             'purpose' => 'PASSWORD_RESET',
+            'otp_channel' => $channel->value,
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
         ], 'Password reset OTP was sent.', User::class, $user->uuid, ModuleEnums::authentication, 200);
 
@@ -117,11 +119,12 @@ class PasswordResetService
         return $payload;
     }
 
-    public function resendResetOtp(string $challengeToken, Request $request): array
+    public function resendResetOtp(string $challengeToken, ?OtpChannelEnum $channel, Request $request): array
     {
-        $payload = $this->otpService->resendPasswordResetOtp($challengeToken);
+        $payload = $this->otpService->resendPasswordResetOtp($challengeToken, $channel);
         GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, null, [
             'purpose' => 'PASSWORD_RESET',
+            'otp_channel' => $payload['otp_channel'] ?? $channel?->value,
             'resend' => true,
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
         ], 'Password reset OTP was resent.', null, null, ModuleEnums::authentication, 200);
@@ -269,7 +272,7 @@ class PasswordResetService
             return $subject->name;
         }
 
-        return trim($subject->firstname.' '.$subject->lastname) ?: $subject->email;
+        return $subject->displayName();
     }
 
 }

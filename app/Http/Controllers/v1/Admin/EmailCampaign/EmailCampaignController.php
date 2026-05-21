@@ -68,7 +68,7 @@ class EmailCampaignController extends Controller
         try {
             $payload = collect(BulkEmailAudience::cases())->map(fn (BulkEmailAudience $a) => [
                 'value' => $a->value,
-                'label' => ucfirst(str_replace('_', ' ', $a->value)),
+                'label' => $a->label(),
             ])->values()->all();
 
             return JsonResponser::send(false, 'Recipient audiences retrieved.', $payload);

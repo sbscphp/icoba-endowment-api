@@ -2,9 +2,11 @@
 
 namespace App\Http\Requests;
 
+use App\Responser\JsonResponser;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\JsonResponse;
 
 abstract class ApiFormRequest extends FormRequest
 {
@@ -38,11 +40,14 @@ abstract class ApiFormRequest extends FormRequest
 
     protected function failedValidation(Validator $validator): void
     {
-        throw new HttpResponseException(response()->json([
-            'error' => true,
-            'message' => $validator->errors()->first(),
-            'errors' => $validator->errors(),
-            'data' => null,
-        ], 422));
+        /** @var JsonResponse $response */
+        $response = JsonResponser::send(
+            error: true,
+            message: $validator->errors()->first() ?: 'Validation error',
+            data: $validator->errors()->messages(),
+            statusCode: 422,
+        );
+
+        throw new HttpResponseException($response);
     }
 }

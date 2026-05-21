@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
 use App\Traits\HasUuid;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Transaction extends Model
@@ -22,6 +25,7 @@ class Transaction extends Model
             'amount_in_naira' => 'decimal:2',
             'is_anonymous' => 'boolean',
             'status' => TransactionStatus::class,
+            'application_type' => TransactionApplicationType::class,
             'metadata' => 'array',
             'paid_at' => 'datetime',
         ];
@@ -44,5 +48,47 @@ class Transaction extends Model
     public function donor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_uuid', 'uuid');
+    }
+
+    public function pledge(): BelongsTo
+    {
+        return $this->belongsTo(Pledge::class, 'pledge_uuid', 'uuid');
+    }
+
+    public function supersededBy(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'superseded_by_transaction_uuid', 'uuid');
+    }
+
+    public function donorType(): BelongsTo
+    {
+        return $this->belongsTo(DonorType::class, 'donor_type_uuid', 'uuid');
+    }
+
+    public function receipt(): HasOne
+    {
+        return $this->hasOne(TransactionReceipt::class, 'transaction_uuid', 'uuid');
+    }
+
+    /**
+     * Successful cash movements that count toward campaign revenue and leaderboards.
+     *
+     * @param  Builder<Transaction>  $query
+     * @return Builder<Transaction>
+     */
+    public function scopeCountableTowardRevenue(Builder $query): Builder
+    {
+        $table = $query->getModel()->getTable();
+
+        return $query
+            ->where($table.'.status', TransactionStatus::SUCCESSFUL)
+            ->where(function (Builder $b) use ($table): void {
+                $b->whereNull($table.'.application_type')
+                    ->orWhere(
+                        $table.'.application_type',
+                        '!=',
+                        TransactionApplicationType::PLEDGE_PLACEHOLDER->value
+                    );
+            });
     }
 }

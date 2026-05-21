@@ -2,6 +2,7 @@
 
 namespace App\Services\Auth;
 
+use App\Enums\OtpChannelEnum;
 use App\Enums\OtpPurposeEnum;
 use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
@@ -14,6 +15,7 @@ use App\Services\Theme\ThemeResolver;
 use App\Services\ThirdParty\SMS\SmsService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
@@ -40,7 +42,7 @@ class OtpService
 
     public function sendLoginOtp(User|Admin $subject): array
     {
-        return $this->sendOtp($subject, OtpPurposeEnum::LOGIN, 'login');
+        return $this->sendOtp($subject, OtpPurposeEnum::LOGIN, 'login', OtpChannelEnum::EMAIL);
     }
 
     public function verifyLoginOtp(string $challengeToken, string $otpCode): User|Admin
@@ -53,12 +55,12 @@ class OtpService
         $payload = $this->challengeTokenService->decode($challengeToken, OtpPurposeEnum::LOGIN);
         $subject = $this->resolveSubjectFromPayload($payload);
 
-        return $this->sendOtp($subject, OtpPurposeEnum::LOGIN, 'login');
+        return $this->sendOtp($subject, OtpPurposeEnum::LOGIN, 'login', OtpChannelEnum::EMAIL);
     }
 
-    public function sendEmailVerificationOtp(User $user): array
+    public function sendEmailVerificationOtp(User $user, OtpChannelEnum $channel = OtpChannelEnum::EMAIL): array
     {
-        return $this->sendOtp($user, OtpPurposeEnum::EMAIL_VERIFICATION, 'email verification');
+        return $this->sendOtp($user, OtpPurposeEnum::EMAIL_VERIFICATION, 'email verification', $channel);
     }
 
     /**
@@ -75,7 +77,7 @@ class OtpService
         return $subject;
     }
 
-    public function resendEmailVerificationOtp(string $challengeToken): array
+    public function resendEmailVerificationOtp(string $challengeToken, ?OtpChannelEnum $channel = null): array
     {
         $payload = $this->challengeTokenService->decode($challengeToken, OtpPurposeEnum::EMAIL_VERIFICATION);
         $subject = $this->resolveSubjectFromPayload($payload);
@@ -84,12 +86,14 @@ class OtpService
             throw new ApiException('Invalid verification session.', 422);
         }
 
-        return $this->sendOtp($subject, OtpPurposeEnum::EMAIL_VERIFICATION, 'email verification');
+        $channel ??= $this->channelFromPayload($payload);
+
+        return $this->sendOtp($subject, OtpPurposeEnum::EMAIL_VERIFICATION, 'email verification', $channel);
     }
 
-    public function sendPasswordResetOtp(User|Admin $subject): array
+    public function sendPasswordResetOtp(User|Admin $subject, OtpChannelEnum $channel = OtpChannelEnum::EMAIL): array
     {
-        return $this->sendOtp($subject, OtpPurposeEnum::PASSWORD_RESET, 'password reset');
+        return $this->sendOtp($subject, OtpPurposeEnum::PASSWORD_RESET, 'password reset', $channel);
     }
 
     public function verifyPasswordResetOtp(string $challengeToken, string $otpCode): array
@@ -107,20 +111,24 @@ class OtpService
         ];
     }
 
-    public function resendPasswordResetOtp(string $challengeToken): array
+    public function resendPasswordResetOtp(string $challengeToken, ?OtpChannelEnum $channel = null): array
     {
         $payload = $this->challengeTokenService->decode($challengeToken, OtpPurposeEnum::PASSWORD_RESET);
         $subject = $this->resolveSubjectFromPayload($payload);
 
-        return $this->sendOtp($subject, OtpPurposeEnum::PASSWORD_RESET, 'password reset');
+        $channel ??= $this->channelFromPayload($payload);
+
+        return $this->sendOtp($subject, OtpPurposeEnum::PASSWORD_RESET, 'password reset', $channel);
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function sendOtp(User|Admin $subject, OtpPurposeEnum $purpose, string $purposeLabel): array
+    private function sendOtp(User|Admin $subject, OtpPurposeEnum $purpose, string $purposeLabel, OtpChannelEnum $channel): array
     {
-        $gate = $this->evaluateOtpSendGate($subject, $purpose);
+        $this->assertChannelSupported($subject, $channel);
+
+        $gate = $this->evaluateOtpSendGate($subject, $purpose, $channel);
 
         if ($gate['mode'] === 'blocked') {
             throw new ApiException(
@@ -146,25 +154,27 @@ class OtpService
                 'retry_after_seconds' => $gate['retry_after_seconds'],
                 'retry_after_human' => OpaqueMessageHelper::humanizeSecondsRemaining($gate['retry_after_seconds']),
                 'otp_purpose' => $purpose->value,
+                'otp_channel' => $challenge->channel,
             ];
         }
 
-        [$plainOtp, $challenge] = DB::transaction(function () use ($subject, $purpose) {
+        [$plainOtp, $challenge] = DB::transaction(function () use ($subject, $purpose, $channel) {
             AuthChallenge::query()
                 ->where('subject_type', $this->subjectType($subject))
                 ->where('subject_id', $subject->uuid)
                 ->where('purpose', $purpose->value)
+                ->where('channel', $channel->value)
                 ->whereNull('used_at')
                 ->update(['used_at' => now()]);
 
-            $otp = (string) random_int(100000, 999999);
+            $otp = $this->generateOtpCode($channel);
 
             $challenge = AuthChallenge::create([
                 'uuid' => (string) Str::uuid(),
                 'subject_type' => $this->subjectType($subject),
                 'subject_id' => (string) $subject->uuid,
                 'purpose' => $purpose,
-                'channel' => 'email',
+                'channel' => $channel->value,
                 'code_hash' => Hash::make($otp),
                 'expires_at' => now()->addMinutes($this->otpExpiryMinutes()),
             ]);
@@ -172,16 +182,7 @@ class OtpService
             return [$otp, $challenge];
         });
 
-        $theme = app(ThemeResolver::class)->resolveForMail();
-        Mail::to($subject->email)->send(new OTPMail($plainOtp, $this->otpExpiryMinutes(), $theme, $purpose));
-
-        $this->smsService->sendOtp(
-            data_get($subject, 'country_code'),
-            data_get($subject, 'phone_number'),
-            $plainOtp,
-            $this->otpExpiryMinutes(),
-            $purposeLabel
-        );
+        $this->dispatchOtp($subject, $plainOtp, $purpose, $purposeLabel, $channel);
 
         $ttlSeconds = $this->otpExpiryMinutes() * 60;
 
@@ -190,7 +191,89 @@ class OtpService
             'expires_in' => $ttlSeconds,
             'cooldown_active' => false,
             'otp_purpose' => $purpose->value,
+            'otp_channel' => $channel->value,
         ];
+    }
+
+    private function dispatchOtp(User|Admin $subject, string $plainOtp, OtpPurposeEnum $purpose, string $purposeLabel, OtpChannelEnum $channel): void
+    {
+        if ($channel === OtpChannelEnum::EMAIL) {
+            $theme = app(ThemeResolver::class)->resolveForMail();
+            $recipientName = $subject instanceof User
+                ? $subject->displayName()
+                : (trim($subject->firstname.' '.$subject->lastname) ?: $subject->email);
+            Mail::to($subject->email)->send(new OTPMail($plainOtp, $this->otpExpiryMinutes(), $recipientName, $theme, $purpose));
+
+            return;
+        }
+
+        if ($this->smsDispatchEnabled()) {
+            $this->smsService->sendOtp(
+                data_get($subject, 'country_code'),
+                data_get($subject, 'phone_number'),
+                $plainOtp,
+                $this->otpExpiryMinutes(),
+                $purposeLabel
+            );
+
+            return;
+        }
+
+        Log::info('OTP SMS stub: provider dispatch skipped', [
+            'subject_type' => $this->subjectType($subject),
+            'subject_id' => $subject->uuid,
+            'purpose' => $purpose->value,
+            'phone' => data_get($subject, 'phone_number'),
+        ]);
+    }
+
+    private function generateOtpCode(OtpChannelEnum $channel): string
+    {
+        if ($channel === OtpChannelEnum::SMS && ! $this->smsDispatchEnabled()) {
+            $stub = (string) config('security.otp_sms_stub_code', '123456');
+
+            return preg_match('/^\d{6}$/', $stub) === 1 ? $stub : '123456';
+        }
+
+        return (string) random_int(100000, 999999);
+    }
+
+    private function smsDispatchEnabled(): bool
+    {
+        return (bool) config('security.otp_sms_dispatch_enabled', false);
+    }
+
+    private function assertChannelSupported(User|Admin $subject, OtpChannelEnum $channel): void
+    {
+        if ($channel !== OtpChannelEnum::SMS) {
+            return;
+        }
+
+        if ($this->subjectHasSmsDestination($subject)) {
+            return;
+        }
+
+        throw new ApiException('A valid phone number is required to receive verification codes by SMS.', 422);
+    }
+
+    private function subjectHasSmsDestination(User|Admin $subject): bool
+    {
+        return trim((string) data_get($subject, 'phone_number')) !== '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function channelFromPayload(array $payload): OtpChannelEnum
+    {
+        if (! empty($payload['challenge_uuid'])) {
+            $challenge = AuthChallenge::query()->where('uuid', $payload['challenge_uuid'])->first();
+            if ($challenge !== null) {
+                return OtpChannelEnum::tryFrom((string) $challenge->channel) ?? OtpChannelEnum::EMAIL;
+            }
+        }
+
+        return OtpChannelEnum::EMAIL;
     }
 
     /**
@@ -200,7 +283,7 @@ class OtpService
      *     retry_after_seconds?: int
      * }
      */
-    private function evaluateOtpSendGate(User|Admin $subject, OtpPurposeEnum $purpose): array
+    private function evaluateOtpSendGate(User|Admin $subject, OtpPurposeEnum $purpose, OtpChannelEnum $channel): array
     {
         $cooldownSec = $this->otpSendCooldownSeconds();
         $subjectType = $this->subjectType($subject);
@@ -209,6 +292,7 @@ class OtpService
             ->where('subject_type', $subjectType)
             ->where('subject_id', $subject->uuid)
             ->where('purpose', $purpose->value)
+            ->where('channel', $channel->value)
             ->orderByDesc('id')
             ->first();
 
@@ -227,6 +311,7 @@ class OtpService
             ->where('subject_type', $subjectType)
             ->where('subject_id', $subject->uuid)
             ->where('purpose', $purpose->value)
+            ->where('channel', $channel->value)
             ->whereNull('used_at')
             ->where('expires_at', '>', now())
             ->orderByDesc('id')
@@ -258,6 +343,7 @@ class OtpService
             ->where('subject_type', $challenge->subject_type)
             ->where('subject_id', $challenge->subject_id)
             ->where('purpose', $purpose->value)
+            ->where('channel', $challenge->channel)
             ->whereNull('used_at')
             ->orderByDesc('id')
             ->first();

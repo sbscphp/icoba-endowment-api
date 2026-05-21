@@ -3,10 +3,12 @@
 namespace App\Http\Requests\Auth;
 
 use App\Http\Requests\ApiFormRequest;
+use App\Http\Requests\Concerns\ValidatesOtpChannel;
 use Illuminate\Contracts\Validation\ValidationRule;
 
 class ResendOtpRequest extends ApiFormRequest
 {
+    use ValidatesOtpChannel;
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -22,9 +24,9 @@ class ResendOtpRequest extends ApiFormRequest
      */
     public function rules(): array
     {
-        return [
+        return array_merge($this->otpChannelRules(), [
             'challenge_token' => ['required', 'string'],
-        ];
+        ]);
     }
 
     public function attributes(): array
@@ -38,6 +40,7 @@ class ResendOtpRequest extends ApiFormRequest
     {
         return array_merge(parent::messages(), [
             'challenge_token.required' => 'The verification session is required.',
+            'otp_channel.in' => 'Verification channel must be either email or sms.',
         ]);
     }
 }

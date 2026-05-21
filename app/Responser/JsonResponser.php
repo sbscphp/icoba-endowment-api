@@ -36,7 +36,7 @@ class JsonResponser
      * @param int $status
      * @param StaffStrength\ApiMgt\Http\Collections\ApiPaginatedCollection $data
      * @param string|null $message
-     * @return Illuminate\Http\JsonResponse
+     * @return \Illuminate\Http\JsonResponse
      */
     public static function sendPaginated(
         int $status,
@@ -59,7 +59,7 @@ class JsonResponser
      * @param int $status
      * @param Array $data
      * @param string|null $message
-     * @return Illuminate\Http\JsonResponse
+     * @return \Illuminate\Http\JsonResponse
      */
     public static function send(
         bool $error = true,

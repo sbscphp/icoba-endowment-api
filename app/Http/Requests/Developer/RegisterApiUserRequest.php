@@ -19,7 +19,7 @@ final class RegisterApiUserRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            'email' => ['required', 'email:rfc', 'max:255'],
+            'email' => ['required', 'email:rfc', 'max:255', Rule::unique('api_users', 'email')],
             'name' => ['nullable', 'string', 'max:255'],
             'encryption_mode' => [
                 'nullable',

@@ -5,10 +5,15 @@ use App\Http\Controllers\v1\Admin\Auth\AdminLoginController;
 use App\Http\Controllers\v1\Admin\Auth\PasswordController as AdminPasswordController;
 use App\Http\Controllers\v1\Admin\Campaign\CampaignController;
 use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateController;
+use App\Http\Controllers\v1\Admin\Dashboard\DashboardController;
 use App\Http\Controllers\v1\Admin\EmailCampaign\EmailCampaignController;
 use App\Http\Controllers\v1\Admin\Notification\NotificationController;
+use App\Http\Controllers\v1\Admin\Pledge\PledgeController;
+use App\Http\Controllers\v1\Admin\Reconciliation\ReconciliationController;
+use App\Http\Controllers\v1\Admin\Report\ReportController;
 use App\Http\Controllers\v1\Admin\Settings\SettingsController;
 use App\Http\Controllers\v1\Admin\TierConfiguration\TierConfigurationController;
+use App\Http\Controllers\v1\Admin\Transaction\TransactionController;
 use App\Http\Controllers\v1\Admin\UserManagement\UserManagementController;
 use Illuminate\Support\Facades\Route;
 
@@ -41,7 +46,7 @@ Route::prefix('v1/admin')->group(function () {
     });
 
     Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
-        Route::get('/users', fn() => 'admin only');
+        Route::get('/users', fn () => 'admin only');
     });
 
     Route::prefix('settings')->middleware(['auth:sanctum'])->group(function () {
@@ -164,6 +169,51 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:campaigns.read']);
             Route::post('/{campaignId}/transition', [CampaignController::class, 'transition'])
                 ->middleware(['permission:campaigns.publish']);
+        });
+
+        Route::prefix('transactions')->group(function () {
+            Route::get('/stats', [TransactionController::class, 'stats'])
+                ->middleware(['permission:transactions.read']);
+            Route::get('/', [TransactionController::class, 'index'])
+                ->middleware(['permission:transactions.read']);
+            Route::get('/{transactionId}', [TransactionController::class, 'show'])
+                ->middleware(['permission:transactions.read']);
+        });
+
+        Route::prefix('pledges')->group(function () {
+            Route::get('/stats', [PledgeController::class, 'stats'])
+                ->middleware(['permission:pledges.read']);
+            Route::get('/', [PledgeController::class, 'index'])
+                ->middleware(['permission:pledges.read']);
+            Route::post('/', [PledgeController::class, 'store'])
+                ->middleware(['permission:pledges.create']);
+            Route::get('/{pledgeUuid}', [PledgeController::class, 'show'])
+                ->middleware(['permission:pledges.read']);
+        });
+
+        Route::post('reconciliation/link-donation-to-pledge', [ReconciliationController::class, 'linkDonationToPledge'])
+            ->middleware(['permission:reconciliation.update']);
+
+        Route::prefix('reports')->group(function () {
+            Route::get('/types', [ReportController::class, 'reportTypes'])
+                ->middleware(['permission:reports.read']);
+            Route::get('/generate', [ReportController::class, 'generate'])
+                ->middleware(['permission:reports.read']);
+        });
+
+        Route::prefix('dashboard')->group(function () {
+            Route::get('/overview', [DashboardController::class, 'overview'])
+                ->middleware(['permission:dashboard.read']);
+            Route::get('/campaign-contribution-trend', [DashboardController::class, 'campaignContributionTrend'])
+                ->middleware(['permission:dashboard.read']);
+            Route::get('/donation-by-user-type', [DashboardController::class, 'donationByUserType'])
+                ->middleware(['permission:dashboard.read']);
+            Route::get('/donation-by-donation-type', [DashboardController::class, 'donationByDonationType'])
+                ->middleware(['permission:dashboard.read']);
+            Route::get('/donation-by-contribution-tier', [DashboardController::class, 'donationByContributionTier'])
+                ->middleware(['permission:dashboard.read']);
+            Route::get('/campaigns/active', [DashboardController::class, 'activeCampaigns'])
+                ->middleware(['permission:dashboard.read']);
         });
 
         Route::prefix('email-campaigns')->group(function () {

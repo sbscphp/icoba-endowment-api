@@ -8,6 +8,7 @@ enum TransactionStatus: string
     case SUCCESSFUL = 'successful';
     case FAILED = 'failed';
     case REVERSED = 'reversed';
+    case SUPERSEDED = 'superseded';
 
     /** @return list<string> */
     public static function values(): array

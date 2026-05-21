@@ -2,6 +2,8 @@
 
 namespace App\Services\ThirdParty\SMS;
 
+use App\Models\Country;
+use App\Services\Phone\PhoneNumberService;
 use Illuminate\Support\Facades\Log;
 
 class SmsService
@@ -9,6 +11,7 @@ class SmsService
     public function __construct(
         private readonly InfobipService $infobipService,
         private readonly TermiiService $termiiService,
+        private readonly PhoneNumberService $phoneNumberService,
     ) {}
 
     /**
@@ -17,7 +20,7 @@ class SmsService
      */
     public function sendOtp(?string $countryCode, ?string $nationalNumber, string $otp, int $expiresInMinutes, string $purposeLabel): void
     {
-        $phoneNumber = $this->normalizePhoneForSms($countryCode, $nationalNumber);
+        $phoneNumber = $this->resolveSmsDigits($countryCode, $nationalNumber);
         if ($phoneNumber === null) {
             return;
         }
@@ -48,7 +51,29 @@ class SmsService
         }
     }
 
-    private function normalizePhoneForSms(?string $countryCode, ?string $nationalNumber): ?string
+    private function resolveSmsDigits(?string $countryCode, ?string $nationalNumber): ?string
+    {
+        $raw = trim((string) $nationalNumber);
+        if ($raw === '') {
+            return null;
+        }
+
+        if (str_starts_with($raw, '+')) {
+            return $this->phoneNumberService->toSmsDigits($raw);
+        }
+
+        $country = Country::findActiveByDialCode($countryCode);
+        if ($country !== null) {
+            $normalized = $this->phoneNumberService->normalize($raw, $country);
+            if ($normalized !== null) {
+                return $this->phoneNumberService->toSmsDigits($normalized['phone_number']);
+            }
+        }
+
+        return $this->legacyNormalizeForSms($countryCode, $raw);
+    }
+
+    private function legacyNormalizeForSms(?string $countryCode, ?string $nationalNumber): ?string
     {
         $nationalRaw = trim((string) $nationalNumber);
         if ($nationalRaw === '') {
@@ -101,7 +126,6 @@ class SmsService
             return $e164Digits;
         }
 
-        // Legacy: phone stored alone (may already include country calling code).
         $digits = preg_replace('/\D+/', '', $nationalRaw) ?? '';
         if ($digits === '') {
             return null;

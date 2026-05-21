@@ -32,9 +32,7 @@ final class ApiUserProvisioningService
             'is_active' => true,
         ]);
 
-        Mail::to($email)->send(
-            new ApiUserCredentialsMail($user, $this->themes->getDefault()),
-        );
+        Mail::to($email)->send(new ApiUserCredentialsMail($user, $this->themes->getDefault()));
 
         return $user;
     }

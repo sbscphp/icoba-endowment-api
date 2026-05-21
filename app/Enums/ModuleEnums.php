@@ -13,6 +13,7 @@ enum ModuleEnums: string
     case dashboard = 'dashboard';
     case campaign_management = 'campaign_management';
     case transactions = 'transactions';
+    case pledges = 'pledges';
     case tier_configuration = 'tier_configuration';
     case reconciliation = 'reconciliation';
     case issued_certificate = 'issued_certificate';
@@ -35,6 +36,7 @@ enum ModuleEnums: string
             self::dashboard => 'Dashboard',
             self::campaign_management => 'Campaign management',
             self::transactions => 'Transactions',
+            self::pledges => 'Pledges',
             self::tier_configuration => 'Tier configuration',
             self::reconciliation => 'Reconciliation',
             self::issued_certificate => 'Issued certificate',

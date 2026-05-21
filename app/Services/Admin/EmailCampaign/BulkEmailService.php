@@ -5,6 +5,7 @@ namespace App\Services\Admin\EmailCampaign;
 use App\Enums\AuditActionEnum;
 use App\Enums\BulkEmailAudience;
 use App\Enums\BulkEmailStatus;
+use App\Enums\DonorTypeSlug;
 use App\Enums\ModuleEnums;
 use App\Enums\TransactionStatus;
 use App\Enums\UserTypeEnum;
@@ -333,7 +334,7 @@ class BulkEmailService
         if ($audience === BulkEmailAudience::CORPORATE) {
             return User::query()
                 ->whereNotNull('email')
-                ->whereHas('donorType', fn (Builder $b) => $b->where('slug', 'corporate_donor'))
+                ->whereHas('donorType', fn (Builder $b) => $b->where('slug', DonorTypeSlug::CORPORATE_DONOR->value))
                 ->get(['email', 'firstname', 'lastname', 'organization_name'])
                 ->map(fn (User $u): array => [
                     'email' => (string) $u->email,
@@ -357,16 +358,11 @@ class BulkEmailService
         }
 
         if ($audience === BulkEmailAudience::FRIENDS_OF_ICOBA) {
-            return Transaction::query()
-                ->where('campaign_uuid', $campaignUuid)
-                ->where('status', TransactionStatus::SUCCESSFUL)
-                ->whereNull('user_uuid')
-                ->whereNotNull('donor_email')
-                ->get(['donor_email', 'donor_name'])
-                ->map(fn (Transaction $t): array => [
-                    'email' => (string) $t->donor_email,
-                    'name' => $t->donor_name,
-                ]);
+            return $this->resolveRegisteredDonorRecipients(DonorTypeSlug::FRIENDS_OF_ICOBA);
+        }
+
+        if ($audience === BulkEmailAudience::RELATIVES_OF_ICOBA) {
+            return $this->resolveRegisteredDonorRecipients(DonorTypeSlug::RELATIVES_OF_ICOBA);
         }
 
         if ($audience === BulkEmailAudience::ALL_DONORS) {
@@ -405,6 +401,21 @@ class BulkEmailService
         }
 
         return collect();
+    }
+
+    /**
+     * @return Collection<int, array{email: string, name: ?string}>
+     */
+    private function resolveRegisteredDonorRecipients(DonorTypeSlug $donorType): Collection
+    {
+        return User::query()
+            ->whereNotNull('email')
+            ->whereHas('donorType', fn (Builder $b) => $b->where('slug', $donorType->value))
+            ->get(['email', 'firstname', 'lastname'])
+            ->map(fn (User $u): array => [
+                'email' => (string) $u->email,
+                'name' => trim(implode(' ', array_filter([$u->firstname ?? '', $u->lastname ?? '']))) ?: null,
+            ]);
     }
 
     /**

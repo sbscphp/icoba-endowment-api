@@ -2,14 +2,21 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Enums\DonorTypeSlug;
 use App\Enums\eClientType;
 use App\Http\Requests\ApiFormRequest;
+use App\Http\Requests\Concerns\ValidatesOtpChannel;
+use App\Models\Country;
+use App\Services\Phone\PhoneNumberService;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
 class DonorRegisterRequest extends ApiFormRequest
 {
+    use ValidatesOtpChannel;
+
     public function authorize(): bool
     {
         return true;
@@ -22,27 +29,30 @@ class DonorRegisterRequest extends ApiFormRequest
     {
         $slug = strtolower(trim((string) $this->input('donor_type')));
 
-        $shared = [
-            'donor_type' => ['required', 'string', Rule::in(['icoba_alumni', 'corporate_donor', 'friends_relatives']), Rule::exists('donor_types', 'slug')],
+        $shared = array_merge($this->otpChannelRules(), [
+            'donor_type' => ['required', 'string', Rule::in(DonorTypeSlug::values()), Rule::exists('donor_types', 'slug')],
             'email' => ['required', 'email', Rule::unique('users', 'email')],
             'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
-            'phone_number' => ['required', 'string', 'regex:/^\+[1-9]\d{6,14}$/'],
+            'phone_number' => ['required', 'string', 'regex:/^\+\d{8,15}$/'],
+            'country_uuid' => ['nullable', 'uuid', Rule::exists('countries', 'uuid')->where('is_active', true)],
             'country_code' => ['nullable', 'string', 'max:10'],
             'client' => ['nullable', Rule::in(eClientType::values())],
-        ];
+        ]);
 
         return match ($slug) {
-            'icoba_alumni' => array_merge($shared, [
+            DonorTypeSlug::ICOBA_ALUMNI->value => array_merge($shared, [
                 'firstname' => $this->personNameRules(),
                 'lastname' => $this->personNameRules(),
                 'set_number' => ['required', 'string', 'max:16', Rule::exists('sets', 'set_number')],
                 'alumni_identifier' => ['nullable', 'string', 'max:50', 'regex:/^[a-zA-Z0-9]*$/'],
             ]),
-            'corporate_donor' => array_merge($shared, [
+            DonorTypeSlug::CORPORATE_DONOR->value => array_merge($shared, [
                 'organization_name' => ['required', 'string', 'min:2', 'max:100'],
                 'corporate_category_uuid' => ['required', 'uuid', Rule::exists('corporate_categories', 'uuid')],
+                'rc_number' => ['required', 'string', 'min:2', 'max:64'],
+                'tin' => ['required', 'string', 'min:2', 'max:64'],
             ]),
-            'friends_relatives' => array_merge($shared, [
+            DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value => array_merge($shared, [
                 'firstname' => $this->personNameRules(),
                 'lastname' => $this->personNameRules(),
             ]),
@@ -67,52 +77,49 @@ class DonorRegisterRequest extends ApiFormRequest
     public function messages(): array
     {
         return array_merge(parent::messages(), [
+            'otp_channel.in' => 'Verification channel must be either email or sms.',
             'email.unique' => 'An account with this email already exists. Would you like to log in instead, or use a different email?',
             'set_number.exists' => 'I couldn\'t find that set. Please double-check your graduation year or contact ICOBA support.',
+            'phone_number.regex' => 'Please enter a valid phone number for the selected country.',
         ]);
     }
 
     protected function prepareForValidation(): void
     {
+        $this->mergeDefaultOtpChannel();
+
         $this->merge([
             'email' => strtolower(trim((string) $this->input('email'))),
             'donor_type' => strtolower(trim((string) $this->input('donor_type'))),
         ]);
 
-        $this->normalizePhoneAndCountry();
+        $country = Country::forRegistration($this->input('country_uuid'));
+
+        $normalized = app(PhoneNumberService::class)->normalize(
+            (string) $this->input('phone_number'),
+            $country,
+        );
+
+        if ($normalized !== null) {
+            $this->merge($normalized);
+        }
     }
 
-    private function normalizePhoneAndCountry(): void
+    public function withValidator(Validator $validator): void
     {
-        $cc = $this->input('country_code');
-        $cc = ($cc !== null && $cc !== '') ? trim((string) $cc) : '+234';
-        if ($cc !== '' && ! str_starts_with($cc, '+')) {
-            $cc = '+'.$cc;
-        }
+        $validator->after(function (Validator $validator): void {
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
 
-        $raw = (string) $this->input('phone_number', '');
-        $digits = preg_replace('/\D+/', '', $raw) ?? '';
+            $phoneNumber = (string) $this->input('phone_number');
 
-        if ($digits === '') {
-            $this->merge([
-                'country_code' => $cc,
-                'phone_number' => '',
-            ]);
-
-            return;
-        }
-
-        if (str_starts_with($digits, '0') && strlen($digits) >= 10 && $cc === '+234') {
-            $phone = '+234'.substr($digits, 1);
-        } elseif (! str_starts_with($raw, '+') && $cc !== '') {
-            $phone = $cc.$digits;
-        } else {
-            $phone = str_starts_with($raw, '+') ? '+'.$digits : $cc.$digits;
-        }
-
-        $this->merge([
-            'country_code' => $cc,
-            'phone_number' => $phone,
-        ]);
+            if (app(PhoneNumberService::class)->isRegistered($phoneNumber)) {
+                $validator->errors()->add(
+                    'phone_number',
+                    'An account with this phone number already exists. Would you like to log in instead, or use a different phone number?',
+                );
+            }
+        });
     }
 }
