@@ -8,7 +8,7 @@ class PasswordRules
 {
     public static function make(): Password
     {
-        return Password::min(12)
+        return Password::min(8)
             ->mixedCase()
             ->letters()
             ->numbers()
