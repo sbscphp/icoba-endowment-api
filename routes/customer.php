@@ -42,6 +42,10 @@ Route::prefix('v1')->group(function () {
 
     Route::middleware('auth:sanctum')->prefix('settings')->group(function () {
         Route::get('/profile', [SettingsController::class, 'profile']);
+        Route::patch('/profile', [SettingsController::class, 'updateProfile']);
+        Route::post('/profile', [SettingsController::class, 'updateProfile']);
+        Route::patch('/2fa', [SettingsController::class, 'toggleTwoFactor']);
+        Route::post('/2fa', [SettingsController::class, 'toggleTwoFactor']);
         Route::patch('/password', [SettingsController::class, 'changePassword']);
         Route::post('/password', [SettingsController::class, 'changePassword']);
         Route::patch('/notifications', [SettingsController::class, 'updateNotificationPreferences']);

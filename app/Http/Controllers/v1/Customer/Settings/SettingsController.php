@@ -4,6 +4,8 @@ namespace App\Http\Controllers\v1\Customer\Settings;
 
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Customer\Settings\CustomerProfileUpdateRequest;
+use App\Http\Requests\Customer\Settings\ToggleTwoFactorRequest;
 use App\Http\Requests\Settings\ChangeSettingsPasswordRequest;
 use App\Http\Requests\Settings\UpdateNotificationPreferencesRequest;
 use App\Models\User;
@@ -24,6 +26,30 @@ class SettingsController extends Controller
             return JsonResponser::send(false, 'Profile retrieved.', $profile, 200);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Customer\Settings\SettingsController@profile');
+        }
+    }
+
+    public function updateProfile(CustomerProfileUpdateRequest $request)
+    {
+        try {
+            $user = $this->requireCustomer($request);
+            $profile = $this->settingsService->updateCustomerProfile($user, $request->validated());
+
+            return JsonResponser::send(false, 'Profile updated.', $profile, 200);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Settings\SettingsController@updateProfile');
+        }
+    }
+
+    public function toggleTwoFactor(ToggleTwoFactorRequest $request)
+    {
+        try {
+            $user = $this->requireCustomer($request);
+            $result = $this->settingsService->toggleCustomerTwoFactor($user, ! (bool) $user->{'2fa'});
+
+            return JsonResponser::send(false, 'Two-factor authentication updated.', $result, 200);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Settings\SettingsController@toggleTwoFactor');
         }
     }
 
