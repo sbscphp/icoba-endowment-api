@@ -119,6 +119,23 @@ return [
     | Modes: both | request_only | response_only
     |
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Encryption override users (dev / support)
+    |--------------------------------------------------------------------------
+    |
+    | When OVERRIDE_USERS is true, authenticated users with the emails below
+    | send and receive plaintext JSON even when API encryption is enabled.
+    |
+    */
+    'override_users' => [
+        'enabled' => filter_var(env('OVERRIDE_USERS', false), FILTER_VALIDATE_BOOL),
+        'emails' => [
+            'admin-override@yopmail.com',
+            'customer-override@yopmail.com',
+        ],
+    ],
+
     'api_encryption' => [
         'middleware_enabled' => filter_var(env('API_ENCRYPTION_MIDDLEWARE_ENABLED', false), FILTER_VALIDATE_BOOL),
         'default_mode' => env('API_ENCRYPTION_DEFAULT_MODE', 'both'),

@@ -290,4 +290,75 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
 
         $this->assertSame(BaseResponse::HTTP_UNPROCESSABLE_ENTITY, $result->getStatusCode());
     }
+
+    public function test_override_user_receives_plaintext_response_when_enabled(): void
+    {
+        Config::set('security.override_users.enabled', true);
+
+        $this->repo->shouldReceive('findByClientKey')->with('test-client-key')->once()->andReturn($this->userResourceBoth);
+
+        $plainBody = json_encode(['status' => 'ok', 'balance' => 9999]);
+        $request = Request::create('/api/balance', 'GET');
+        $request->headers->set('X-ClientKey', 'test-client-key');
+
+        $overrideUser = new class {
+            public string $email = 'admin-override@yopmail.com';
+        };
+        $request->setUserResolver(static fn () => $overrideUser);
+
+        $result = $this->middleware->handle($request, fn () => new Response($plainBody));
+
+        $this->assertSame($plainBody, $result->getContent());
+    }
+
+    public function test_non_override_user_still_receives_encrypted_response_when_override_enabled(): void
+    {
+        Config::set('security.override_users.enabled', true);
+
+        $this->repo->shouldReceive('findByClientKey')->with('test-client-key')->once()->andReturn($this->userResourceBoth);
+
+        $plainBody = json_encode(['status' => 'ok']);
+        $request = Request::create('/api/balance', 'GET');
+        $request->headers->set('X-ClientKey', 'test-client-key');
+
+        $regularUser = new class {
+            public string $email = 'someone@example.com';
+        };
+        $request->setUserResolver(static fn () => $regularUser);
+
+        $result = $this->middleware->handle($request, fn () => new Response($plainBody));
+
+        $decoded = json_decode($result->getContent(), true);
+
+        $this->assertIsArray($decoded);
+        $this->assertArrayHasKey('response', $decoded);
+    }
+
+    public function test_override_user_accepts_plain_json_request_body(): void
+    {
+        Config::set('security.override_users.enabled', true);
+
+        $this->repo->shouldReceive('findByClientKey')->with('test-client-key')->once()->andReturn($this->userResourceBoth);
+
+        $overrideUser = new class {
+            public string $email = 'customer-override@yopmail.com';
+        };
+
+        $request = Request::create('/api/transactions', 'POST', content: json_encode(['amount' => 2500]));
+        $request->headers->set('X-ClientKey', 'test-client-key');
+        $request->headers->set('Content-Type', 'application/json');
+        $request->setUserResolver(static fn () => $overrideUser);
+
+        $captured = null;
+        $plainResponse = json_encode(['created' => true]);
+
+        $result = $this->middleware->handle($request, function (Request $req) use (&$captured, $plainResponse) {
+            $captured = $req->input('amount');
+
+            return new Response($plainResponse);
+        });
+
+        $this->assertSame(2500, $captured);
+        $this->assertSame($plainResponse, $result->getContent());
+    }
 }
