@@ -3,6 +3,7 @@
 use App\Http\Controllers\v1\Public\ContactSubmissionController;
 use App\Http\Controllers\v1\Public\LeaderboardController;
 use App\Http\Controllers\v1\Public\PublicCampaignController;
+use App\Http\Controllers\v1\Public\PublicCampaignUpdateReportController;
 use App\Http\Controllers\v1\Public\PublicTierController;
 use App\Http\Controllers\v1\Public\ReceiptDownloadController;
 use App\Http\Controllers\v1\Public\RecognitionDownloadController;
@@ -31,6 +32,13 @@ Route::prefix('v1')->group(function () {
 
         Route::post('contact', [ContactSubmissionController::class, 'store'])
             ->middleware(['throttle:60,1']);
+
+        Route::prefix('blog/report')->group(function () {
+            Route::get('/', [PublicCampaignUpdateReportController::class, 'index']);
+            Route::get('/{reportId}/download', [PublicCampaignUpdateReportController::class, 'download'])
+                ->middleware(['throttle:public-receipt']);
+            Route::get('/{reportId}', [PublicCampaignUpdateReportController::class, 'show']);
+        });
     });
 
     // Route::get('receipts/{receiptNumber}/download', [ReceiptDownloadController::class, 'guestPdf'])
