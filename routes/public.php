@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\v1\Public\ContactSubmissionController;
 use App\Http\Controllers\v1\Public\LeaderboardController;
 use App\Http\Controllers\v1\Public\PublicCampaignController;
 use App\Http\Controllers\v1\Public\ReceiptDownloadController;
@@ -23,6 +24,9 @@ Route::prefix('v1')->group(function () {
             ->middleware(['throttle:public-receipt']);
         Route::get('recognitions/{recognitionNumber}/download', [RecognitionDownloadController::class, 'download'])
             ->middleware(['throttle:public-receipt']);
+
+        Route::post('contact', [ContactSubmissionController::class, 'store'])
+            ->middleware(['throttle:60,1']);
     });
 
     // Route::get('receipts/{receiptNumber}/download', [ReceiptDownloadController::class, 'guestPdf'])

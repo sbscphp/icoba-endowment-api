@@ -62,6 +62,10 @@ enum ePermission: string
     case CONTENT_MANAGEMENT_UPDATE = 'content_management.update';
     case CONTENT_MANAGEMENT_DELETE = 'content_management.delete';
 
+    // 9b. Contact submissions
+    case CONTACT_SUBMISSIONS_READ = 'contact_submissions.read';
+    case CONTACT_SUBMISSIONS_UPDATE = 'contact_submissions.update';
+
     // 10. Reports
     case REPORTS_READ = 'reports.read';
     case REPORTS_EXPORT = 'reports.export';

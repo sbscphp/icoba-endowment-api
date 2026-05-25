@@ -5,6 +5,7 @@ use App\Http\Controllers\v1\Admin\Auth\AdminLoginController;
 use App\Http\Controllers\v1\Admin\Auth\PasswordController as AdminPasswordController;
 use App\Http\Controllers\v1\Admin\Campaign\CampaignController;
 use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateController;
+use App\Http\Controllers\v1\Admin\ContactSubmission\ContactSubmissionController;
 use App\Http\Controllers\v1\Admin\Dashboard\DashboardController;
 use App\Http\Controllers\v1\Admin\EmailCampaign\EmailCampaignController;
 use App\Http\Controllers\v1\Admin\Notification\NotificationController;
@@ -215,6 +216,15 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:dashboard.read']);
             Route::get('/campaigns/active', [DashboardController::class, 'activeCampaigns'])
                 ->middleware(['permission:dashboard.read']);
+        });
+
+        Route::prefix('contact-submissions')->group(function () {
+            Route::get('/', [ContactSubmissionController::class, 'index'])
+                ->middleware(['permission:contact_submissions.read']);
+            Route::get('/{submissionUuid}', [ContactSubmissionController::class, 'show'])
+                ->middleware(['permission:contact_submissions.read']);
+            Route::patch('/{submissionUuid}/status', [ContactSubmissionController::class, 'updateStatus'])
+                ->middleware(['permission:contact_submissions.update']);
         });
 
         Route::prefix('email-campaigns')->group(function () {
