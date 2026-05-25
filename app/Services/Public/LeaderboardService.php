@@ -6,6 +6,7 @@ use App\Enums\Currency;
 use App\Enums\DonorTypeSlug;
 use App\Models\Campaign;
 use App\Models\DonorType;
+use App\Models\TierConfiguration;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Tier\TierResolutionService;
@@ -30,6 +31,7 @@ class LeaderboardService
         $campaignUuid = isset($filters['campaign_uuid']) ? (string) $filters['campaign_uuid'] : null;
         $donorTypeUuid = isset($filters['donor_type_uuid']) ? (string) $filters['donor_type_uuid'] : null;
         $setUuid = isset($filters['graduation_set_uuid']) ? (string) $filters['graduation_set_uuid'] : null;
+        $tierUuid = isset($filters['tier_uuid']) ? (string) $filters['tier_uuid'] : null;
         $search = trim((string) ($filters['search'] ?? ''));
         $scope = strtolower(trim((string) ($filters['scope'] ?? 'all')));
         $displayCurrency = $this->resolveDisplayCurrency($filters);
@@ -65,17 +67,6 @@ SQL;
 
         if ($mode === 'set' && $setUuid !== null && $setUuid !== '') {
             $base->whereHas('donor', fn(Builder $b) => $b->where('graduation_set_uuid', $setUuid));
-        }
-
-        if ($search !== '') {
-            $like = '%' . $this->escapeLike($search) . '%';
-            $base->where(function (Builder $q) use ($like): void {
-                $q->where('transactions.donor_name', 'like', $like)
-                    ->orWhereHas('donor', function (Builder $b) use ($like): void {
-                        $b->where('firstname', 'like', $like)
-                            ->orWhere('lastname', 'like', $like);
-                    });
-            });
         }
 
         $inner = $base->clone()
@@ -119,6 +110,9 @@ SQL;
             ->selectRaw("MAX(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.guest_donor_profile.corporate_category_name'))) as guest_corporate_category_name")
             ->selectRaw("CASE WHEN MIN(is_anonymous) = 1 THEN 'Anonymous' ELSE MAX(sort_name) END as display_sort_name")
             ->groupBy('donor_key');
+
+        $this->applyTierFilter($query, $tierUuid);
+        $this->applyDonorSearchFilter($query, $search);
 
         if ($sort['by'] === 'name') {
             $query->orderBy('display_sort_name', $sort['dir']);
@@ -613,5 +607,41 @@ SQL;
         }
 
         return ['by' => $by, 'dir' => $dir];
+    }
+
+    private function applyTierFilter(\Illuminate\Database\Query\Builder $query, ?string $tierUuid): void
+    {
+        if ($tierUuid === null || $tierUuid === '') {
+            return;
+        }
+
+        $tier = TierConfiguration::query()
+            ->where('uuid', $tierUuid)
+            ->where('is_active', true)
+            ->first(['min_amount', 'max_amount']);
+
+        if ($tier === null) {
+            return;
+        }
+
+        $query->having('total_amount_ngn', '>=', (float) $tier->min_amount);
+
+        if ($tier->max_amount !== null) {
+            $query->having('total_amount_ngn', '<=', (float) $tier->max_amount);
+        }
+    }
+
+    private function applyDonorSearchFilter(\Illuminate\Database\Query\Builder $query, string $search): void
+    {
+        if ($search === '') {
+            return;
+        }
+
+        $like = '%'.$this->escapeLike($search).'%';
+
+        $query->havingRaw(
+            '(display_sort_name LIKE ? OR donor_email LIKE ?)',
+            [$like, $like]
+        );
     }
 }
