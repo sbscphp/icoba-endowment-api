@@ -13,6 +13,7 @@ use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
 use App\Helpers\OpaqueMessageHelper;
+use App\Jobs\LinkGuestDonorHistoryJob;
 use App\Mail\WelcomeToEndowmentPortalMail;
 use App\Models\Admin;
 use App\Models\Country;
@@ -61,6 +62,8 @@ class AuthService
         $user = $this->userRepository->create($payload);
         $user->assignRole(eRole::CUSTOMER->value);
         $user->load(['roles', 'donorType', 'corporateCategory', 'graduationSet']);
+
+        LinkGuestDonorHistoryJob::dispatch($user->uuid);
 
         GeneralHelper::storeAuditLog(
             UserTypeEnum::CUSTOMER,

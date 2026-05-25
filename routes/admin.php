@@ -42,6 +42,7 @@ Route::prefix('v1/admin')->group(function () {
             Route::post('/read-all', [NotificationController::class, 'markAllRead']);
             Route::patch('/{id}/read', [NotificationController::class, 'markRead']);
             Route::patch('/{id}/unread', [NotificationController::class, 'markUnread']);
+            Route::delete('/{id}/dismiss', [NotificationController::class, 'dismiss']);
         });
     });
 

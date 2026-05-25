@@ -18,6 +18,9 @@ class LeaderboardRequest extends ApiFormRequest
             'graduation_set_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:sets,uuid'],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'currency' => ['sometimes', 'string', Rule::in(Currency::values())],
+            'scope' => ['sometimes', 'string', Rule::in(['all', 'donations', 'pledges'])],
+            'sort_by' => ['sometimes', 'string', Rule::in(['name', 'amount', 'set'])],
+            'sort_dir' => ['sometimes', 'string', Rule::in(['asc', 'desc'])],
         ];
     }
 }

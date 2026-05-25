@@ -6,11 +6,14 @@ use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use Stripe\Checkout\Session;
 use Stripe\Exception\ApiErrorException;
 use Stripe\StripeClient;
 
 final class StripeCheckoutService
 {
+    private const DEFAULT_FRONTEND_URL = 'https://icoba-endowment.netlify.app';
+
     /** @var list<string> */
     private const ZERO_DECIMAL = ['bif', 'clp', 'djf', 'gnf', 'jpy', 'kmf', 'krw', 'mga', 'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf'];
 
@@ -40,12 +43,13 @@ final class StripeCheckoutService
         ?User $donorUser,
         ?string $successUrl,
         ?string $cancelUrl,
+        ?string $frontendUrl = null,
     ): array {
         $currency = strtolower((string) $transaction->currency);
         $unitAmount = $this->unitAmount((float) $transaction->amount, $currency);
 
-        $success = $this->resolveSuccessUrl($successUrl);
-        $cancel = $this->resolveCancelUrl($cancelUrl);
+        $success = $this->resolveSuccessUrl($successUrl, $frontendUrl);
+        $cancel = $this->resolveCancelUrl($cancelUrl, $frontendUrl);
 
         $params = [
             'mode' => 'payment',
@@ -100,6 +104,14 @@ final class StripeCheckoutService
         ];
     }
 
+    /**
+     * @throws ApiErrorException
+     */
+    public function retrieveCheckoutSession(string $sessionId): Session
+    {
+        return $this->stripe->checkout->sessions->retrieve($sessionId);
+    }
+
     private function resolveStripeCustomerId(User $user): string
     {
         if (is_string($user->stripe_customer_id) && $user->stripe_customer_id !== '') {
@@ -118,28 +130,59 @@ final class StripeCheckoutService
         return $customer->id;
     }
 
-    private function resolveSuccessUrl(?string $fromRequest): string
+    private function resolveSuccessUrl(?string $fromRequest, ?string $frontendUrl): string
     {
-        $base = $fromRequest ?? config('services.stripe.success_url') ?? config('app.frontend_url').'/donate/success';
+        $base = $fromRequest
+            ?? $this->urlFromFrontendBase($frontendUrl, '/donate/success')
+            ?? $this->stripeConfiguredUrl('success_url')
+            ?? self::DEFAULT_FRONTEND_URL.'/donate/success';
 
         if (! is_string($base) || trim($base) === '') {
-            Log::warning('Stripe checkout: falling back to APP_URL for success URL.');
+            Log::warning('Stripe checkout: falling back to default frontend URL for success URL.');
 
-            $base = rtrim((string) config('app.url'), '/').'/donate/success';
+            $base = self::DEFAULT_FRONTEND_URL.'/donate/success';
         }
 
         return $this->ensureCheckoutSessionPlaceholder($base);
     }
 
-    private function resolveCancelUrl(?string $fromRequest): string
+    private function resolveCancelUrl(?string $fromRequest, ?string $frontendUrl): string
     {
-        $base = $fromRequest ?? config('services.stripe.cancel_url') ?? config('app.frontend_url').'/donate';
+        $base = $fromRequest
+            ?? $this->urlFromFrontendBase($frontendUrl, '/donate')
+            ?? $this->stripeConfiguredUrl('cancel_url')
+            ?? self::DEFAULT_FRONTEND_URL.'/donate';
 
         if (! is_string($base) || trim($base) === '') {
-            $base = rtrim((string) config('app.url'), '/').'/donate';
+            $base = self::DEFAULT_FRONTEND_URL.'/donate';
         }
 
         return $base;
+    }
+
+    private function urlFromFrontendBase(?string $frontendUrl, string $path): ?string
+    {
+        if (! is_string($frontendUrl) || trim($frontendUrl) === '') {
+            return null;
+        }
+
+        return $this->frontendBase($frontendUrl).$path;
+    }
+
+    private function stripeConfiguredUrl(string $key): ?string
+    {
+        $url = config("services.stripe.{$key}");
+
+        if (! is_string($url) || trim($url) === '') {
+            return null;
+        }
+
+        return $url;
+    }
+
+    private function frontendBase(string $frontendUrl): string
+    {
+        return rtrim($frontendUrl, '/');
     }
 
     /**

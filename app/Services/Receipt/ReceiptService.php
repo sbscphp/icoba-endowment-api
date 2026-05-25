@@ -146,7 +146,7 @@ class ReceiptService
         $transaction = $this->ensurePublicReceiptAccess($transaction);
 
         return rtrim((string) config('app.url'), '/')
-            .'/api/v1/receipts/'.$transaction->receipt_number.'/tax/download?token='.urlencode((string) $transaction->receipt_token);
+            .'/api/v1/public/receipts/'.$transaction->receipt_number.'/tax/download';
     }
 
     public function guestDonationReceiptDownloadUrl(Transaction $transaction): string
@@ -154,7 +154,7 @@ class ReceiptService
         $transaction = $this->ensurePublicReceiptAccess($transaction);
 
         return rtrim((string) config('app.url'), '/')
-            .'/api/v1/receipts/'.$transaction->receipt_number.'/download?token='.urlencode((string) $transaction->receipt_token);
+            .'/api/v1/public/receipts/'.$transaction->receipt_number.'/download';
     }
 
     public function ensurePublicReceiptAccess(Transaction $transaction): Transaction
@@ -189,7 +189,9 @@ class ReceiptService
             return (string) $transaction->receipt_number;
         }
 
-        return $this->formatReceiptNumber($transaction);
+        $year = ($transaction->paid_at ?? $transaction->created_at ?? now())->format('Y');
+
+        return sprintf('ICOBA-%s-PENDING', $year);
     }
 
     private function ensureReceiptNumber(Transaction $transaction): void
@@ -199,7 +201,7 @@ class ReceiptService
         }
 
         $transaction->forceFill([
-            'receipt_number' => $this->formatReceiptNumber($transaction),
+            'receipt_number' => $this->generateUniqueReceiptNumber($transaction),
         ])->save();
     }
 
@@ -321,11 +323,37 @@ class ReceiptService
         ];
     }
 
-    private function formatReceiptNumber(Transaction $transaction): string
+    private function generateUniqueReceiptNumber(Transaction $transaction): string
     {
         $year = ($transaction->paid_at ?? $transaction->created_at ?? now())->format('Y');
+        $prefix = sprintf('ICOBA-%s-', $year);
+        $pool = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
-        return sprintf('ICOBA-%s-%06d', $year, (int) $transaction->id);
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $suffix = '';
+            for ($i = 0; $i < 10; $i++) {
+                $suffix .= $pool[random_int(0, strlen($pool) - 1)];
+            }
+
+            $receiptNumber = $prefix.$suffix;
+            if (! Transaction::query()->where('receipt_number', $receiptNumber)->exists()) {
+                return $receiptNumber;
+            }
+        }
+
+        $generated = GeneralHelper::getModelUniqueRandomId([
+            'modelNamespace' => Transaction::class,
+            'modelField' => 'receipt_number',
+            'prefix' => $prefix,
+            'idLength' => 10,
+            'idType' => 'numalpha',
+        ]);
+
+        if (is_string($generated)) {
+            return strtoupper($generated);
+        }
+
+        return $prefix.strtoupper(bin2hex(random_bytes(5)));
     }
 
     private function formatAmount(float $amount, string $currency): string

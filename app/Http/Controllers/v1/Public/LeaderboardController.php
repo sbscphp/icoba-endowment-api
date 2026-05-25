@@ -5,6 +5,7 @@ namespace App\Http\Controllers\v1\Public;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Public\LeaderboardRequest;
+use App\Http\Requests\Public\TopSetsRequest;
 use App\Responser\JsonResponser;
 use App\Services\Public\LeaderboardService;
 
@@ -14,14 +15,14 @@ class LeaderboardController extends Controller
         private readonly LeaderboardService $leaderboardService,
     ) {}
 
-    public function donors(LeaderboardRequest $request)
+    public function leaderboard(LeaderboardRequest $request)
     {
         try {
             $paginator = $this->leaderboardService->donorsLeaderboard($request->validated());
 
             return JsonResponser::send(false, 'Leaderboard retrieved.', $paginator);
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'Public\LeaderboardController@donors');
+            return GeneralHelper::handleControllerThrowable($th, 'Public\LeaderboardController@leaderboard');
         }
     }
 
@@ -33,6 +34,17 @@ class LeaderboardController extends Controller
             return JsonResponser::send(false, 'Set leaderboard retrieved.', $paginator);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Public\LeaderboardController@sets');
+        }
+    }
+
+    public function topSets(TopSetsRequest $request)
+    {
+        try {
+            $payload = $this->leaderboardService->topSets($request->validated());
+
+            return JsonResponser::send(false, 'Top sets retrieved.', $payload);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Public\LeaderboardController@topSets');
         }
     }
 

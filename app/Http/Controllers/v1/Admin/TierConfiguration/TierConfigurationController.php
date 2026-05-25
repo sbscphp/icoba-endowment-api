@@ -115,6 +115,7 @@ class TierConfigurationController extends Controller
             $payload = $tiers->map(fn ($tier) => [
                 'tier_id' => $tier->uuid,
                 'name' => $tier->name,
+                'tier_badge_url' => $tier->tier_badge_url,
                 'is_active' => (bool) $tier->is_active,
             ])->values()->all();
 

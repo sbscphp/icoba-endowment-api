@@ -18,6 +18,7 @@ class CreateTierConfigurationRequest extends ApiFormRequest
                 Rule::unique('tier_configurations', 'name'),
             ],
             'description' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'tier_badge_url' => ['sometimes', 'nullable'],
             'min_amount' => ['required', 'numeric', 'min:0'],
             'max_amount' => ['sometimes', 'nullable', 'numeric', 'gt:min_amount'],
             'benefits' => ['sometimes', 'nullable', 'array', 'max:20'],

@@ -6,6 +6,7 @@ use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\Donation\StripeGuestCheckoutRequest;
 use App\Http\Requests\Customer\Donation\StripeMemberCheckoutRequest;
+use App\Http\Requests\Customer\Donation\StripeVerifyCheckoutRequest;
 use App\Http\Resources\TransactionResource;
 use App\Models\Pledge;
 use App\Models\User;
@@ -13,6 +14,7 @@ use App\Responser\JsonResponser;
 use App\Services\Admin\Transaction\TransactionService;
 use App\Services\Donation\DonationIntentService;
 use App\Services\Payment\StripeCheckoutService;
+use App\Services\Payment\StripeCheckoutVerificationService;
 use Illuminate\Validation\ValidationException;
 
 class StripeCheckoutController extends Controller
@@ -20,6 +22,7 @@ class StripeCheckoutController extends Controller
     public function __construct(
         private readonly DonationIntentService $donationIntentService,
         private readonly StripeCheckoutService $stripeCheckoutService,
+        private readonly StripeCheckoutVerificationService $stripeCheckoutVerificationService,
         private readonly TransactionService $transactionService,
     ) {}
 
@@ -29,7 +32,8 @@ class StripeCheckoutController extends Controller
             $validated = $request->validated();
             $successUrl = $validated['success_url'] ?? null;
             $cancelUrl = $validated['cancel_url'] ?? null;
-            unset($validated['success_url'], $validated['cancel_url']);
+            $frontendUrl = $validated['frontend_url'] ?? null;
+            unset($validated['success_url'], $validated['cancel_url'], $validated['frontend_url']);
 
             $transaction = $this->donationIntentService->createPendingIntent(array_merge($validated, [
                 'gateway' => 'stripe',
@@ -40,6 +44,7 @@ class StripeCheckoutController extends Controller
                 null,
                 $successUrl,
                 $cancelUrl,
+                $frontendUrl,
             );
 
             $transaction = $this->transactionService->findTransaction($transaction->uuid);
@@ -47,7 +52,7 @@ class StripeCheckoutController extends Controller
             return JsonResponser::send(false, 'Stripe Checkout session created.', [
                 'checkout_url' => $checkout['url'],
                 'checkout_session_id' => $checkout['session_id'],
-                'transaction' => TransactionResource::make($transaction)->resolve(),
+                // 'transaction' => TransactionResource::make($transaction)->resolve(),
             ], 201);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Customer\Donation\StripeCheckoutController@guest');
@@ -75,7 +80,8 @@ class StripeCheckoutController extends Controller
 
             $successUrl = $validated['success_url'] ?? null;
             $cancelUrl = $validated['cancel_url'] ?? null;
-            unset($validated['success_url'], $validated['cancel_url']);
+            $frontendUrl = $validated['frontend_url'] ?? null;
+            unset($validated['success_url'], $validated['cancel_url'], $validated['frontend_url']);
 
             $validated['user_uuid'] = $user->uuid;
 
@@ -103,6 +109,7 @@ class StripeCheckoutController extends Controller
                 $user,
                 $successUrl,
                 $cancelUrl,
+                $frontendUrl,
             );
 
             $transaction = $this->transactionService->findTransaction($transaction->uuid);
@@ -110,10 +117,35 @@ class StripeCheckoutController extends Controller
             return JsonResponser::send(false, 'Stripe Checkout session created.', [
                 'checkout_url' => $checkout['url'],
                 'checkout_session_id' => $checkout['session_id'],
-                'transaction' => TransactionResource::make($transaction)->resolve(),
+                // 'transaction' => TransactionResource::make($transaction)->resolve(),
             ], 201);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Customer\Donation\StripeCheckoutController@member');
+        }
+    }
+
+    public function verify(StripeVerifyCheckoutRequest $request)
+    {
+        try {
+            $validated = $request->validated();
+            $user = $request->user();
+            $user = $user instanceof User ? $user : null;
+
+            $result = $this->stripeCheckoutVerificationService->verify(
+                $validated['checkout_session_id'],
+                $user,
+                $validated['transaction_uuid'] ?? null,
+            );
+
+            return JsonResponser::send(false, 'Stripe checkout verified.', [
+                'checkout_session_id' => $result['checkout_session_id'],
+                'payment_status' => $result['payment_status'],
+                'session_status' => $result['session_status'],
+                'sync_action' => $result['sync_action'],
+                // 'transaction' => TransactionResource::make($result['transaction'])->resolve(),
+            ], 200);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Donation\StripeCheckoutController@verify');
         }
     }
 }

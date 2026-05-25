@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             AdminSeeder::class,
             DefaultCampaignSeeder::class,
             ThemeSeeder::class,
+            TierConfigurationSeeder::class,
             ApiUserSeeder::class,
         ]);
     }

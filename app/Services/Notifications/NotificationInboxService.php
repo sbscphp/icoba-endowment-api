@@ -58,4 +58,13 @@ class NotificationInboxService
 
         return $notification->fresh();
     }
+
+    /**
+     * @param  Model&object{notifications(): mixed}  $recipient
+     */
+    public function dismiss(Model $recipient, string $id): void
+    {
+        $notification = $this->findForRecipient($recipient, $id);
+        $notification->delete();
+    }
 }

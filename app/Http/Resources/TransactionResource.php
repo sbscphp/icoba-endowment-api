@@ -86,24 +86,20 @@ class TransactionResource extends JsonResource
             return [];
         }
 
-        if ($this->receipt_token === null || $this->receipt_token === '') {
-            return [];
-        }
-
         if ($this->receipt_number === null || $this->receipt_number === '') {
             return [];
         }
 
         $receiptService = app(ReceiptService::class);
-        $token = urlencode((string) $this->receipt_token);
         $base = rtrim((string) config('app.url'), '/').'/api/v1/receipts/'.$this->receipt_number;
 
         $links = [
-            'donation' => $base.'/download?token='.$token,
+            'donation' => $base.'/download',
         ];
 
         if ($receiptService->isEligibleForTaxReceipt($this->resource)) {
-            $links['tax'] = $base.'/tax/download?token='.$token;
+            $links['tax'] = rtrim((string) config('app.url'), '/')
+                .'/api/v1/public/receipts/'.$this->receipt_number.'/tax/download';
         }
 
         return $links;

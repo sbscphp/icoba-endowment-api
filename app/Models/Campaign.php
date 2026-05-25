@@ -86,6 +86,11 @@ class Campaign extends Model
         return $this->hasMany(Transaction::class, 'campaign_uuid', 'uuid');
     }
 
+    public function pledges(): HasMany
+    {
+        return $this->hasMany(Pledge::class, 'campaign_uuid', 'uuid');
+    }
+
     public function bulkEmails(): HasMany
     {
         return $this->hasMany(CampaignEmail::class, 'campaign_uuid', 'uuid');
