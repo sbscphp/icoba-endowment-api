@@ -566,7 +566,8 @@ SQL;
                 'set_totals.total_amount_ngn',
                 'sets.name as set_name',
                 'sets.set_number',
-            ]);
+            ])
+            ->selectRaw('(SELECT COUNT(*) FROM users WHERE users.graduation_set_uuid = sets.uuid) as total_members');
     }
 
     /**
@@ -602,6 +603,7 @@ SQL;
                     'graduation_set_uuid' => (string) $row->set_uuid,
                     'set_name' => $row->set_name,
                     'set_number' => $row->set_number,
+                    'total_members' => (int) ($row->total_members ?? 0),
                 ],
                 'total_amount' => $this->formatLeaderboardAmount($row->total_amount ?? null),
                 'amount_in_ngn' => $this->formatLeaderboardAmount($row->total_amount_ngn ?? null),
