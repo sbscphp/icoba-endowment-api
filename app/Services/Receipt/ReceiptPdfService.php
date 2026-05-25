@@ -22,24 +22,16 @@ class ReceiptPdfService
 
     public function streamDonationReceipt(Transaction $transaction): Response
     {
-        if ($transaction->status !== TransactionStatus::SUCCESSFUL) {
-            abort(422, 'Receipt available only for successful payments.');
-        }
-
         return $this->streamPdf(
             $transaction,
             'pdf.donation-receipt',
-            $this->receiptService->donationReceiptViewData($transaction),
+            fn (): array => $this->receiptService->donationReceiptViewData($transaction),
             'donation-receipt-'.$transaction->transaction_id.'.pdf',
         );
     }
 
     public function streamTaxReceipt(Transaction $transaction): Response
     {
-        if ($transaction->status !== TransactionStatus::SUCCESSFUL) {
-            abort(422, 'Receipt available only for successful payments.');
-        }
-
         if (! $this->receiptService->isEligibleForTaxReceipt($transaction)) {
             abort(422, 'Tax receipt is available only for corporate donations with registration and tax identification numbers.');
         }
@@ -47,7 +39,7 @@ class ReceiptPdfService
         return $this->streamPdf(
             $transaction,
             'pdf.tax-exemption-receipt',
-            $this->receiptService->taxReceiptViewData($transaction),
+            fn (): array => $this->receiptService->taxReceiptViewData($transaction),
             'tax-receipt-'.$transaction->transaction_id.'.pdf',
         );
     }
@@ -62,12 +54,6 @@ class ReceiptPdfService
 
     public function renderDonationReceiptBinary(Transaction $transaction): string
     {
-        if ($transaction->status !== TransactionStatus::SUCCESSFUL) {
-            throw new \InvalidArgumentException('Receipt available only for successful payments.');
-        }
-
-        $this->receiptService->getOrCreateReceiptRecord($transaction);
-
         return $this->renderPdf(
             'pdf.donation-receipt',
             $this->receiptService->donationReceiptViewData($transaction),
@@ -75,17 +61,15 @@ class ReceiptPdfService
     }
 
     /**
-     * @param  array<string, mixed>  $viewData
+     * @param  callable(): array<string, mixed>  $viewDataResolver
      */
-    private function streamPdf(Transaction $transaction, string $view, array $viewData, string $filename): Response
+    private function streamPdf(Transaction $transaction, string $view, callable $viewDataResolver, string $filename): Response
     {
         if ($transaction->status !== TransactionStatus::SUCCESSFUL) {
             abort(422, 'Receipt available only for successful payments.');
         }
 
-        $this->receiptService->getOrCreateReceiptRecord($transaction);
-
-        return new Response($this->renderPdf($view, $viewData), 200, [
+        return new Response($this->renderPdf($view, $viewDataResolver()), 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="'.$filename.'"',
         ]);
