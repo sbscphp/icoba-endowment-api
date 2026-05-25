@@ -61,6 +61,17 @@ class LeaderboardController extends Controller
         }
     }
 
+    public function fundProgressList(LeaderboardRequest $request)
+    {
+        try {
+            $payload = $this->leaderboardService->campaignsFundProgressList($request->validated());
+
+            return JsonResponser::send(false, 'Fund progress list retrieved.', $payload);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Public\LeaderboardController@fundProgressList');
+        }
+    }
+
     public function fundProgress(LeaderboardRequest $request, string $campaignUuid)
     {
         try {
