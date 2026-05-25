@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('user_type', 50)->index();
             $table->text('description');
             $table->string('status', 20)->default('pending')->index();
+            $table->timestamp('resolved_at')->nullable()->index();
             $table->uuid('handled_by_admin_uuid')->nullable();
             $table->timestamp('email_sent_at')->nullable();
             $table->timestamps();
