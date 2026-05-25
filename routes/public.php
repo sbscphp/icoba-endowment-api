@@ -3,6 +3,7 @@
 use App\Http\Controllers\v1\Public\ContactSubmissionController;
 use App\Http\Controllers\v1\Public\LeaderboardController;
 use App\Http\Controllers\v1\Public\PublicCampaignController;
+use App\Http\Controllers\v1\Public\PublicTierController;
 use App\Http\Controllers\v1\Public\ReceiptDownloadController;
 use App\Http\Controllers\v1\Public\RecognitionDownloadController;
 use Illuminate\Support\Facades\Route;
@@ -16,6 +17,8 @@ Route::prefix('v1')->group(function () {
 
         Route::get('campaigns', [PublicCampaignController::class, 'index']);
         Route::get('campaigns/dropdown', [PublicCampaignController::class, 'dropdown']);
+
+        Route::get('tiers', [PublicTierController::class, 'index']);
         Route::get('campaigns/{campaignUuid}/fund-progress', [LeaderboardController::class, 'fundProgress']);
 
         Route::get('receipts/{receiptNumber}/download', [ReceiptDownloadController::class, 'guestPdf'])

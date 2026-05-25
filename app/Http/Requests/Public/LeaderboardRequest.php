@@ -16,6 +16,7 @@ class LeaderboardRequest extends ApiFormRequest
             'campaign_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:campaigns,uuid'],
             'donor_type_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:donor_types,uuid'],
             'graduation_set_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:sets,uuid'],
+            'tier_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:tier_configurations,uuid'],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'currency' => ['sometimes', 'string', Rule::in(Currency::values())],
             'scope' => ['sometimes', 'string', Rule::in(['all', 'donations', 'pledges'])],
