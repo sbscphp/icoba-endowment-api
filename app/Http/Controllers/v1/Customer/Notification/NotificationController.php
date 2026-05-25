@@ -84,6 +84,18 @@ class NotificationController extends Controller
         }
     }
 
+    public function dismiss(Request $request, string $id)
+    {
+        try {
+            $user = $this->requireCustomer($request);
+            $this->inbox->dismiss($user, $id);
+
+            return JsonResponser::send(false, 'Notification deleted.', null);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Notification\NotificationController@dismiss');
+        }
+    }
+
     private function requireCustomer(Request $request): User
     {
         $user = $request->user();

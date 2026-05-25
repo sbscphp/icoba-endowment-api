@@ -9,6 +9,8 @@ use App\Helpers\GeneralHelper;
 use App\Models\Campaign;
 use App\Models\Pledge;
 use App\Models\Transaction;
+use App\Models\User;
+use App\Repositories\Contracts\User\UserRepositoryInterface;
 use App\Services\Pledge\PledgeBalanceService;
 use App\Services\Transaction\TransactionNgnSnapshotService;
 use Illuminate\Support\Facades\Validator;
@@ -22,6 +24,7 @@ class DonationIntentService
         private readonly TransactionNgnSnapshotService $transactionNgnSnapshot,
         private readonly GuestDonorProfileSnapshotService $guestDonorProfileSnapshot,
         private readonly DonationCurrencyValidator $donationCurrencyValidator,
+        private readonly UserRepositoryInterface $userRepository,
     ) {}
 
     /**
@@ -42,6 +45,10 @@ class DonationIntentService
                 $data['currency'] = $pledge->currency;
             }
         }
+
+        $data = $this->applyPledgeDonorDefaults($data);
+        $data = $this->linkGuestDonorToExistingUser($data);
+        $data = $this->applyLinkedUserDefaults($data);
 
         $guestSnapshot = $this->shouldBuildGuestDonorProfile($data)
             ? $this->guestDonorProfileSnapshot->build($data)
@@ -89,6 +96,14 @@ class DonationIntentService
                     'currency' => ['Currency must match pledge currency.'],
                 ]);
             }
+
+            $linkedUserUuid = $clean['user_uuid'] ?? null;
+            if ($linkedUserUuid !== null && $pledge->user_uuid !== null && $pledge->user_uuid !== $linkedUserUuid) {
+                throw ValidationException::withMessages([
+                    'pledge_uuid' => ['This pledge is not linked to your account.'],
+                ]);
+            }
+
             $remaining = (float) $this->pledgeBalance->remainingAmount($pledge);
             if ($remaining <= 0) {
                 throw ValidationException::withMessages([
@@ -155,12 +170,23 @@ class DonationIntentService
             $transactionId = 'TRN-'.strtoupper(bin2hex(random_bytes(4)));
         }
 
+        $linkedUser = ! empty($clean['user_uuid'])
+            ? User::query()->where('uuid', $clean['user_uuid'])->first(['uuid', 'donor_type_uuid', 'firstname', 'lastname'])
+            : null;
+
+        if ($donorName === null && $linkedUser !== null) {
+            $donorName = trim(implode(' ', array_filter([
+                (string) ($linkedUser->firstname ?? ''),
+                (string) ($linkedUser->lastname ?? ''),
+            ]))) ?: null;
+        }
+
         return Transaction::query()->create([
             'transaction_id' => $transactionId,
             'campaign_uuid' => $campaignUuid ?? Campaign::defaultCampaign()->uuid,
             'pledge_uuid' => $pledgeUuid,
             'user_uuid' => $clean['user_uuid'] ?? null,
-            'donor_type_uuid' => $guestSnapshot['donor_type_uuid'] ?? ($clean['donor_type_uuid'] ?? null),
+            'donor_type_uuid' => $guestSnapshot['donor_type_uuid'] ?? ($clean['donor_type_uuid'] ?? $linkedUser?->donor_type_uuid),
             'donor_name' => $donorName,
             'organization_name' => $organizationName,
             'rc_number' => $rcNumber,
@@ -177,6 +203,111 @@ class DonationIntentService
             'application_type' => $applicationType,
             'metadata' => array_merge((array) ($data['metadata'] ?? []), $metadata),
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function applyPledgeDonorDefaults(array $data): array
+    {
+        $pledgeUuid = $data['pledge_uuid'] ?? null;
+        if (! is_string($pledgeUuid) || $pledgeUuid === '') {
+            return $data;
+        }
+
+        $pledge = Pledge::query()->where('uuid', $pledgeUuid)->first();
+        if ($pledge === null) {
+            return $data;
+        }
+
+        if (! array_key_exists('is_anonymous', $data)) {
+            $data['is_anonymous'] = (bool) $pledge->is_anonymous;
+        }
+
+        if (blank($data['donor_email'] ?? null) && filled($pledge->donor_email)) {
+            $data['donor_email'] = $pledge->donor_email;
+        }
+
+        if (blank(trim((string) ($data['donor_name'] ?? ''))) && filled($pledge->donor_name)) {
+            $data['donor_name'] = $pledge->donor_name;
+        }
+
+        if (blank($data['donor_phone'] ?? null) && filled($pledge->donor_phone)) {
+            $data['donor_phone'] = $pledge->donor_phone;
+        }
+
+        if (blank($data['donor_type_uuid'] ?? null) && filled($pledge->donor_type_uuid)) {
+            $data['donor_type_uuid'] = $pledge->donor_type_uuid;
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function applyLinkedUserDefaults(array $data): array
+    {
+        if (empty($data['user_uuid'])) {
+            return $data;
+        }
+
+        $user = User::query()
+            ->where('uuid', $data['user_uuid'])
+            ->first(['uuid', 'email', 'firstname', 'lastname', 'phone_number']);
+
+        if ($user === null) {
+            return $data;
+        }
+
+        if (blank($data['donor_email'] ?? null) && filled($user->email)) {
+            $data['donor_email'] = $user->email;
+        }
+
+        if (blank(trim((string) ($data['donor_name'] ?? '')))) {
+            $donorName = trim(implode(' ', array_filter([
+                (string) ($user->firstname ?? ''),
+                (string) ($user->lastname ?? ''),
+            ])));
+
+            if ($donorName !== '') {
+                $data['donor_name'] = $donorName;
+            }
+        }
+
+        if (blank($data['donor_phone'] ?? null) && filled($user->phone_number)) {
+            $data['donor_phone'] = $user->phone_number;
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function linkGuestDonorToExistingUser(array $data): array
+    {
+        if (! empty($data['user_uuid'])) {
+            return $data;
+        }
+
+        $email = isset($data['donor_email']) ? strtolower(trim((string) $data['donor_email'])) : '';
+        if ($email === '') {
+            return $data;
+        }
+
+        $user = $this->userRepository->findByEmail($email);
+        if ($user === null) {
+            return $data;
+        }
+
+        $data['user_uuid'] = $user->uuid;
+        $data['donor_email'] = $email;
+
+        return $data;
     }
 
     /**

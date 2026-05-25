@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\v1\Customer\Recognition\CustomerRecognitionController;
 use App\Http\Controllers\v1\Customer\Auth\EmailVerificationController;
 use App\Http\Controllers\v1\Customer\Auth\LoginController;
 use App\Http\Controllers\v1\Customer\Auth\PasswordController;
@@ -38,6 +39,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/{id}', [NotificationController::class, 'show']);
         Route::patch('/{id}/read', [NotificationController::class, 'markRead']);
         Route::patch('/{id}/unread', [NotificationController::class, 'markUnread']);
+        Route::delete('/{id}/dismiss', [NotificationController::class, 'dismiss']);
     });
 
     Route::middleware('auth:sanctum')->prefix('settings')->group(function () {
@@ -63,6 +65,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/pledges', [CustomerPledgeController::class, 'store']);
         Route::get('/pledges/{pledgeUuid}', [CustomerPledgeController::class, 'show'])
             ->whereUuid('pledgeUuid');
+        Route::get('/recognitions', [CustomerRecognitionController::class, 'index']);
+        Route::get('/recognitions/{recognitionUuid}/download', [CustomerRecognitionController::class, 'download'])
+            ->whereUuid('recognitionUuid');
         Route::post('/donations/intent', [DonationIntentController::class, 'store'])
             ->middleware(['throttle:60,1']);
     });

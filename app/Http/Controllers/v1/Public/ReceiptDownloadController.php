@@ -57,13 +57,14 @@ class ReceiptDownloadController extends Controller
 
     private function resolveAuthorizedTransaction(Request $request, string $receiptNumber): Transaction
     {
-        $token = (string) $request->query('token', '');
+        $transaction = $this->receiptService->resolveByReceiptNumber($receiptNumber);
+
+        $token = trim((string) $request->query('token', ''));
         if ($token === '') {
-            abort(403, 'Missing receipt token.');
+            return $transaction;
         }
 
-        $transaction = $this->receiptService->resolveByReceiptNumber($receiptNumber);
-        if (! hash_equals((string) $transaction->receipt_token, $token)) {
+        if ($transaction->receipt_token === null || ! hash_equals((string) $transaction->receipt_token, $token)) {
             abort(403, 'Invalid receipt token.');
         }
 

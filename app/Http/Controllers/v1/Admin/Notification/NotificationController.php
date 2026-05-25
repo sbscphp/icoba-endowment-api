@@ -83,6 +83,18 @@ class NotificationController extends Controller
         }
     }
 
+    public function dismiss(Request $request, string $id)
+    {
+        try {
+            $admin = $this->requireAdmin($request);
+            $this->inbox->dismiss($admin, $id);
+
+            return JsonResponser::send(false, 'Notification deleted.', null);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\Notification\NotificationController@dismiss');
+        }
+    }
+
     private function requireAdmin(Request $request): Admin
     {
         $admin = $request->user();

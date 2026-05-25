@@ -3,6 +3,7 @@
 use App\Http\Controllers\v1\Public\LeaderboardController;
 use App\Http\Controllers\v1\Public\PublicCampaignController;
 use App\Http\Controllers\v1\Public\ReceiptDownloadController;
+use App\Http\Controllers\v1\Public\RecognitionDownloadController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -15,10 +16,17 @@ Route::prefix('v1')->group(function () {
         Route::get('campaigns', [PublicCampaignController::class, 'index']);
         Route::get('campaigns/dropdown', [PublicCampaignController::class, 'dropdown']);
         Route::get('campaigns/{campaignUuid}/fund-progress', [LeaderboardController::class, 'fundProgress']);
+
+        Route::get('receipts/{receiptNumber}/download', [ReceiptDownloadController::class, 'guestPdf'])
+            ->middleware(['throttle:public-receipt']);
+        Route::get('receipts/{receiptNumber}/tax/download', [ReceiptDownloadController::class, 'guestTaxPdf'])
+            ->middleware(['throttle:public-receipt']);
+        Route::get('recognitions/{recognitionNumber}/download', [RecognitionDownloadController::class, 'download'])
+            ->middleware(['throttle:public-receipt']);
     });
 
-    Route::get('receipts/{receiptNumber}/download', [ReceiptDownloadController::class, 'guestPdf'])
-        ->middleware(['throttle:public-receipt']);
-    Route::get('receipts/{receiptNumber}/tax/download', [ReceiptDownloadController::class, 'guestTaxPdf'])
-        ->middleware(['throttle:public-receipt']);
+    // Route::get('receipts/{receiptNumber}/download', [ReceiptDownloadController::class, 'guestPdf'])
+    //     ->middleware(['throttle:public-receipt']);
+    // Route::get('receipts/{receiptNumber}/tax/download', [ReceiptDownloadController::class, 'guestTaxPdf'])
+    //     ->middleware(['throttle:public-receipt']);
 });

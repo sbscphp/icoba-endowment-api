@@ -3,6 +3,7 @@
 namespace App\Services\Payment;
 
 use App\Enums\TransactionStatus;
+use App\Jobs\EvaluateDonorTierRecognitionJob;
 use App\Jobs\SendDonationConfirmationEmailJob;
 use App\Jobs\SendDonationTaxReceiptEmailJob;
 use App\Models\Transaction;
@@ -142,6 +143,8 @@ final class StripeCheckoutSyncService
             if ($shouldQueueTaxReceiptEmail) {
                 SendDonationTaxReceiptEmailJob::dispatch($locked->uuid);
             }
+
+            EvaluateDonorTierRecognitionJob::dispatch($locked->uuid);
 
             return true;
         });
