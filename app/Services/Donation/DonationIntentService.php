@@ -12,6 +12,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Repositories\Contracts\User\UserRepositoryInterface;
 use App\Services\Pledge\PledgeBalanceService;
+use App\Services\Pledge\PledgeScheduleService;
 use App\Services\Transaction\TransactionNgnSnapshotService;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -21,6 +22,7 @@ class DonationIntentService
 {
     public function __construct(
         private readonly PledgeBalanceService $pledgeBalance,
+        private readonly PledgeScheduleService $pledgeSchedule,
         private readonly TransactionNgnSnapshotService $transactionNgnSnapshot,
         private readonly GuestDonorProfileSnapshotService $guestDonorProfileSnapshot,
         private readonly DonationCurrencyValidator $donationCurrencyValidator,
@@ -70,6 +72,7 @@ class DonationIntentService
             'is_anonymous' => ['sometimes', 'boolean'],
             'gateway' => ['sometimes', 'nullable', 'string', 'max:64'],
             'application_type' => ['sometimes', 'nullable', 'string', 'max:48'],
+            'schedule_item_id' => ['sometimes', 'nullable', 'string', 'max:64'],
         ]);
 
         if ($v->fails()) {
@@ -104,17 +107,23 @@ class DonationIntentService
                 ]);
             }
 
-            $remaining = (float) $this->pledgeBalance->remainingAmount($pledge);
-            if ($remaining <= 0) {
-                throw ValidationException::withMessages([
-                    'pledge_uuid' => ['This pledge is already fulfilled.'],
-                ]);
+            $scheduleItemId = isset($clean['schedule_item_id']) ? (string) $clean['schedule_item_id'] : null;
+            if ($scheduleItemId === '') {
+                $scheduleItemId = null;
             }
+
+            $this->pledgeSchedule->assertPaymentAllowed($pledge, $amount, $scheduleItemId);
 
             $allocationMeta = $this->pledgeBalance->buildOverpaymentMetadata($pledge, $amount, $amountNgn);
             $metadata = array_merge($metadata, $allocationMeta);
 
-            $applicationType = TransactionApplicationType::VOLUNTARY_CONTRIBUTION;
+            if ($scheduleItemId !== null) {
+                $metadata['schedule_item_id'] = $scheduleItemId;
+            }
+
+            $applicationType = $scheduleItemId !== null
+                ? TransactionApplicationType::SCHEDULED_INSTALLMENT
+                : TransactionApplicationType::VOLUNTARY_CONTRIBUTION;
         } else {
             $applicationType = TransactionApplicationType::INSTANT_DONATION;
         }

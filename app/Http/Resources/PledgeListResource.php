@@ -16,6 +16,8 @@ class PledgeListResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $schedule = $this->resource->getAttribute('schedule_view');
+
         $row = [
             'pledge_uuid' => $this->uuid,
             'campaign' => $this->campaign !== null ? [
@@ -27,7 +29,11 @@ class PledgeListResource extends JsonResource
             'exchange_rate_to_naira' => $this->exchange_rate_to_naira !== null ? (string) $this->exchange_rate_to_naira : null,
             'currency' => $this->currency,
             'payment_plan_type' => $this->payment_plan_type instanceof \BackedEnum ? $this->payment_plan_type->value : $this->payment_plan_type,
+            'installment_count' => $this->installment_count,
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
+            'fulfilled_amount' => $this->resource->getAttribute('fulfilled_amount'),
+            'remaining_amount' => $this->resource->getAttribute('remaining_amount'),
+            'schedule' => is_array($schedule) ? $schedule : null,
             'is_anonymous' => (bool) $this->is_anonymous,
             'created_at' => $this->created_at,
         ];

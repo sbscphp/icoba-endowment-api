@@ -37,6 +37,7 @@ class DonationIntentRequest extends ApiFormRequest
             'donor_type_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:donor_types,uuid'],
             'is_anonymous' => ['sometimes', 'boolean'],
             'gateway' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'schedule_item_id' => ['sometimes', 'nullable', 'string', 'max:64'],
             'metadata' => ['sometimes', 'nullable', 'array'],
         ];
     }

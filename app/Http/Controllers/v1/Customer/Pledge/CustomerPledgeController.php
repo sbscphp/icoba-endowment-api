@@ -2,25 +2,32 @@
 
 namespace App\Http\Controllers\v1\Customer\Pledge;
 
+use App\Enums\PledgePaymentPreference;
 use App\Enums\PledgeStatus;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\Pledge\PledgeListRequest;
 use App\Http\Requests\Customer\Pledge\PledgeStatsRequest;
 use App\Http\Requests\Customer\Pledge\PledgeStoreRequest;
+use App\Http\Requests\Customer\Pledge\UpdatePledgeScheduleRequest;
 use App\Http\Resources\PledgeDetailResource;
 use App\Http\Resources\PledgeListResource;
 use App\Models\Campaign;
 use App\Models\User;
 use App\Responser\JsonResponser;
 use App\Services\Admin\Pledge\PledgeService;
+use App\Services\Pledge\PledgeBalanceService;
 use App\Services\Pledge\PledgeCommittedNgnResolver;
+use App\Services\Pledge\PledgeScheduleService;
 use Illuminate\Http\Request;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class CustomerPledgeController extends Controller
 {
     public function __construct(
         private readonly PledgeService $pledgeService,
+        private readonly PledgeScheduleService $pledgeScheduleService,
+        private readonly PledgeBalanceService $pledgeBalanceService,
     ) {}
 
     public function stats(PledgeStatsRequest $request)
@@ -48,10 +55,20 @@ class CustomerPledgeController extends Controller
             }
 
             $paginator = $this->pledgeService->listForUser($user->uuid, $request->validated());
+            $items = collect($paginator->items());
+            $schedules = $this->pledgeScheduleService->buildForPledges($items);
+
+            $data = $items->map(function ($pledge) use ($schedules) {
+                $pledge->setAttribute('schedule_view', $schedules[$pledge->uuid] ?? null);
+                $pledge->setAttribute('fulfilled_amount', $this->pledgeBalanceService->fulfilledAmount($pledge));
+                $pledge->setAttribute('remaining_amount', $this->pledgeBalanceService->remainingAmount($pledge));
+
+                return PledgeListResource::make($pledge)->resolve();
+            })->values()->all();
 
             return JsonResponser::send(false, 'Pledges retrieved.', [
                 ...$paginator->toArray(),
-                'data' => PledgeListResource::collection($paginator->items())->resolve(),
+                'data' => $data,
             ]);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Customer\Pledge\CustomerPledgeController@index');
@@ -99,6 +116,7 @@ class CustomerPledgeController extends Controller
             ];
 
             $pledge = $this->pledgeService->createPledge($data);
+            $pledge = $this->pledgeScheduleService->persistDefaultScheduleIfMissing($pledge);
 
             if (! empty($v['with_placeholder_transaction'])) {
                 $this->pledgeService->createPlaceholderTransaction(
@@ -109,9 +127,44 @@ class CustomerPledgeController extends Controller
 
             $this->pledgeService->findByUuid($pledge->uuid);
 
-            return JsonResponser::send(false, 'Pledge created.', PledgeListResource::make($pledge->fresh(['campaign', 'donor']))->resolve());
+            $pledge = $pledge->fresh(['campaign', 'donor']);
+            $pledge->setAttribute('schedule_view', $this->pledgeScheduleService->buildForPledge($pledge));
+
+            return JsonResponser::send(false, 'Pledge created.', PledgeListResource::make($pledge)->resolve());
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Customer\Pledge\CustomerPledgeController@store');
+        }
+    }
+
+    public function updateSchedule(UpdatePledgeScheduleRequest $request, string $pledgeUuid)
+    {
+        try {
+            $user = $request->user();
+            if (! $user instanceof User) {
+                abort(401);
+            }
+
+            $pledge = $this->pledgeService->findByUuid($pledgeUuid);
+            if ($pledge->user_uuid !== $user->uuid) {
+                throw (new ModelNotFoundException)->setModel($pledge::class, [$pledgeUuid]);
+            }
+
+            $action = (string) $request->validated('action');
+            if ($action === 'pause') {
+                $pledge = $this->pledgeScheduleService->pauseSchedule($pledge);
+            } elseif ($action === 'resume') {
+                $pledge = $this->pledgeScheduleService->resumeSchedule($pledge);
+            } else {
+                $pref = PledgePaymentPreference::from((string) $request->validated('payment_preference'));
+                $pledge = $this->pledgeScheduleService->setPaymentPreference($pledge, $pref);
+            }
+
+            $pledge->load(['campaign:uuid,name,campaign_id', 'donor:uuid,firstname,lastname,email,phone_number']);
+            $pledge->setAttribute('schedule_view', $this->pledgeScheduleService->buildForPledge($pledge));
+
+            return JsonResponser::send(false, 'Pledge schedule updated.', PledgeListResource::make($pledge)->resolve());
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Pledge\CustomerPledgeController@updateSchedule');
         }
     }
 
@@ -125,6 +178,10 @@ class CustomerPledgeController extends Controller
 
             $perPage = max(1, min((int) $request->query('per_page', 15), 100));
             $detail = $this->pledgeService->detailWithLedgerForUser($user->uuid, $pledgeUuid, $perPage);
+            $detail['schedule'] = $this->pledgeScheduleService->buildForPledge($detail['pledge']);
+            $detail['pledge']->setAttribute('fulfilled_amount', $detail['fulfilled_amount']);
+            $detail['pledge']->setAttribute('remaining_amount', $detail['remaining_amount']);
+            $detail['pledge']->setAttribute('schedule_view', $detail['schedule']);
 
             return JsonResponser::send(false, 'Pledge retrieved.', PledgeDetailResource::make($detail)->resolve());
         } catch (\Throwable $th) {

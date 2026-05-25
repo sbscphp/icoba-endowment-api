@@ -45,7 +45,8 @@ class CustomerDashboardController extends Controller
             $filters = [
                 'per_page' => $validated['per_page'] ?? 15,
                 'campaign_uuid' => $validated['campaign_uuid'] ?? null,
-                'filters' => $validated['filters'] ?? [],
+                'search' => $validated['search'] ?? null,
+                'filter' => $validated['filter'] ?? 'all',
             ];
 
             $paginator = $this->dashboardService->transactionHistory($user, $filters);
