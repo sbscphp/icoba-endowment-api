@@ -21,6 +21,7 @@ class TierConfigurationSeeder extends Seeder
                 'max_amount' => 999999.99,
                 'sort_order' => 1,
                 'badge_slug' => 'friends-of-igbobi-college',
+                'base_color' => '#64748B',
             ],
             [
                 'name' => 'Bronze Contributor',
@@ -29,6 +30,7 @@ class TierConfigurationSeeder extends Seeder
                 'max_amount' => 9999999.99,
                 'sort_order' => 2,
                 'badge_slug' => 'bronze-contributor',
+                'base_color' => '#CD7F32',
             ],
             [
                 'name' => 'Silver Supporter',
@@ -37,6 +39,7 @@ class TierConfigurationSeeder extends Seeder
                 'max_amount' => 99999999.99,
                 'sort_order' => 3,
                 'badge_slug' => 'silver-supporter',
+                'base_color' => '#C0C0C0',
             ],
             [
                 'name' => 'Gold Benefactor',
@@ -45,6 +48,7 @@ class TierConfigurationSeeder extends Seeder
                 'max_amount' => 499999999.99,
                 'sort_order' => 4,
                 'badge_slug' => 'gold-benefactor',
+                'base_color' => '#FFD700',
             ],
             [
                 'name' => 'Platinum Benefactor',
@@ -53,6 +57,7 @@ class TierConfigurationSeeder extends Seeder
                 'max_amount' => 999999999.99,
                 'sort_order' => 5,
                 'badge_slug' => 'platinum-benefactor',
+                'base_color' => '#E5E4E2',
             ],
             [
                 'name' => "Founders/Principals' Circle",
@@ -61,6 +66,7 @@ class TierConfigurationSeeder extends Seeder
                 'max_amount' => null,
                 'sort_order' => 6,
                 'badge_slug' => 'founders-principals-circle',
+                'base_color' => '#7C3AED',
             ],
         ];
 
@@ -72,8 +78,10 @@ class TierConfigurationSeeder extends Seeder
             TierConfiguration::query()->updateOrCreate(
                 ['name' => $tier['name']],
                 [
+                    'slug' => $tier['badge_slug'],
                     'description' => $tier['description'],
                     'tier_badge_url' => $baseUrl.'/'.$tier['badge_slug'].'.png',
+                    'base_color' => $tier['base_color'],
                     'min_amount' => $tier['min_amount'],
                     'max_amount' => $tier['max_amount'],
                     'benefits' => [],

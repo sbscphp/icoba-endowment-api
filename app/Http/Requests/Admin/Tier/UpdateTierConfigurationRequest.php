@@ -30,7 +30,16 @@ class UpdateTierConfigurationRequest extends ApiFormRequest
                 Rule::unique('tier_configurations', 'name')->ignore($tier?->id),
             ],
             'description' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'slug' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'max:120',
+                'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
+                Rule::unique('tier_configurations', 'slug')->ignore($tier?->id),
+            ],
             'tier_badge_url' => ['sometimes', 'nullable'],
+            'base_color' => ['sometimes', 'nullable', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
             'min_amount' => ['sometimes', 'numeric', 'min:0'],
             'max_amount' => [
                 'sometimes',

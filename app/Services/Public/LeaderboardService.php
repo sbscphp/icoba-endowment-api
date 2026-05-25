@@ -256,7 +256,6 @@ SQL;
         string $displayCurrency,
     ): array {
         $totalNgn = (float) ($row->total_amount_ngn ?? 0);
-        $tierLabel = $this->tierResolution->resolveDisplayLabelForCumulativeAmount($totalNgn);
         $allAnonymous = (int) ($row->all_anonymous ?? 0) === 1;
 
         $payload = [
@@ -264,7 +263,7 @@ SQL;
             'total_amount' => $this->formatLeaderboardAmount($row->total_amount ?? null),
             'amount_in_ngn' => $this->formatLeaderboardAmount($row->total_amount_ngn ?? null),
             'currency' => $displayCurrency,
-            'tier_label' => $tierLabel,
+            'tier' => $this->tierResolution->resolvePublicTierForCumulativeAmount($totalNgn),
             'last_donation_at' => $row->last_paid_at,
         ];
 
@@ -401,16 +400,14 @@ SQL;
      */
     private function mapTransactionForPublic(Transaction $tx): array
     {
-        $tier = $this->tierResolution->resolveDisplayLabelForAmount(
-            $tx->amount_in_naira !== null ? (float) $tx->amount_in_naira : null
-        );
-
         $row = [
             'transaction_uuid' => $tx->uuid,
             'amount' => (string) $tx->amount,
             'currency' => $tx->currency,
             'paid_at' => $tx->paid_at,
-            'tier_label' => $tier,
+            'tier' => $this->tierResolution->resolvePublicTierForAmount(
+                $tx->amount_in_naira !== null ? (float) $tx->amount_in_naira : null
+            ),
         ];
 
         if ($tx->is_anonymous) {
