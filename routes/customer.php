@@ -65,6 +65,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/pledges', [CustomerPledgeController::class, 'store']);
         Route::get('/pledges/{pledgeUuid}', [CustomerPledgeController::class, 'show'])
             ->whereUuid('pledgeUuid');
+        Route::patch('/pledges/{pledgeUuid}/schedule', [CustomerPledgeController::class, 'updateSchedule'])
+            ->whereUuid('pledgeUuid');
+        Route::post('/pledges/{pledgeUuid}/schedule', [CustomerPledgeController::class, 'updateSchedule'])
+            ->whereUuid('pledgeUuid');
         Route::get('/recognitions', [CustomerRecognitionController::class, 'index']);
         Route::get('/recognitions/{recognitionUuid}/download', [CustomerRecognitionController::class, 'download'])
             ->whereUuid('recognitionUuid');

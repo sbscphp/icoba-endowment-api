@@ -25,6 +25,8 @@ class CustomerReceiptController extends Controller
             $transaction = $this->resolveOwnedTransaction($request, $transactionUuid);
 
             return $this->receiptPdfService->streamDonationReceipt($transaction);
+        } catch (\InvalidArgumentException $th) {
+            abort(422, $th->getMessage());
         } catch (\Throwable $th) {
             if ($th instanceof HttpException) {
                 throw $th;
@@ -43,6 +45,8 @@ class CustomerReceiptController extends Controller
             $transaction = $this->resolveOwnedTransaction($request, $transactionUuid);
 
             return $this->receiptPdfService->streamTaxReceipt($transaction);
+        } catch (\InvalidArgumentException $th) {
+            abort(422, $th->getMessage());
         } catch (\Throwable $th) {
             if ($th instanceof HttpException) {
                 throw $th;

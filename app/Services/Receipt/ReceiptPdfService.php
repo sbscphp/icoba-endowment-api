@@ -22,6 +22,10 @@ class ReceiptPdfService
 
     public function streamDonationReceipt(Transaction $transaction): Response
     {
+        if ($transaction->status !== TransactionStatus::SUCCESSFUL) {
+            abort(422, 'Receipt available only for successful payments.');
+        }
+
         return $this->streamPdf(
             $transaction,
             'pdf.donation-receipt',
@@ -32,6 +36,10 @@ class ReceiptPdfService
 
     public function streamTaxReceipt(Transaction $transaction): Response
     {
+        if ($transaction->status !== TransactionStatus::SUCCESSFUL) {
+            abort(422, 'Receipt available only for successful payments.');
+        }
+
         if (! $this->receiptService->isEligibleForTaxReceipt($transaction)) {
             abort(422, 'Tax receipt is available only for corporate donations with registration and tax identification numbers.');
         }

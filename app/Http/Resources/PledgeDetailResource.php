@@ -26,10 +26,17 @@ class PledgeDetailResource extends JsonResource
         $paginatorArray = $ledger->toArray();
         $paginatorArray['data'] = TransactionResource::collection($ledger->getCollection())->resolve();
 
+        $pledge->setAttribute('fulfilled_amount', $this->resource['fulfilled_amount']);
+        $pledge->setAttribute('remaining_amount', $this->resource['remaining_amount']);
+        if (isset($this->resource['schedule'])) {
+            $pledge->setAttribute('schedule_view', $this->resource['schedule']);
+        }
+
         return [
             'pledge' => PledgeListResource::make($pledge)->resolve(),
             'fulfilled_amount' => $this->resource['fulfilled_amount'],
             'remaining_amount' => $this->resource['remaining_amount'],
+            'schedule' => $this->resource['schedule'] ?? null,
             'ledger' => $paginatorArray,
         ];
     }

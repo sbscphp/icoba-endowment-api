@@ -9,6 +9,7 @@ use App\Models\Pledge;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
 
 class CustomerDonationDashboardService
 {
@@ -66,7 +67,7 @@ class CustomerDonationDashboardService
     /**
      * Paginated transactions for the given donor account only (never cross-user).
      *
-     * @param  array{per_page?: int, campaign_uuid?: string|null, filters?: array{scope?: string}}  $filters
+     * @param  array{per_page?: int, campaign_uuid?: string|null, search?: string|null, filter?: string}  $filters
      */
     public function transactionHistory(User $user, array $filters): LengthAwarePaginator
     {
@@ -79,8 +80,8 @@ class CustomerDonationDashboardService
             ->with(['campaign:uuid,name', 'pledge:uuid,committed_amount,currency,committed_amount_ngn'])
             ->orderByDesc('created_at');
 
-        $scope = strtolower(trim((string) (data_get($filters, 'filters.scope') ?? 'all')));
-        if (! in_array($scope, ['all', 'pledges', 'donations'], true)) {
+        $scope = strtolower(trim((string) ($filters['filter'] ?? 'all')));
+        if ($scope === '' || ! in_array($scope, ['all', 'pledges', 'donations'], true)) {
             $scope = 'all';
         }
         if ($scope === 'pledges') {
@@ -97,6 +98,29 @@ class CustomerDonationDashboardService
             $q->where('campaign_uuid', (string) $filters['campaign_uuid']);
         }
 
+        $search = trim((string) ($filters['search'] ?? ''));
+        if ($search !== '') {
+            $like = '%'.$this->escapeLike($search).'%';
+            $q->where(function (Builder $builder) use ($like): void {
+                $builder->where('transaction_id', 'like', $like)
+                    ->orWhere('uuid', 'like', $like)
+                    ->orWhere('donor_name', 'like', $like)
+                    ->orWhere('donor_email', 'like', $like)
+                    ->orWhere('donor_phone', 'like', $like)
+                    ->orWhere('gateway', 'like', $like)
+                    ->orWhere('gateway_reference', 'like', $like)
+                    ->orWhereHas('campaign', function (Builder $b) use ($like): void {
+                        $b->where('name', 'like', $like)
+                            ->orWhere('campaign_id', 'like', $like);
+                    });
+            });
+        }
+
         return $q->paginate($perPage);
+    }
+
+    private function escapeLike(string $value): string
+    {
+        return str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $value);
     }
 }
