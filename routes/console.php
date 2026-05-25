@@ -11,3 +11,7 @@ Artisan::command('inspire', function () {
 Schedule::command('campaigns:auto-complete')
     ->hourly()
     ->withoutOverlapping();
+
+Schedule::command('contact-submissions:auto-close')
+    ->daily()
+    ->withoutOverlapping();
