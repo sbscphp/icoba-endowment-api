@@ -115,10 +115,42 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
             'flutterwave webhook' => ['/api/payment/flutterwave/webhook'],
             'flutterwave callback' => ['/api/payment/flutterwave/callback'],
             'stripe webhook' => ['/api/v1/payment/stripe/webhook'],
-            'admin api users' => ['/api/admin/apiusers'],
-            'crypto helper' => ['/api/crypto'],
             'dev api registration' => ['/api/v1/dev/api-users'],
+            'dev crypto encrypt' => ['/api/v1/dev/crypto/encrypt'],
         ];
+    }
+
+    public function test_donation_and_checkout_routes_require_encryption_when_middleware_enabled(): void
+    {
+        $paths = [
+            '/api/v1/donations/intent',
+            '/api/v1/me/donations/intent',
+            '/api/v1/donations/stripe/checkout/guest',
+            '/api/v1/donations/stripe/checkout/verify',
+        ];
+
+        foreach ($paths as $path) {
+            $request = Request::create($path, 'POST', content: '{"data":"plain"}');
+            $response = JsonResponse::fromJsonString('{"ok":true}');
+
+            $result = $this->middleware->handle($request, fn () => $response);
+
+            $this->assertSame(
+                BaseResponse::HTTP_UNAUTHORIZED,
+                $result->getStatusCode(),
+                "Expected {$path} to require encryption.",
+            );
+        }
+    }
+
+    public function test_public_contact_requires_encryption_when_middleware_enabled(): void
+    {
+        $request = Request::create('/api/v1/public/contact', 'POST', content: '{"data":"plain"}');
+        $response = JsonResponse::fromJsonString('{"ok":true}');
+
+        $result = $this->middleware->handle($request, fn () => $response);
+
+        $this->assertSame(BaseResponse::HTTP_UNAUTHORIZED, $result->getStatusCode());
     }
 
     public function test_missing_client_key_returns_401(): void
@@ -306,7 +338,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         };
         $request->setUserResolver(static fn () => $overrideUser);
 
-        $result = $this->middleware->handle($request, fn () => new Response($plainBody));
+        $result = $this->middleware->handle($request, fn () => JsonResponse::fromJsonString($plainBody));
 
         $this->assertSame($plainBody, $result->getContent());
     }
@@ -326,7 +358,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         };
         $request->setUserResolver(static fn () => $regularUser);
 
-        $result = $this->middleware->handle($request, fn () => new Response($plainBody));
+        $result = $this->middleware->handle($request, fn () => JsonResponse::fromJsonString($plainBody));
 
         $decoded = json_decode($result->getContent(), true);
 

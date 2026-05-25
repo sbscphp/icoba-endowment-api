@@ -42,17 +42,16 @@ final readonly class RequestResponseEncryptionMiddleware
     /**
      * Route path substrings that bypass encryption entirely.
      *
+     * Payment provider webhook/callback routes use {@see BYPASS_SUFFIXES} instead.
+     * Dev provisioning routes accept plaintext for bootstrap. All other routes
+     * (including donations, public API, and checkout) require X-ClientKey when
+     * middleware is enabled.
+     *
      * @var list<string>
      */
     private const BYPASS_CONTAINS = [
-        '/api/admin/apiusers',
-        '/api/crypto',
         '/dev/api-users',
         '/dev/crypto',
-        '/api/v1/public/',
-        '/api/v1/receipts/',
-        '/api/v1/donations/intent',
-        '/api/v1/donations/stripe',
     ];
 
     public function __construct(
