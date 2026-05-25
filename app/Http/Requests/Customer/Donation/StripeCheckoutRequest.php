@@ -6,17 +6,24 @@ use App\Enums\Currency;
 use App\Http\Requests\ApiFormRequest;
 use App\Http\Requests\Concerns\MergesCurrencyFromPledge;
 use App\Http\Requests\Concerns\ValidatesGuestDonorProfileFields;
+use App\Models\User;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Validation\Rule;
 
-class StripeGuestCheckoutRequest extends ApiFormRequest
+class StripeCheckoutRequest extends ApiFormRequest
 {
-    use MergesCurrencyFromPledge;
+    use MergesCurrencyFromPledge {
+        prepareForValidation as mergeCurrencyFromPledge;
+    }
     use ValidatesGuestDonorProfileFields;
 
     protected function prepareForValidation(): void
     {
-        $this->prepareGuestDonorProfileForValidation();
+        $this->mergeCurrencyFromPledge();
+
+        if (! $this->isAuthenticatedMember()) {
+            $this->prepareGuestDonorProfileForValidation();
+        }
     }
 
     public function rules(): array
@@ -41,6 +48,10 @@ class StripeGuestCheckoutRequest extends ApiFormRequest
             'cancel_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
         ];
 
+        if ($this->isAuthenticatedMember()) {
+            return array_merge($checkoutRules, $this->memberDonorRules());
+        }
+
         return array_merge(
             $checkoutRules,
             $this->guestDonorProfileRulesForSlug($this->resolvedGuestDonorTypeSlug()),
@@ -57,6 +68,26 @@ class StripeGuestCheckoutRequest extends ApiFormRequest
 
     public function withValidator(Validator $validator): void
     {
-        $this->appendGuestDonorProfileValidation($validator);
+        if (! $this->isAuthenticatedMember()) {
+            $this->appendGuestDonorProfileValidation($validator);
+        }
+    }
+
+    /**
+     * @return array<string, list<\Illuminate\Contracts\Validation\ValidationRule|string>>
+     */
+    private function memberDonorRules(): array
+    {
+        return [
+            'donor_name' => ['sometimes', 'nullable', 'string', 'max:190'],
+            'donor_email' => ['sometimes', 'nullable', 'email', 'max:190'],
+            'donor_phone' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'donor_type_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:donor_types,uuid'],
+        ];
+    }
+
+    private function isAuthenticatedMember(): bool
+    {
+        return $this->user() instanceof User;
     }
 }

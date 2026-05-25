@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\Pledge;
+use App\Services\Pledge\PledgeScheduleService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -17,6 +18,7 @@ class PledgeListResource extends JsonResource
     public function toArray(Request $request): array
     {
         $schedule = $this->resource->getAttribute('schedule_view');
+        $scheduleService = app(PledgeScheduleService::class);
 
         $row = [
             'pledge_uuid' => $this->uuid,
@@ -31,6 +33,8 @@ class PledgeListResource extends JsonResource
             'payment_plan_type' => $this->payment_plan_type instanceof \BackedEnum ? $this->payment_plan_type->value : $this->payment_plan_type,
             'installment_count' => $this->installment_count,
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
+            'is_paused' => $scheduleService->isPledgePaused($this->resource),
+            'paused_at' => $scheduleService->pledgePausedAt($this->resource),
             'fulfilled_amount' => $this->resource->getAttribute('fulfilled_amount'),
             'remaining_amount' => $this->resource->getAttribute('remaining_amount'),
             'schedule' => is_array($schedule) ? $schedule : null,

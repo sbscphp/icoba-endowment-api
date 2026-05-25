@@ -15,3 +15,7 @@ Schedule::command('campaigns:auto-complete')
 Schedule::command('contact-submissions:auto-close')
     ->daily()
     ->withoutOverlapping();
+
+Schedule::command('pledges:send-payment-reminders')
+    ->dailyAt('08:00')
+    ->withoutOverlapping();
