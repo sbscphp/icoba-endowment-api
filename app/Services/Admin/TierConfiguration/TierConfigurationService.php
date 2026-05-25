@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class TierConfigurationService
@@ -26,8 +27,10 @@ class TierConfigurationService
 
         $tier = TierConfiguration::query()->create([
             'name' => (string) $payload['name'],
+            'slug' => $this->resolveSlug($payload),
             'description' => $payload['description'] ?? null,
             'tier_badge_url' => $this->uploadBadgeIfPresent($payload['tier_badge_url'] ?? null),
+            'base_color' => $payload['base_color'] ?? null,
             'min_amount' => $minAmount,
             'max_amount' => $maxAmount,
             'benefits' => array_values(array_filter((array) ($payload['benefits'] ?? []), fn ($v) => is_string($v) && trim($v) !== '')),
@@ -106,10 +109,16 @@ class TierConfigurationService
         $tier = $this->resolveTier($tierId);
 
         $updates = [];
-        foreach (['name', 'description', 'sort_order'] as $key) {
+        foreach (['name', 'description', 'sort_order', 'slug', 'base_color'] as $key) {
             if (array_key_exists($key, $payload)) {
                 $updates[$key] = $payload[$key];
             }
+        }
+
+        if (array_key_exists('slug', $payload) && ($payload['slug'] === null || $payload['slug'] === '')) {
+            unset($updates['slug']);
+        } elseif (array_key_exists('slug', $payload)) {
+            $updates['slug'] = Str::slug((string) $payload['slug']);
         }
 
         if (array_key_exists('tier_badge_url', $payload)) {
@@ -270,5 +279,19 @@ class TierConfigurationService
             ),
             422
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function resolveSlug(array $payload): string
+    {
+        $slug = trim((string) ($payload['slug'] ?? ''));
+
+        if ($slug !== '') {
+            return Str::slug($slug);
+        }
+
+        return Str::slug((string) $payload['name']);
     }
 }

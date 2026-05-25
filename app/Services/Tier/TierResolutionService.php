@@ -75,6 +75,44 @@ class TierResolutionService
         ];
     }
 
+    /**
+     * @return array{slug: string, name: string, base_color: string|null}
+     */
+    public function resolvePublicTierForAmount(?float $amountInNaira): array
+    {
+        $tier = $this->resolveTierForAmount($amountInNaira);
+
+        return $this->formatPublicTier($tier);
+    }
+
+    /**
+     * @return array{slug: string, name: string, base_color: string|null}
+     */
+    public function resolvePublicTierForCumulativeAmount(float $cumulativeAmountInNaira): array
+    {
+        return $this->resolvePublicTierForAmount($cumulativeAmountInNaira);
+    }
+
+    /**
+     * @return array{slug: string, name: string, base_color: string|null}
+     */
+    private function formatPublicTier(?TierConfiguration $tier): array
+    {
+        if ($tier === null) {
+            return [
+                'slug' => 'uncategorized',
+                'name' => self::UNCATEGORIZED_LABEL,
+                'base_color' => null,
+            ];
+        }
+
+        return [
+            'slug' => (string) ($tier->slug ?? ''),
+            'name' => (string) $tier->name,
+            'base_color' => $tier->base_color,
+        ];
+    }
+
     private function formatNgnAmount(float $amountInNaira): string
     {
         return number_format(max(0, $amountInNaira), 2, '.', '');
