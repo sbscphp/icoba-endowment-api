@@ -4,6 +4,7 @@ use App\Http\Controllers\v1\Admin\AuditTrail\AuditTrailController;
 use App\Http\Controllers\v1\Admin\Auth\AdminLoginController;
 use App\Http\Controllers\v1\Admin\Auth\PasswordController as AdminPasswordController;
 use App\Http\Controllers\v1\Admin\Campaign\CampaignController;
+use App\Http\Controllers\v1\Admin\Campaign\CampaignUpdateReportController;
 use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateController;
 use App\Http\Controllers\v1\Admin\ContactSubmission\ContactSubmissionController;
 use App\Http\Controllers\v1\Admin\Dashboard\DashboardController;
@@ -171,6 +172,21 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:campaigns.read']);
             Route::post('/{campaignId}/transition', [CampaignController::class, 'transition'])
                 ->middleware(['permission:campaigns.publish']);
+
+            Route::prefix('/{campaignId}/reports')->group(function () {
+                Route::get('/', [CampaignUpdateReportController::class, 'index'])
+                    ->middleware(['permission:campaigns.read']);
+                Route::post('/', [CampaignUpdateReportController::class, 'store'])
+                    ->middleware(['permission:campaigns.create']);
+                Route::get('/{reportId}', [CampaignUpdateReportController::class, 'show'])
+                    ->middleware(['permission:campaigns.read']);
+                Route::patch('/{reportId}', [CampaignUpdateReportController::class, 'update'])
+                    ->middleware(['permission:campaigns.update']);
+                Route::patch('/{reportId}/toggle-status', [CampaignUpdateReportController::class, 'toggleStatus'])
+                    ->middleware(['permission:campaigns.update']);
+                Route::delete('/{reportId}', [CampaignUpdateReportController::class, 'destroy'])
+                    ->middleware(['permission:campaigns.delete']);
+            });
         });
 
         Route::prefix('transactions')->group(function () {

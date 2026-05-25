@@ -105,4 +105,12 @@ class Campaign extends Model
     {
         return $this->belongsTo(Admin::class, 'created_by_admin_uuid', 'uuid');
     }
+
+    /**
+     * @return HasMany<CampaignUpdateReport, $this>
+     */
+    public function updateReports(): HasMany
+    {
+        return $this->hasMany(CampaignUpdateReport::class, 'campaign_uuid', 'uuid');
+    }
 }
