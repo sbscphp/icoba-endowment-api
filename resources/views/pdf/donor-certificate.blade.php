@@ -5,43 +5,51 @@
     <title>Donor Certificate</title>
     <style>
         * { box-sizing: border-box; }
-        @page { margin: 0; }
-        body {
+        @page { margin: 0; size: A4 landscape; }
+        html, body {
             font-family: DejaVu Sans, sans-serif;
             margin: 0;
             padding: 0;
             color: #1f2937;
+            width: 100%;
+            height: 100%;
         }
         .page {
             position: relative;
             width: 100%;
-            height: 100%;
-            min-height: 720px;
-            overflow: hidden;
+            min-height: 595px;
         }
         .background {
             position: absolute;
-            inset: 0;
+            top: 0;
+            left: 0;
             width: 100%;
-            height: 100%;
-            object-fit: cover;
+            height: 595px;
             z-index: 0;
         }
-        .content {
+        .layout-table {
             position: relative;
             z-index: 1;
             width: 100%;
-            height: 100%;
-            min-height: 720px;
-            padding: 48px 64px;
+            min-height: 595px;
+            border-collapse: collapse;
         }
-        .icon-wrap {
-            text-align: {{ $iconPosition ?? 'center' }};
-            margin-bottom: 12px;
+        .meta-cell {
+            padding: 28px 48px 8px 48px;
+            text-align: center;
+            font-size: 9px;
+            color: #6b7280;
+            line-height: 1.5;
+        }
+        .body-cell {
+            padding: 12px 64px 160px 64px;
+            text-align: center;
+            vertical-align: middle;
         }
         .icon {
-            max-width: 72px;
-            max-height: 72px;
+            width: 72px;
+            height: auto;
+            margin: 0 auto 12px auto;
         }
         .awardee-name {
             font-family: {{ $awardeeFont ?? 'DejaVu Sans' }}, DejaVu Sans, sans-serif;
@@ -49,18 +57,17 @@
             font-weight: {{ $awardeeFontWeight ?? 'bold' }};
             text-align: {{ $awardeeTextAlign ?? 'center' }};
             color: #122168;
-            margin: 24px 0 18px 0;
+            margin: 0 0 18px 0;
             line-height: 1.3;
         }
         .line {
-            margin: 8px 0;
+            margin: 8px auto;
             line-height: 1.5;
+            max-width: 620px;
         }
-        .signatories {
-            position: absolute;
-            left: 64px;
-            right: 64px;
-            bottom: 48px;
+        .signatories-cell {
+            padding: 0 64px 40px 64px;
+            vertical-align: bottom;
         }
         .signatories-table {
             width: 100%;
@@ -87,20 +94,13 @@
             color: #6b7280;
             margin: 4px 0 0 0;
         }
-        .seal {
-            position: absolute;
-            right: 72px;
-            bottom: 120px;
-            max-width: 96px;
-            max-height: 96px;
+        .seal-wrap {
+            text-align: center;
+            margin-top: 16px;
         }
-        .meta {
-            position: absolute;
-            top: 36px;
-            right: 64px;
-            font-size: 9px;
-            color: #6b7280;
-            text-align: right;
+        .seal {
+            width: 96px;
+            height: auto;
         }
     </style>
 </head>
@@ -110,48 +110,60 @@
             <img src="{{ $backgroundDataUri }}" alt="" class="background">
         @endif
 
-        <div class="content">
-            <div class="meta">
-                {{ $recognitionNumber }}<br>
-                {{ $issuedAt }}
-            </div>
-
-            @if(!empty($iconDataUri))
-                <div class="icon-wrap">
-                    <img src="{{ $iconDataUri }}" alt="" class="icon">
-                </div>
-            @endif
-
-            <div class="awardee-name">{{ $awardeeName }}</div>
-
-            @foreach($lines as $line)
-                <div class="line" style="font-family: {{ $line['font'] }}, DejaVu Sans, sans-serif; font-size: {{ $line['size'] }}; font-weight: {{ $line['weight'] }}; text-align: {{ $line['position'] }};">
-                    {{ $line['text'] }}
-                </div>
-            @endforeach
-
-            @if(!empty($sealDataUri))
-                <img src="{{ $sealDataUri }}" alt="" class="seal">
-            @endif
-
-            @if(!empty($signatories))
-                <div class="signatories">
-                    <table class="signatories-table">
-                        <tr>
-                            @foreach($signatories as $signatory)
-                                <td>
-                                    @if(!empty($signatory['signature_data_uri']))
-                                        <img src="{{ $signatory['signature_data_uri'] }}" alt="" class="signature-image">
-                                    @endif
-                                    <p class="signature-name">{{ $signatory['name'] }}</p>
-                                    <p class="signature-position">{{ $signatory['position'] }}</p>
+        <table class="layout-table" cellpadding="0" cellspacing="0">
+            <tr>
+                <td class="meta-cell">
+                    {{ $recognitionNumber }}<br>
+                    {{ $issuedAt }}
+                </td>
+            </tr>
+            <tr>
+                <td class="body-cell" align="center" valign="middle">
+                    @if(!empty($iconDataUri))
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                                <td align="{{ $iconPosition === 'left' ? 'left' : ($iconPosition === 'right' ? 'right' : 'center') }}">
+                                    <img src="{{ $iconDataUri }}" alt="" class="icon">
                                 </td>
-                            @endforeach
-                        </tr>
-                    </table>
-                </div>
+                            </tr>
+                        </table>
+                    @endif
+
+                    <div class="awardee-name">{{ $awardeeName }}</div>
+
+                    @foreach($lines as $line)
+                        <div class="line" style="font-family: {{ $line['font'] }}, DejaVu Sans, sans-serif; font-size: {{ $line['size'] }}; font-weight: {{ $line['weight'] }}; text-align: {{ $line['position'] }};">
+                            {{ $line['text'] }}
+                        </div>
+                    @endforeach
+
+                    @if(!empty($sealDataUri))
+                        <div class="seal-wrap">
+                            <img src="{{ $sealDataUri }}" alt="" class="seal">
+                        </div>
+                    @endif
+                </td>
+            </tr>
+            @if(!empty($signatories))
+                <tr>
+                    <td class="signatories-cell">
+                        <table class="signatories-table" cellpadding="0" cellspacing="0">
+                            <tr>
+                                @foreach($signatories as $signatory)
+                                    <td>
+                                        @if(!empty($signatory['signature_data_uri']))
+                                            <img src="{{ $signatory['signature_data_uri'] }}" alt="" class="signature-image">
+                                        @endif
+                                        <p class="signature-name">{{ $signatory['name'] }}</p>
+                                        <p class="signature-position">{{ $signatory['position'] }}</p>
+                                    </td>
+                                @endforeach
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
             @endif
-        </div>
+        </table>
     </div>
 </body>
 </html>

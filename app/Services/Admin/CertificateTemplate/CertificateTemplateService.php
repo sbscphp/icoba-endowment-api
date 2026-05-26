@@ -4,6 +4,7 @@ namespace App\Services\Admin\CertificateTemplate;
 
 use App\Exceptions\ApiException;
 use App\Helpers\FileUploadHelper;
+use App\Jobs\BackfillDonorRecognitionForTierJob;
 use App\Models\CertificateTemplate;
 use App\Models\TierConfiguration;
 use Carbon\Carbon;
@@ -39,7 +40,12 @@ class CertificateTemplateService
                 $this->deactivateSiblingsOnTier($tierUuid, $template->id);
             }
 
-            return $template->fresh() ?? $template;
+            $fresh = $template->fresh() ?? $template;
+            if ($isActive) {
+                $this->queueRecognitionBackfillForTemplate($fresh);
+            }
+
+            return $fresh;
         });
     }
 
@@ -82,7 +88,12 @@ class CertificateTemplateService
                 $this->deactivateSiblingsOnTier($finalTierUuid, $template->id);
             }
 
-            return $template->fresh() ?? $template;
+            $fresh = $template->fresh() ?? $template;
+            if ($finalIsActive) {
+                $this->queueRecognitionBackfillForTemplate($fresh);
+            }
+
+            return $fresh;
         });
     }
 
@@ -98,7 +109,12 @@ class CertificateTemplateService
                 $this->deactivateSiblingsOnTier($template->tier_uuid, $template->id);
             }
 
-            return $template->fresh() ?? $template;
+            $fresh = $template->fresh() ?? $template;
+            if ($nextActive) {
+                $this->queueRecognitionBackfillForTemplate($fresh);
+            }
+
+            return $fresh;
         });
     }
 
@@ -253,6 +269,16 @@ class CertificateTemplateService
         } catch (InvalidArgumentException $e) {
             throw new ApiException('File upload failed: '.$e->getMessage(), 422);
         }
+    }
+
+    private function queueRecognitionBackfillForTemplate(CertificateTemplate $template): void
+    {
+        $tierUuid = $template->tier_uuid;
+        if (! is_string($tierUuid) || $tierUuid === '' || ! (bool) $template->is_active) {
+            return;
+        }
+
+        BackfillDonorRecognitionForTierJob::dispatch($tierUuid);
     }
 
     // Deactivate all siblings on the same tier

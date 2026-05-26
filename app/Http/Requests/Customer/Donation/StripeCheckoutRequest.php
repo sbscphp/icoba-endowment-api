@@ -5,6 +5,7 @@ namespace App\Http\Requests\Customer\Donation;
 use App\Enums\Currency;
 use App\Http\Requests\ApiFormRequest;
 use App\Http\Requests\Concerns\MergesCurrencyFromPledge;
+use App\Http\Requests\Concerns\RequiresResolvableDonorName;
 use App\Http\Requests\Concerns\ValidatesGuestDonorProfileFields;
 use App\Models\User;
 use Illuminate\Contracts\Validation\Validator;
@@ -15,6 +16,7 @@ class StripeCheckoutRequest extends ApiFormRequest
     use MergesCurrencyFromPledge {
         prepareForValidation as mergeCurrencyFromPledge;
     }
+    use RequiresResolvableDonorName;
     use ValidatesGuestDonorProfileFields;
 
     protected function prepareForValidation(): void
@@ -68,7 +70,9 @@ class StripeCheckoutRequest extends ApiFormRequest
 
     public function withValidator(Validator $validator): void
     {
-        if (! $this->isAuthenticatedMember()) {
+        if ($this->isAuthenticatedMember()) {
+            $this->appendRequiresResolvableDonorNameValidation($validator, true);
+        } else {
             $this->appendGuestDonorProfileValidation($validator);
         }
     }
@@ -79,7 +83,8 @@ class StripeCheckoutRequest extends ApiFormRequest
     private function memberDonorRules(): array
     {
         return [
-            'donor_name' => ['sometimes', 'nullable', 'string', 'max:190'],
+            'donor_name' => ['sometimes', 'string', 'min:2', 'max:190'],
+            'organization_name' => ['sometimes', 'string', 'min:2', 'max:150'],
             'donor_email' => ['sometimes', 'nullable', 'email', 'max:190'],
             'donor_phone' => ['sometimes', 'nullable', 'string', 'max:32'],
             'donor_type_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:donor_types,uuid'],

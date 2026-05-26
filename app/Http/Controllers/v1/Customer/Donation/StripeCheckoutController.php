@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Responser\JsonResponser;
 use App\Services\Admin\Transaction\TransactionService;
 use App\Services\Donation\DonationIntentService;
+use App\Services\Donation\DonorNameRequirement;
 use App\Services\Payment\StripeCheckoutService;
 use App\Services\Payment\StripeCheckoutVerificationService;
 use Illuminate\Validation\ValidationException;
@@ -22,6 +23,7 @@ class StripeCheckoutController extends Controller
         private readonly StripeCheckoutService $stripeCheckoutService,
         private readonly StripeCheckoutVerificationService $stripeCheckoutVerificationService,
         private readonly TransactionService $transactionService,
+        private readonly DonorNameRequirement $donorNameRequirement,
     ) {}
 
     public function store(StripeCheckoutRequest $request)
@@ -53,15 +55,12 @@ class StripeCheckoutController extends Controller
                     $validated['donor_email'] = $user->email;
                 }
 
-                if (
-                    ! isset($validated['donor_name'])
-                    || ! is_string($validated['donor_name'])
-                    || trim($validated['donor_name']) === ''
-                ) {
-                    $validated['donor_name'] = trim(implode(' ', array_filter([
-                        (string) ($user->firstname ?? ''),
-                        (string) ($user->lastname ?? ''),
-                    ])));
+                $resolvedName = $this->donorNameRequirement->resolveFromPayload($validated, $user);
+                if ($resolvedName !== null) {
+                    $validated['donor_name'] = $resolvedName;
+                    if (filled($user->organization_name) && trim((string) ($validated['organization_name'] ?? '')) === '') {
+                        $validated['organization_name'] = trim((string) $user->organization_name);
+                    }
                 }
             }
 

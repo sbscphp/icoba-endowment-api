@@ -27,6 +27,7 @@ class DonationIntentService
         private readonly GuestDonorProfileSnapshotService $guestDonorProfileSnapshot,
         private readonly DonationCurrencyValidator $donationCurrencyValidator,
         private readonly UserRepositoryInterface $userRepository,
+        private readonly DonorNameRequirement $donorNameRequirement,
     ) {}
 
     /**
@@ -180,15 +181,22 @@ class DonationIntentService
         }
 
         $linkedUser = ! empty($clean['user_uuid'])
-            ? User::query()->where('uuid', $clean['user_uuid'])->first(['uuid', 'donor_type_uuid', 'firstname', 'lastname'])
+            ? User::query()
+                ->where('uuid', $clean['user_uuid'])
+                ->first(['uuid', 'donor_type_uuid', 'firstname', 'lastname', 'organization_name'])
             : null;
 
-        if ($donorName === null && $linkedUser !== null) {
-            $donorName = trim(implode(' ', array_filter([
-                (string) ($linkedUser->firstname ?? ''),
-                (string) ($linkedUser->lastname ?? ''),
-            ]))) ?: null;
+        if ($donorName === null) {
+            $donorName = $this->donorNameRequirement->resolveFromPayload([
+                'donor_name' => null,
+                'organization_name' => $organizationName,
+            ], $linkedUser);
         }
+
+        $this->donorNameRequirement->assertPresent([
+            'donor_name' => $donorName,
+            'organization_name' => $organizationName,
+        ], $linkedUser);
 
         return Transaction::query()->create([
             'transaction_id' => $transactionId,
@@ -265,7 +273,7 @@ class DonationIntentService
 
         $user = User::query()
             ->where('uuid', $data['user_uuid'])
-            ->first(['uuid', 'email', 'firstname', 'lastname', 'phone_number']);
+            ->first(['uuid', 'email', 'firstname', 'lastname', 'organization_name', 'phone_number']);
 
         if ($user === null) {
             return $data;
@@ -275,14 +283,14 @@ class DonationIntentService
             $data['donor_email'] = $user->email;
         }
 
-        if (blank(trim((string) ($data['donor_name'] ?? '')))) {
-            $donorName = trim(implode(' ', array_filter([
-                (string) ($user->firstname ?? ''),
-                (string) ($user->lastname ?? ''),
-            ])));
-
-            if ($donorName !== '') {
-                $data['donor_name'] = $donorName;
+        if (blank(trim((string) ($data['donor_name'] ?? ''))) && blank(trim((string) ($data['organization_name'] ?? '')))) {
+            if (filled($user->organization_name)) {
+                $data['organization_name'] = trim((string) $user->organization_name);
+            } else {
+                $donorName = $this->donorNameRequirement->resolveFromUser($user);
+                if ($donorName !== null) {
+                    $data['donor_name'] = $donorName;
+                }
             }
         }
 

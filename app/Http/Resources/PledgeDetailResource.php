@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\Pledge;
 use App\Models\Transaction;
+use App\Services\Pledge\PledgeScheduleService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -28,15 +29,13 @@ class PledgeDetailResource extends JsonResource
 
         $pledge->setAttribute('fulfilled_amount', $this->resource['fulfilled_amount']);
         $pledge->setAttribute('remaining_amount', $this->resource['remaining_amount']);
-        if (isset($this->resource['schedule'])) {
-            $pledge->setAttribute('schedule_view', $this->resource['schedule']);
-        }
+        $pledge->setAttribute(
+            'schedule_view',
+            $this->resource['schedule'] ?? app(PledgeScheduleService::class)->buildForPledge($pledge)
+        );
 
         return [
             'pledge' => PledgeListResource::make($pledge)->resolve(),
-            'fulfilled_amount' => $this->resource['fulfilled_amount'],
-            'remaining_amount' => $this->resource['remaining_amount'],
-            'schedule' => $this->resource['schedule'] ?? null,
             'ledger' => $paginatorArray,
         ];
     }

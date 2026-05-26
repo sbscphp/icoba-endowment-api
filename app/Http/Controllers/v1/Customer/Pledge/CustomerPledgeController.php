@@ -201,10 +201,6 @@ class CustomerPledgeController extends Controller
 
             $perPage = max(1, min((int) $request->query('per_page', 15), 100));
             $detail = $this->pledgeService->detailWithLedgerForUser($user->uuid, $pledgeUuid, $perPage);
-            $detail['schedule'] = $this->pledgeScheduleService->buildForPledge($detail['pledge']);
-            $detail['pledge']->setAttribute('fulfilled_amount', $detail['fulfilled_amount']);
-            $detail['pledge']->setAttribute('remaining_amount', $detail['remaining_amount']);
-            $detail['pledge']->setAttribute('schedule_view', $detail['schedule']);
 
             return JsonResponser::send(false, 'Pledge retrieved.', PledgeDetailResource::make($detail)->resolve());
         } catch (\Throwable $th) {
