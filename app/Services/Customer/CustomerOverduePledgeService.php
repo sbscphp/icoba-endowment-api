@@ -6,6 +6,8 @@ use App\Enums\PledgeScheduleItemStatus;
 use App\Enums\PledgeStatus;
 use App\Models\Pledge;
 use App\Services\Pledge\PledgeScheduleService;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Collection;
 
 class CustomerOverduePledgeService
@@ -13,6 +15,27 @@ class CustomerOverduePledgeService
     public function __construct(
         private readonly PledgeScheduleService $pledgeScheduleService,
     ) {}
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    public function paginateForUser(string $userUuid, array $validated): LengthAwarePaginator
+    {
+        $page = max(1, (int) ($validated['page'] ?? 1));
+        $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
+        $results = $this->listForUser($userUuid);
+
+        return new LengthAwarePaginator(
+            collect($results)->forPage($page, $perPage)->values()->all(),
+            count($results),
+            $perPage,
+            $page,
+            [
+                'path' => Paginator::resolveCurrentPath(),
+                'pageName' => 'page',
+            ],
+        );
+    }
 
     /**
      * @return list<array{pledge: Pledge, due_installment: array<string, mixed>}>

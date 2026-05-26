@@ -2,8 +2,11 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\TransactionApplicationType;
+use App\Enums\TransactionStatus;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
+use App\Services\Bank\BankAccountRegistry;
 use App\Services\Receipt\ReceiptService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -73,8 +76,66 @@ class TransactionResource extends JsonResource
             'receipt_number' => $this->receipt_number,
             'receipt_download_url' => $receiptLinks['donation'] ?? null,
             'tax_receipt_download_url' => $receiptLinks['tax'] ?? null,
+            'bank_transfer_reference' => $this->bank_transfer_reference,
+            'paid_into_account_number' => $this->paid_into_account_number,
+            'paid_into' => $this->resolvePaidIntoLabel(),
+            'fcmb_statement_reference' => $this->fcmb_statement_reference,
+            'awaiting_bank_verification_at' => $this->awaiting_bank_verification_at,
+            'reconciled_at' => $this->reconciled_at,
+            'reconciled_by_admin_uuid' => $this->reconciled_by_admin_uuid,
+            'reconciliation_note' => $this->reconciliation_note,
+            'reconciliation_status' => $this->resolveReconciliationStatus(),
+            'certificates' => $this->whenLoaded('certificates', fn () => \App\Http\Resources\Customer\CustomerRecognitionResource::collection($this->certificates)),
             'metadata' => $metadata,
         ];
+    }
+
+    private function resolveReconciliationStatus(): ?string
+    {
+        $applicationType = $this->application_type;
+        if (! ($applicationType instanceof TransactionApplicationType) || $applicationType !== TransactionApplicationType::BANK_TRANSFER) {
+            $metadata = is_array($this->metadata) ? $this->metadata : [];
+            if (! isset($metadata['source']) || ! in_array($metadata['source'], ['fcmb_import', 'fcmb_webhook'], true)) {
+                return null;
+            }
+        }
+
+        if ($this->status === TransactionStatus::SUCCESSFUL && $this->reconciled_at !== null) {
+            return 'reconciled';
+        }
+
+        $metadata = is_array($this->metadata) ? $this->metadata : [];
+        if (($metadata['source'] ?? null) === 'fcmb_import' || ($metadata['source'] ?? null) === 'fcmb_webhook') {
+            if ($this->status === TransactionStatus::PENDING) {
+                return 'unmatched';
+            }
+        }
+
+        if ($this->awaiting_bank_verification_at !== null && $this->status === TransactionStatus::PENDING) {
+            return 'awaiting_verification';
+        }
+
+        if ($this->status === TransactionStatus::PENDING) {
+            return 'awaiting_payment';
+        }
+
+        return null;
+    }
+
+    private function resolvePaidIntoLabel(): ?string
+    {
+        if ($this->paid_into_account_number === null || $this->paid_into_account_number === '') {
+            return null;
+        }
+
+        $registry = app(BankAccountRegistry::class);
+        $account = $registry->resolveByAccountNumber($this->paid_into_account_number);
+
+        if ($account === null) {
+            return null;
+        }
+
+        return $registry->paidIntoLabel($account['account_key']).' '.$account['currency'];
     }
 
     /**

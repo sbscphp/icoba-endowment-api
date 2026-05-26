@@ -11,6 +11,7 @@ enum TransactionApplicationType: string
     case ADMIN_LINKED_PAYMENT = 'admin_linked_payment';
     case STANDALONE_CHECKOUT_ALLOCATED = 'standalone_checkout_allocated_to_pledge';
     case PLEDGE_PLACEHOLDER = 'pledge_placeholder';
+    case BANK_TRANSFER = 'bank_transfer';
 
     /** @return list<string> */
     public static function values(): array

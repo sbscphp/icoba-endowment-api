@@ -3,13 +3,8 @@
 namespace App\Services\Payment;
 
 use App\Enums\TransactionStatus;
-use App\Jobs\EvaluateDonorTierRecognitionJob;
-use App\Jobs\SendDonationConfirmationEmailJob;
-use App\Jobs\SendDonationTaxReceiptEmailJob;
 use App\Models\Transaction;
-use App\Services\Pledge\PledgeBalanceService;
-use App\Services\Receipt\ReceiptService;
-use App\Services\Transaction\TransactionNgnSnapshotService;
+use App\Services\Transaction\TransactionFinalizationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Stripe\Checkout\Session;
@@ -17,9 +12,7 @@ use Stripe\Checkout\Session;
 final class StripeCheckoutSyncService
 {
     public function __construct(
-        private readonly PledgeBalanceService $pledgeBalance,
-        private readonly ReceiptService $receiptService,
-        private readonly TransactionNgnSnapshotService $transactionNgnSnapshot,
+        private readonly TransactionFinalizationService $finalizationService,
     ) {}
 
     /**
@@ -65,89 +58,27 @@ final class StripeCheckoutSyncService
             ? $session->payment_intent
             : $session->id;
 
-        return (bool) DB::transaction(function () use ($transaction, $session, $gatewayReference): bool {
-            /** @var Transaction|null $locked */
-            $locked = Transaction::query()
-                ->whereKey($transaction->getKey())
-                ->lockForUpdate()
-                ->first();
+        if (! $this->sessionMatchesTransaction($transaction, $session)) {
+            Log::warning('Stripe checkout sync: session does not match transaction.', [
+                'transaction_uuid' => $transaction->uuid,
+                'session_id' => $session->id,
+                'gateway_reference' => $transaction->gateway_reference,
+            ]);
 
-            if ($locked === null || $locked->status !== TransactionStatus::PENDING || $locked->gateway !== 'stripe') {
-                return false;
-            }
+            return false;
+        }
 
-            if (! $this->sessionMatchesTransaction($locked, $session)) {
-                Log::warning('Stripe checkout sync: session does not match transaction.', [
-                    'transaction_uuid' => $locked->uuid,
-                    'session_id' => $session->id,
-                    'gateway_reference' => $locked->gateway_reference,
-                ]);
-
-                return false;
-            }
-
-            $meta = is_array($locked->metadata) ? $locked->metadata : [];
-            $shouldQueueConfirmationEmail = ! array_key_exists('donation_confirmation_email_queued', $meta);
-            $shouldQueueTaxReceiptEmail = ! array_key_exists('stripe_tax_receipt_email_queued', $meta);
-
-            $meta = array_merge($meta, [
+        return $this->finalizationService->finalizeSuccessful($transaction, [
+            'gateway_reference' => $gatewayReference,
+            'metadata' => [
                 'stripe_checkout_session_id' => $session->id,
                 'stripe_payment_intent_id' => $session->payment_intent,
                 'stripe_payment_status' => $session->payment_status,
                 'payment_method' => 'stripe',
-                'stripe_checkout_finalized_at' => $meta['stripe_checkout_finalized_at'] ?? now()->toIso8601String(),
-            ]);
-
-            if ($shouldQueueConfirmationEmail) {
-                $meta['donation_confirmation_email_queued'] = true;
-            }
-
-            if ($shouldQueueTaxReceiptEmail) {
-                $meta['stripe_tax_receipt_email_queued'] = true;
-            }
-
-            $ngnFields = [];
-            if ($locked->amount_in_naira === null || $locked->exchange_rate_to_naira === null) {
-                $snapshot = $this->transactionNgnSnapshot->resolve(
-                    (float) $locked->amount,
-                    (string) $locked->currency,
-                );
-
-                if ($locked->amount_in_naira === null) {
-                    $ngnFields['amount_in_naira'] = $snapshot['amount_in_naira'];
-                }
-
-                if ($locked->exchange_rate_to_naira === null) {
-                    $ngnFields['exchange_rate_to_naira'] = $snapshot['exchange_rate_to_naira'];
-                }
-            }
-
-            $locked->forceFill(array_merge([
-                'status' => TransactionStatus::SUCCESSFUL,
-                'paid_at' => $locked->paid_at ?? now(),
-                'gateway_reference' => $gatewayReference,
-                'metadata' => $meta,
-            ], $ngnFields))->save();
-
-            $locked->loadMissing('pledge');
-            if ($locked->pledge !== null) {
-                $this->pledgeBalance->refreshPledgeStatus($locked->pledge);
-            }
-
-            $this->receiptService->ensurePublicReceiptAccess($locked);
-
-            if ($shouldQueueConfirmationEmail) {
-                SendDonationConfirmationEmailJob::dispatch($locked->uuid);
-            }
-
-            if ($shouldQueueTaxReceiptEmail) {
-                SendDonationTaxReceiptEmailJob::dispatch($locked->uuid);
-            }
-
-            EvaluateDonorTierRecognitionJob::dispatch($locked->uuid);
-
-            return true;
-        });
+                'stripe_checkout_finalized_at' => now()->toIso8601String(),
+            ],
+            'tax_receipt_email_meta_key' => 'stripe_tax_receipt_email_queued',
+        ]);
     }
 
     /**

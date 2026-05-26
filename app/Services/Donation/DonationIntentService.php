@@ -3,6 +3,7 @@
 namespace App\Services\Donation;
 
 use App\Enums\Currency;
+use App\Enums\PaymentGateway;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
 use App\Helpers\GeneralHelper;
@@ -11,6 +12,7 @@ use App\Models\Pledge;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Repositories\Contracts\User\UserRepositoryInterface;
+use App\Services\Bank\BankAccountRegistry;
 use App\Services\Pledge\PledgeBalanceService;
 use App\Services\Pledge\PledgeScheduleService;
 use App\Services\Transaction\TransactionNgnSnapshotService;
@@ -28,6 +30,8 @@ class DonationIntentService
         private readonly DonationCurrencyValidator $donationCurrencyValidator,
         private readonly UserRepositoryInterface $userRepository,
         private readonly DonorNameRequirement $donorNameRequirement,
+        private readonly BankTransferReferenceService $bankTransferReference,
+        private readonly BankAccountRegistry $bankAccountRegistry,
     ) {}
 
     /**
@@ -220,6 +224,89 @@ class DonationIntentService
             'application_type' => $applicationType,
             'metadata' => array_merge((array) ($data['metadata'] ?? []), $metadata),
         ]);
+    }
+
+    /**
+     * Create a pending offline bank-transfer intent with a unique narration reference.
+     *
+     * The customer pays externally from any bank app into one of the configured ICOBA accounts;
+     * the reference is what we use later to auto-match an incoming credit to this transaction.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function createBankTransferIntent(array $data): Transaction
+    {
+        $currency = isset($data['currency']) && $data['currency'] !== ''
+            ? strtoupper(trim((string) $data['currency']))
+            : null;
+
+        $providedAccountNumber = isset($data['paid_into_account_number']) && $data['paid_into_account_number'] !== ''
+            ? trim((string) $data['paid_into_account_number'])
+            : null;
+        $providedAccountKey = isset($data['paid_into_account_key']) && $data['paid_into_account_key'] !== ''
+            ? trim((string) $data['paid_into_account_key'])
+            : null;
+
+        $targetAccount = null;
+        if ($providedAccountNumber !== null) {
+            $targetAccount = $this->bankAccountRegistry->resolveByAccountNumber($providedAccountNumber);
+            if ($targetAccount === null) {
+                throw ValidationException::withMessages([
+                    'paid_into_account_number' => ['The selected ICOBA bank account is not recognized.'],
+                ]);
+            }
+        } elseif ($providedAccountKey !== null) {
+            $targetAccount = $this->bankAccountRegistry->resolveByAccountKey($providedAccountKey);
+            if ($targetAccount === null) {
+                throw ValidationException::withMessages([
+                    'paid_into_account_key' => ['The selected ICOBA bank account key is not recognized.'],
+                ]);
+            }
+        } elseif ($currency !== null) {
+            $targetAccount = $this->bankAccountRegistry->resolveByCurrency($currency);
+            if ($targetAccount === null) {
+                throw ValidationException::withMessages([
+                    'currency' => ['No ICOBA bank account is configured for currency '.$currency.'.'],
+                ]);
+            }
+        }
+
+        if ($targetAccount === null) {
+            throw ValidationException::withMessages([
+                'currency' => ['A donation currency is required to select a bank account.'],
+            ]);
+        }
+
+        $accountCurrency = $targetAccount['currency'];
+        if ($currency !== null && $currency !== $accountCurrency) {
+            throw ValidationException::withMessages([
+                'currency' => ['Donation currency must match the selected ICOBA bank account currency ('.$accountCurrency.').'],
+            ]);
+        }
+
+        $data['currency'] = $accountCurrency;
+        $data['gateway'] = PaymentGateway::Fcmb->value;
+        $data['application_type'] = TransactionApplicationType::BANK_TRANSFER->value;
+
+        $metadata = is_array($data['metadata'] ?? null) ? $data['metadata'] : [];
+        $metadata['payment_method'] = 'bank_transfer';
+        $metadata['payment_channel'] = 'offline_bank_app';
+        $metadata['paid_into_account_number'] = $targetAccount['account_number'];
+        $metadata['paid_into_account_key'] = $targetAccount['account_key'];
+        $data['metadata'] = $metadata;
+
+        unset($data['paid_into_account_number'], $data['paid_into_account_key']);
+
+        $transaction = $this->createPendingIntent($data);
+
+        $bankReference = $this->bankTransferReference->generateUniqueReference();
+
+        $transaction->forceFill([
+            'bank_transfer_reference' => $bankReference,
+            'paid_into_account_number' => $targetAccount['account_number'],
+        ])->save();
+
+        return $transaction->refresh();
     }
 
     /**

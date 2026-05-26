@@ -52,7 +52,7 @@ class LeaderboardController extends Controller
     {
         try {
             $campaignUuid = (string) $request->query('campaign_uuid', '');
-            $limit = max(1, min((int) $request->query('limit', 20), 50));
+            $limit = max(1, min((int) $request->query('limit', 10), 50));
             $rows = $this->leaderboardService->recentDonations($campaignUuid, $limit);
 
             return JsonResponser::send(false, 'Recent donations retrieved.', $rows->all());

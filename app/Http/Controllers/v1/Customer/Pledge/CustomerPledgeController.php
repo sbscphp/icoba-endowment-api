@@ -7,6 +7,7 @@ use App\Enums\PledgeStatus;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\Pledge\PledgeListRequest;
+use App\Http\Requests\Customer\Pledge\PledgeOverdueListRequest;
 use App\Http\Requests\Customer\Pledge\PledgeStatsRequest;
 use App\Http\Requests\Customer\Pledge\PledgeStoreRequest;
 use App\Http\Requests\Customer\Pledge\UpdatePledgePauseRequest;
@@ -41,7 +42,7 @@ class CustomerPledgeController extends Controller
         private readonly CustomerOverduePledgeService $customerOverduePledgeService,
     ) {}
 
-    public function overdue(Request $request)
+    public function overdue(PledgeOverdueListRequest $request)
     {
         try {
             $user = $request->user();
@@ -49,13 +50,16 @@ class CustomerPledgeController extends Controller
                 abort(401);
             }
 
-            $items = $this->customerOverduePledgeService->listForUser($user->uuid);
-            $data = collect($items)
+            $paginator = $this->customerOverduePledgeService->paginateForUser($user->uuid, $request->validated());
+            $data = collect($paginator->items())
                 ->map(fn (array $row): array => CustomerOverduePledgeResource::make($row)->resolve())
                 ->values()
                 ->all();
 
-            return JsonResponser::send(false, 'Overdue pledges retrieved.', $data);
+            return JsonResponser::send(false, 'Overdue pledges retrieved.', [
+                ...$paginator->toArray(),
+                'data' => $data,
+            ]);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Customer\Pledge\CustomerPledgeController@overdue');
         }
