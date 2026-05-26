@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\v1\Customer\Donation;
 
 use App\Enums\PaymentGateway;
+use App\Enums\TransactionStatus;
 use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\Donation\DonationCheckoutRequest;
 use App\Http\Requests\Customer\Donation\DonationVerifyCheckoutRequest;
 use App\Models\Pledge;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Responser\JsonResponser;
 use App\Services\Admin\Transaction\TransactionService;
@@ -19,6 +21,7 @@ use App\Services\Payment\PaystackCheckoutService;
 use App\Services\Payment\PaystackCheckoutVerificationService;
 use App\Services\Payment\StripeCheckoutService;
 use App\Services\Payment\StripeCheckoutVerificationService;
+use App\Services\Receipt\ReceiptService;
 use Illuminate\Validation\ValidationException;
 
 class DonationCheckoutController extends Controller
@@ -32,6 +35,7 @@ class DonationCheckoutController extends Controller
         private readonly TransactionService $transactionService,
         private readonly DonorNameRequirement $donorNameRequirement,
         private readonly CheckoutRedirectResolver $checkoutRedirectResolver,
+        private readonly ReceiptService $receiptService,
     ) {}
 
     public function store(DonationCheckoutRequest $request)
@@ -145,19 +149,24 @@ class DonationCheckoutController extends Controller
                 default => throw new ApiException('This payment gateway is not yet supported.', 501),
             };
 
+            $transaction = $result['transaction'];
+
             return JsonResponser::send(false, 'Checkout verified.', [
                 'payment_gateway' => $paymentGateway->value,
                 'checkout_session_id' => $result['checkout_session_id'],
                 'payment_status' => $result['payment_status'],
                 'session_status' => $result['session_status'],
                 'sync_action' => $result['sync_action'],
-                'receipt_number' => $result['transaction']->receipt_number,
+                'receipt_number' => $this->resolveReceiptNumberForVerify(
+                    $result['payment_status'],
+                    $transaction,
+                ),
                 'redirect_url' => $this->checkoutRedirectResolver->redirectForPaymentStatus(
-                    $result['transaction'],
+                    $transaction,
                     $result['payment_status'],
                 ),
-                'success_url' => data_get($result['transaction']->metadata, 'checkout_redirects.success_url'),
-                'failed_url' => data_get($result['transaction']->metadata, 'checkout_redirects.failed_url'),
+                'success_url' => data_get($transaction->metadata, 'checkout_redirects.success_url'),
+                'failed_url' => data_get($transaction->metadata, 'checkout_redirects.failed_url'),
             ], 200);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Customer\Donation\DonationCheckoutController@verify');
@@ -172,5 +181,18 @@ class DonationCheckoutController extends Controller
                 501,
             );
         }
+    }
+
+    private function resolveReceiptNumberForVerify(string $paymentStatus, Transaction $transaction): ?string
+    {
+        if (! in_array($paymentStatus, ['paid', 'complete', 'no_payment_required'], true)) {
+            return null;
+        }
+
+        if ($transaction->status !== TransactionStatus::SUCCESSFUL) {
+            return null;
+        }
+
+        return $this->receiptService->ensurePublicReceiptAccess($transaction)->receipt_number;
     }
 }
