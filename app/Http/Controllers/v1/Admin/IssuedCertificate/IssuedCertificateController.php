@@ -7,6 +7,7 @@ use App\Helpers\PDFReportHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\DateRangeStatsRequest;
 use App\Http\Requests\Admin\IssuedCertificate\IssuedCertificateListRequest;
+use App\Http\Requests\Admin\IssuedCertificate\ReissueIssuedCertificateRequest;
 use App\Http\Resources\IssuedCertificateListResource;
 use App\Http\Resources\IssuedCertificateResource;
 use App\Models\DonorRecognition;
@@ -83,6 +84,36 @@ class IssuedCertificateController extends Controller
             return $this->certificatePdfService->streamCertificateInline($recognition);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\IssuedCertificate\IssuedCertificateController@preview');
+        }
+    }
+
+    public function revoke(string $recognitionId)
+    {
+        try {
+            $recognition = $this->issuedCertificateService->revoke($recognitionId);
+
+            return JsonResponser::send(
+                false,
+                'Issued certificate revoked.',
+                IssuedCertificateResource::make($recognition)->resolve(),
+            );
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\IssuedCertificate\IssuedCertificateController@revoke');
+        }
+    }
+
+    public function reissue(ReissueIssuedCertificateRequest $request, string $recognitionId)
+    {
+        try {
+            $recognition = $this->issuedCertificateService->reissue($recognitionId, $request->validated());
+
+            return JsonResponser::send(
+                false,
+                'Issued certificate reissued.',
+                IssuedCertificateResource::make($recognition)->resolve(),
+            );
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\IssuedCertificate\IssuedCertificateController@reissue');
         }
     }
 

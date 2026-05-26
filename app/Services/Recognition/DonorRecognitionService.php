@@ -262,7 +262,12 @@ final class DonorRecognitionService
             ->first();
     }
 
-    private function generateUniqueRecognitionNumber(): string
+    public function generateUniqueRecognitionNumber(): string
+    {
+        return $this->generateUniqueRecognitionNumberInternal();
+    }
+
+    private function generateUniqueRecognitionNumberInternal(): string
     {
         $year = now()->format('Y');
         $prefix = sprintf('ICOBA-REC-%s-', $year);
