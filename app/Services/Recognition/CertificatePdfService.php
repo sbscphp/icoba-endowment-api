@@ -24,6 +24,16 @@ final class CertificatePdfService
         ]);
     }
 
+    public function streamCertificateInline(DonorRecognition $recognition): Response
+    {
+        $filename = 'donor-certificate-'.$recognition->recognition_number.'.pdf';
+
+        return new Response($this->renderCertificateBinary($recognition), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$filename.'"',
+        ]);
+    }
+
     public function streamTemplatePreview(CertificateTemplate $template, string $awardeeName = 'Sample Donor'): Response
     {
         $template->loadMissing('tier');

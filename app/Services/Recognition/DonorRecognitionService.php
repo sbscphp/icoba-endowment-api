@@ -2,6 +2,7 @@
 
 namespace App\Services\Recognition;
 
+use App\Enums\IssuedCertificateStatus;
 use App\Enums\TransactionStatus;
 use App\Helpers\GeneralHelper;
 use App\Jobs\SendDonorRecognitionEmailJob;
@@ -240,6 +241,7 @@ final class DonorRecognitionService
                 'initial_amount' => $triggerTransaction->amount,
                 'initial_currency' => strtoupper((string) $triggerTransaction->currency),
                 'issued_at' => now(),
+                'status' => IssuedCertificateStatus::AUTO_ISSUED,
                 'snapshot' => [
                     'tier_name' => $tier->name,
                     'template_name' => $template->name,

@@ -9,6 +9,7 @@ use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateControl
 use App\Http\Controllers\v1\Admin\ContactSubmission\ContactSubmissionController;
 use App\Http\Controllers\v1\Admin\Dashboard\DashboardController;
 use App\Http\Controllers\v1\Admin\EmailCampaign\EmailCampaignController;
+use App\Http\Controllers\v1\Admin\IssuedCertificate\IssuedCertificateController;
 use App\Http\Controllers\v1\Admin\Notification\NotificationController;
 use App\Http\Controllers\v1\Admin\Pledge\PledgeController;
 use App\Http\Controllers\v1\Admin\Reconciliation\ReconciliationController;
@@ -121,6 +122,17 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:tier_configuration.update']);
             Route::delete('/{tierId}', [TierConfigurationController::class, 'destroy'])
                 ->middleware(['permission:tier_configuration.delete']);
+        });
+
+        Route::prefix('issued-certificates')->group(function () {
+            Route::get('/stats', [IssuedCertificateController::class, 'stats'])
+                ->middleware(['permission:issued_certificates.read']);
+            Route::get('/', [IssuedCertificateController::class, 'index'])
+                ->middleware(['permission:issued_certificates.read']);
+            Route::get('/{recognitionId}/preview', [IssuedCertificateController::class, 'preview'])
+                ->middleware(['permission:issued_certificates.read']);
+            Route::get('/{recognitionId}', [IssuedCertificateController::class, 'show'])
+                ->middleware(['permission:issued_certificates.read']);
         });
 
         Route::prefix('certificate-templates')->group(function () {

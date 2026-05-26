@@ -21,6 +21,8 @@ class PublicTierResource extends JsonResource
             'slug' => $this->slug,
             'name' => $this->name,
             'base_color' => $this->base_color,
+            'min_amount' => $this->min_amount !== null ? (float) $this->min_amount : null,
+            'max_amount' => $this->max_amount !== null ? (float) $this->max_amount : null,
         ];
     }
 }
