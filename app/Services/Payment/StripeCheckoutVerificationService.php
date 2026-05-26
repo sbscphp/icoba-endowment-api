@@ -19,6 +19,7 @@ final class StripeCheckoutVerificationService
         private readonly StripeCheckoutSyncService $stripeCheckoutSyncService,
         private readonly TransactionService $transactionService,
         private readonly TransactionNgnSnapshotService $transactionNgnSnapshot,
+        private readonly CheckoutVerificationReceiptResolver $receiptResolver,
     ) {}
 
     /**
@@ -33,6 +34,7 @@ final class StripeCheckoutVerificationService
      *     payment_status: string,
      *     session_status: string,
      *     sync_action: string,
+     *     receipt_number: string|null,
      *     transaction: \App\Models\Transaction
      * }
      */
@@ -77,11 +79,14 @@ final class StripeCheckoutVerificationService
         $transaction = $this->transactionService->findTransaction($transactionBefore->uuid);
         $syncAction = $this->resolveSyncActionAfter($syncAction, $transaction);
 
+        $paymentStatus = (string) $session->payment_status;
+
         return [
             'checkout_session_id' => $session->id,
-            'payment_status' => (string) $session->payment_status,
+            'payment_status' => $paymentStatus,
             'session_status' => (string) $session->status,
             'sync_action' => $syncAction,
+            'receipt_number' => $this->receiptResolver->resolve($paymentStatus, $transaction),
             'transaction' => $transaction,
         ];
     }
