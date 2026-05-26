@@ -131,6 +131,10 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:issued_certificates.read']);
             Route::get('/{recognitionId}/preview', [IssuedCertificateController::class, 'preview'])
                 ->middleware(['permission:issued_certificates.read']);
+            Route::patch('/{recognitionId}/revoke', [IssuedCertificateController::class, 'revoke'])
+                ->middleware(['permission:issued_certificates.revoke']);
+            Route::post('/{recognitionId}/reissue', [IssuedCertificateController::class, 'reissue'])
+                ->middleware(['permission:issued_certificates.issue']);
             Route::get('/{recognitionId}', [IssuedCertificateController::class, 'show'])
                 ->middleware(['permission:issued_certificates.read']);
         });

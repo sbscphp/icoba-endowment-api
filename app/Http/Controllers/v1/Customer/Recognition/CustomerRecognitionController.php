@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\v1\Customer\Recognition;
 
+use App\Enums\IssuedCertificateStatus;
+use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\CustomerRecognitionListRequest;
@@ -40,6 +42,10 @@ class CustomerRecognitionController extends Controller
                     (string) $validated['recognition_uuid'],
                 );
 
+                if ($recognition->status === IssuedCertificateStatus::REVOKED) {
+                    throw new ApiException('This certificate has been revoked and is no longer available for download.', 403);
+                }
+
                 return $this->certificatePdfService->streamCertificate($recognition);
             }
 
@@ -74,6 +80,10 @@ class CustomerRecognitionController extends Controller
             }
 
             $recognition = $this->recognitionService->resolveOwnedRecognition($user, $recognitionUuid);
+
+            if ($recognition->status === IssuedCertificateStatus::REVOKED) {
+                throw new ApiException('This certificate has been revoked and is no longer available for download.', 403);
+            }
 
             return $this->certificatePdfService->streamCertificate($recognition);
         } catch (\Throwable $th) {

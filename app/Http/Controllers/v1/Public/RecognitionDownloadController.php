@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\v1\Public;
 
+use App\Enums\IssuedCertificateStatus;
+use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Services\Recognition\CertificatePdfService;
@@ -39,6 +41,10 @@ class RecognitionDownloadController extends Controller
     private function resolveAuthorizedRecognition(Request $request, string $recognitionNumber): \App\Models\DonorRecognition
     {
         $recognition = $this->recognitionService->resolveByRecognitionNumber($recognitionNumber);
+
+        if ($recognition->status === IssuedCertificateStatus::REVOKED) {
+            throw new ApiException('This certificate has been revoked and is no longer available for download.', 403);
+        }
 
         $token = trim((string) $request->query('token', ''));
         if ($token === '') {

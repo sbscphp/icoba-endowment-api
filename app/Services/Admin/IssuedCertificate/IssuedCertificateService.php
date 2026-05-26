@@ -3,19 +3,28 @@
 namespace App\Services\Admin\IssuedCertificate;
 
 use App\Enums\IssuedCertificateStatus;
+use App\Exceptions\ApiException;
 use App\Enums\PaymentGateway;
 use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\DonorRecognition;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
+use App\Jobs\SendDonorRecognitionEmailJob;
+use App\Services\Recognition\DonorRecognitionService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class IssuedCertificateService
 {
     public const MAX_EXPORT_ROWS = 5000;
+
+    public function __construct(
+        private readonly DonorRecognitionService $donorRecognitionService,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $validated
@@ -71,6 +80,97 @@ class IssuedCertificateService
                 }
             })
             ->with($this->detailRelations())
+            ->first();
+
+        if ($recognition === null) {
+            throw (new ModelNotFoundException)->setModel(DonorRecognition::class, [$recognitionId]);
+        }
+
+        return $recognition;
+    }
+
+    public function revoke(string $recognitionId): DonorRecognition
+    {
+        return DB::transaction(function () use ($recognitionId): DonorRecognition {
+            $recognition = $this->lockRecognition($recognitionId);
+
+            if ($recognition->status === IssuedCertificateStatus::REVOKED) {
+                throw new ApiException('This certificate has already been revoked.', 422);
+            }
+
+            $recognition->forceFill([
+                'status' => IssuedCertificateStatus::REVOKED,
+                'download_token' => null,
+            ])->save();
+
+            return $recognition->fresh($this->detailRelations()) ?? $recognition;
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public function reissue(string $recognitionId, array $payload = []): DonorRecognition
+    {
+        return DB::transaction(function () use ($recognitionId, $payload): DonorRecognition {
+            $recognition = $this->lockRecognition($recognitionId);
+            $recognition->loadMissing('tier');
+
+            $tier = $recognition->tier;
+            if ($tier === null) {
+                throw new ApiException('Certificate tier could not be resolved.', 422);
+            }
+
+            $template = $this->donorRecognitionService->resolveActiveTemplateForTier($tier);
+            if ($template === null) {
+                throw new ApiException('No active certificate template is available for this tier.', 422);
+            }
+
+            $design = is_array($template->design) ? $template->design : [];
+            $awardeeName = trim((string) ($payload['awardee_name'] ?? $recognition->awardee_name));
+            if ($awardeeName === '') {
+                throw new ApiException('Awardee name is required to reissue a certificate.', 422);
+            }
+
+            $recognition->forceFill([
+                'recognition_number' => $this->donorRecognitionService->generateUniqueRecognitionNumber(),
+                'awardee_name' => $awardeeName,
+                'certificate_template_uuid' => $template->uuid,
+                'issued_at' => now(),
+                'status' => IssuedCertificateStatus::REISSUED,
+                'download_token' => Str::random(48),
+                'email_sent_at' => null,
+                'snapshot' => [
+                    'tier_name' => $tier->name,
+                    'template_name' => $template->name,
+                    'design' => $design,
+                    'initial_amount' => $recognition->initial_amount !== null ? (string) $recognition->initial_amount : null,
+                    'initial_currency' => $recognition->initial_currency,
+                    'reissued_at' => now()->toIso8601String(),
+                ],
+            ])->save();
+
+            $fresh = $recognition->fresh($this->detailRelations()) ?? $recognition;
+
+            if (($payload['send_email'] ?? true) && filled($fresh->trigger_transaction_uuid)) {
+                SendDonorRecognitionEmailJob::dispatch($fresh->uuid, (string) $fresh->trigger_transaction_uuid);
+            }
+
+            return $fresh;
+        });
+    }
+
+    private function lockRecognition(string $recognitionId): DonorRecognition
+    {
+        $recognition = DonorRecognition::query()
+            ->where(function (Builder $builder) use ($recognitionId): void {
+                $builder->where('uuid', $recognitionId)
+                    ->orWhere('recognition_number', strtoupper(trim($recognitionId)));
+                if (is_numeric($recognitionId)) {
+                    $builder->orWhere('id', (int) $recognitionId);
+                }
+            })
+            ->lockForUpdate()
             ->first();
 
         if ($recognition === null) {
