@@ -17,6 +17,7 @@ class PublicBankAccountResource extends JsonResource
             'account_name' => $this->resource['account_name'],
             'accounts' => collect($this->resource['accounts'])
                 ->map(fn (array $account): array => [
+                    'account_key' => $account['account_key'],
                     'currency' => $account['currency'],
                     'currency_symbol' => $account['currency_symbol'],
                     'account_number' => $account['account_number'],
