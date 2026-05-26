@@ -62,7 +62,6 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/pledges/stats', [CustomerPledgeController::class, 'stats']);
         Route::get('/pledges', [CustomerPledgeController::class, 'index']);
-        Route::post('/pledges', [CustomerPledgeController::class, 'store']);
         Route::get('/pledges/{pledgeUuid}', [CustomerPledgeController::class, 'show'])
             ->whereUuid('pledgeUuid');
         Route::patch('/pledges/{pledgeUuid}/pause', [CustomerPledgeController::class, 'updatePause'])
@@ -87,5 +86,8 @@ Route::prefix('v1')->group(function () {
         ->middleware(['throttle:60,1']);
 
     Route::post('donations/checkout/verify', [DonationCheckoutController::class, 'verify'])
+        ->middleware(['throttle:60,1']);
+
+    Route::post('pledges', [CustomerPledgeController::class, 'store'])
         ->middleware(['throttle:60,1']);
 });

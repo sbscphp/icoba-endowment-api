@@ -110,8 +110,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
     public static function bypassPathProvider(): array
     {
         return [
-            'paystack webhook' => ['/api/payment/paystack/webhook'],
-            'paystack callback' => ['/api/payment/paystack/callback'],
+            'paystack webhook' => ['/api/v1/payment/paystack/webhook'],
             'flutterwave webhook' => ['/api/payment/flutterwave/webhook'],
             'flutterwave callback' => ['/api/payment/flutterwave/callback'],
             'stripe webhook' => ['/api/v1/payment/stripe/webhook'],

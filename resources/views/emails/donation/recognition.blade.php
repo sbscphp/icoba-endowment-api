@@ -1,7 +1,7 @@
 @extends('emails.layouts.base')
 
 @php
-    $subject = 'Thank you — your '.$tierName.' recognition from '.$theme->brand_name;
+    $subject = $subject ?? \App\Mail\DonorRecognitionMail::subjectForTier($tierName);
     $headline = 'Congratulations, '.$recipientName.',';
     $lead = 'Thank you for your continued support. Based on your cumulative contributions, you have earned the '.$tierName.' recognition tier.';
 @endphp

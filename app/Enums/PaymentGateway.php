@@ -17,8 +17,8 @@ enum PaymentGateway: string
     public function isImplemented(): bool
     {
         return match ($this) {
-            self::Stripe => true,
-            self::Paystack, self::Fcmb => false,
+            self::Stripe, self::Paystack => true,
+            self::Fcmb => false,
         };
     }
 }

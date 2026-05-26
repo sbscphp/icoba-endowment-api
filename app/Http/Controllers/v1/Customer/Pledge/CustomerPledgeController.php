@@ -15,10 +15,14 @@ use App\Http\Resources\PledgeDetailResource;
 use App\Http\Resources\PledgeListResource;
 use App\Models\Campaign;
 use App\Models\User;
+use App\Repositories\Contracts\User\UserRepositoryInterface;
 use App\Responser\JsonResponser;
 use App\Services\Admin\Pledge\PledgeService;
+use App\Services\Donation\DonorNameRequirement;
+use App\Services\Donation\GuestDonorProfileSnapshotService;
 use App\Services\Pledge\PledgeBalanceService;
 use App\Services\Pledge\PledgeCommittedNgnResolver;
+use App\Services\Pledge\PledgeScheduleInput;
 use App\Services\Pledge\PledgeScheduleService;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -29,6 +33,9 @@ class CustomerPledgeController extends Controller
         private readonly PledgeService $pledgeService,
         private readonly PledgeScheduleService $pledgeScheduleService,
         private readonly PledgeBalanceService $pledgeBalanceService,
+        private readonly GuestDonorProfileSnapshotService $guestDonorProfileSnapshot,
+        private readonly DonorNameRequirement $donorNameRequirement,
+        private readonly UserRepositoryInterface $userRepository,
     ) {}
 
     public function stats(PledgeStatsRequest $request)
@@ -80,30 +87,81 @@ class CustomerPledgeController extends Controller
     {
         try {
             $user = $request->user();
-            if (! $user instanceof User) {
-                abort(401);
-            }
+            $user = $user instanceof User ? $user : null;
 
             $v = $request->validated();
             $campaignUuid = $v['campaign_uuid'] ?? Campaign::defaultCampaign()->uuid;
 
-            $displayName = isset($v['donor_name']) && is_string($v['donor_name']) && trim($v['donor_name']) !== ''
-                ? $v['donor_name']
-                : trim((string) (($user->firstname ?? '').' '.($user->lastname ?? '')));
+            $userUuid = null;
+            $donorTypeUuid = $v['donor_type_uuid'] ?? null;
+            $graduationSetUuid = $v['graduation_set_uuid'] ?? null;
+            $donorName = isset($v['donor_name']) && is_string($v['donor_name']) ? trim($v['donor_name']) : null;
+            $donorEmail = isset($v['donor_email']) && is_string($v['donor_email']) ? trim($v['donor_email']) : null;
+            $donorPhone = isset($v['donor_phone']) && is_string($v['donor_phone']) ? trim($v['donor_phone']) : null;
+            $metadata = is_array($v['metadata'] ?? null) ? $v['metadata'] : [];
+
+            if ($user !== null) {
+                $userUuid = $user->uuid;
+                $donorTypeUuid = $donorTypeUuid ?? $user->donor_type_uuid;
+                $graduationSetUuid = $graduationSetUuid ?? $user->graduation_set_uuid;
+
+                $resolvedName = $this->donorNameRequirement->resolveFromPayload($v, $user);
+                if ($resolvedName !== null) {
+                    $donorName = $resolvedName;
+                } elseif ($donorName === null || $donorName === '') {
+                    $donorName = trim((string) (($user->firstname ?? '').' '.($user->lastname ?? '')));
+                    $donorName = $donorName !== '' ? $donorName : null;
+                }
+
+                if ($donorEmail === null || $donorEmail === '') {
+                    $donorEmail = $user->email;
+                }
+
+                if ($donorPhone === null || $donorPhone === '') {
+                    $donorPhone = filled($user->phone_number) ? (string) $user->phone_number : null;
+                }
+            } else {
+                $guestSnapshot = $this->guestDonorProfileSnapshot->build($v);
+
+                $donorTypeUuid = $guestSnapshot['donor_type_uuid'] ?? $donorTypeUuid;
+                $donorName = $guestSnapshot['donor_name'] ?? $donorName;
+                $donorPhone = $guestSnapshot['donor_phone'] ?? $donorPhone;
+                $donorEmail = strtolower(trim((string) ($v['donor_email'] ?? '')));
+
+                $graduationSetUuid = $guestSnapshot['guest_donor_profile']['graduation_set_uuid'] ?? $graduationSetUuid;
+
+                if ($guestSnapshot['guest_donor_profile'] !== []) {
+                    $metadata = array_merge($metadata, [
+                        'guest_donor_profile' => $guestSnapshot['guest_donor_profile'],
+                    ]);
+                }
+
+                if ($donorEmail !== '') {
+                    $existingUser = $this->userRepository->findByEmail($donorEmail);
+                    if ($existingUser !== null) {
+                        $userUuid = $existingUser->uuid;
+                    }
+                }
+            }
 
             $fx = PledgeCommittedNgnResolver::atCapture(
                 (float) $v['committed_amount'],
                 (string) $v['currency']
             );
 
+            $scheduleStorage = PledgeScheduleInput::resolveStorage(array_merge($v, [
+                'metadata' => $metadata,
+            ]));
+            $metadata = $scheduleStorage['metadata'] ?? $metadata;
+
             $data = [
                 'campaign_uuid' => $campaignUuid,
-                'user_uuid' => $user->uuid,
-                'donor_type_uuid' => $v['donor_type_uuid'] ?? $user->donor_type_uuid,
-                'graduation_set_uuid' => $v['graduation_set_uuid'] ?? $user->graduation_set_uuid,
-                'donor_name' => $displayName !== '' ? $displayName : null,
-                'donor_email' => $v['donor_email'] ?? $user->email,
-                'donor_phone' => $v['donor_phone'] ?? $user->phone_number,
+                'user_uuid' => $userUuid,
+                'donor_type_uuid' => $donorTypeUuid,
+                'graduation_set_uuid' => $graduationSetUuid,
+                'donor_name' => $donorName !== '' ? $donorName : null,
+                'donor_email' => $donorEmail !== '' ? $donorEmail : null,
+                'donor_phone' => $donorPhone !== '' ? $donorPhone : null,
                 'is_anonymous' => (bool) ($v['is_anonymous'] ?? false),
                 'committed_amount' => $v['committed_amount'],
                 'currency' => (string) $v['currency'],
@@ -111,9 +169,9 @@ class CustomerPledgeController extends Controller
                 'exchange_rate_to_naira' => $fx['exchange_rate_to_naira'],
                 'payment_plan_type' => $v['payment_plan_type'],
                 'installment_count' => $v['installment_count'] ?? null,
-                'schedule' => $v['schedule'] ?? null,
+                'schedule' => $scheduleStorage['schedule'],
                 'status' => PledgeStatus::ACTIVE,
-                'metadata' => $v['metadata'] ?? null,
+                'metadata' => $metadata !== [] ? $metadata : null,
             ];
 
             $pledge = $this->pledgeService->createPledge($data);
@@ -131,7 +189,7 @@ class CustomerPledgeController extends Controller
             $pledge = $pledge->fresh(['campaign', 'donor']);
             $pledge->setAttribute('schedule_view', $this->pledgeScheduleService->buildForPledge($pledge));
 
-            return JsonResponser::send(false, 'Pledge created.', PledgeListResource::make($pledge)->resolve());
+            return JsonResponser::send(false, 'Pledge created.', PledgeListResource::make($pledge)->resolve(), 201);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Customer\Pledge\CustomerPledgeController@store');
         }

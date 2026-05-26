@@ -49,6 +49,7 @@ class DonationCheckoutRequest extends ApiFormRequest
             'metadata' => ['sometimes', 'nullable', 'array'],
             'frontend_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
             'success_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
+            'failed_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
             'cancel_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
         ];
 

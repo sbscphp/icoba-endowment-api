@@ -14,6 +14,9 @@ use App\Responser\JsonResponser;
 use App\Services\Admin\Transaction\TransactionService;
 use App\Services\Donation\DonationIntentService;
 use App\Services\Donation\DonorNameRequirement;
+use App\Services\Payment\CheckoutRedirectResolver;
+use App\Services\Payment\PaystackCheckoutService;
+use App\Services\Payment\PaystackCheckoutVerificationService;
 use App\Services\Payment\StripeCheckoutService;
 use App\Services\Payment\StripeCheckoutVerificationService;
 use Illuminate\Validation\ValidationException;
@@ -24,8 +27,11 @@ class DonationCheckoutController extends Controller
         private readonly DonationIntentService $donationIntentService,
         private readonly StripeCheckoutService $stripeCheckoutService,
         private readonly StripeCheckoutVerificationService $stripeCheckoutVerificationService,
+        private readonly PaystackCheckoutService $paystackCheckoutService,
+        private readonly PaystackCheckoutVerificationService $paystackCheckoutVerificationService,
         private readonly TransactionService $transactionService,
         private readonly DonorNameRequirement $donorNameRequirement,
+        private readonly CheckoutRedirectResolver $checkoutRedirectResolver,
     ) {}
 
     public function store(DonationCheckoutRequest $request)
@@ -49,10 +55,12 @@ class DonationCheckoutController extends Controller
             }
 
             $successUrl = $validated['success_url'] ?? null;
+            $failedUrl = $validated['failed_url'] ?? null;
             $cancelUrl = $validated['cancel_url'] ?? null;
             $frontendUrl = $validated['frontend_url'] ?? null;
             unset(
                 $validated['success_url'],
+                $validated['failed_url'],
                 $validated['cancel_url'],
                 $validated['frontend_url'],
                 $validated['payment_gateway'],
@@ -83,6 +91,15 @@ class DonationCheckoutController extends Controller
                     $transaction,
                     $user,
                     $successUrl,
+                    $failedUrl,
+                    $cancelUrl,
+                    $frontendUrl,
+                ),
+                PaymentGateway::Paystack => $this->paystackCheckoutService->createCheckoutSession(
+                    $transaction,
+                    $user,
+                    $successUrl,
+                    $failedUrl,
                     $cancelUrl,
                     $frontendUrl,
                 ),
@@ -96,6 +113,8 @@ class DonationCheckoutController extends Controller
                 'checkout_url' => $checkout['url'],
                 'checkout_session_id' => $checkout['session_id'],
                 'transaction_uuid' => $transaction->uuid,
+                'success_url' => $checkout['success_url'],
+                'failed_url' => $checkout['failed_url'],
             ], 201);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Customer\Donation\DonationCheckoutController@store');
@@ -118,6 +137,11 @@ class DonationCheckoutController extends Controller
                     $user,
                     $validated['transaction_uuid'] ?? null,
                 ),
+                PaymentGateway::Paystack => $this->paystackCheckoutVerificationService->verify(
+                    $validated['checkout_session_id'],
+                    $user,
+                    $validated['transaction_uuid'] ?? null,
+                ),
                 default => throw new ApiException('This payment gateway is not yet supported.', 501),
             };
 
@@ -127,6 +151,12 @@ class DonationCheckoutController extends Controller
                 'payment_status' => $result['payment_status'],
                 'session_status' => $result['session_status'],
                 'sync_action' => $result['sync_action'],
+                'redirect_url' => $this->checkoutRedirectResolver->redirectForPaymentStatus(
+                    $result['transaction'],
+                    $result['payment_status'],
+                ),
+                'success_url' => data_get($result['transaction']->metadata, 'checkout_redirects.success_url'),
+                'failed_url' => data_get($result['transaction']->metadata, 'checkout_redirects.failed_url'),
             ], 200);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Customer\Donation\DonationCheckoutController@verify');

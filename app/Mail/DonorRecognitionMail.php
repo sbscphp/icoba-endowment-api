@@ -31,7 +31,7 @@ class DonorRecognitionMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Thank you — your '.$this->tierName.' recognition from '.$this->mailTheme->brand_name,
+            subject: self::subjectForTier($this->tierName),
         );
     }
 
@@ -45,10 +45,26 @@ class DonorRecognitionMail extends Mailable
                 'theme' => $this->mailTheme,
                 'recipientName' => $this->recipientName,
                 'tierName' => $this->tierName,
+                'subject' => self::subjectForTier($this->tierName),
                 'certificateDownloadUrl' => $this->certificateDownloadUrl,
                 'donationReceiptDownloadUrl' => $this->donationReceiptDownloadUrl,
             ],
         );
+    }
+
+    public static function subjectForTier(string $tierName): string
+    {
+        $tierName = trim($tierName);
+
+        if ($tierName === '') {
+            return 'Donor recognition';
+        }
+
+        if (preg_match('/\brecognition$/iu', $tierName)) {
+            return $tierName;
+        }
+
+        return $tierName.' recognition';
     }
 
     /**

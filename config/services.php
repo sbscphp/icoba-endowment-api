@@ -39,7 +39,15 @@ return [
         'secret' => env('STRIPE_SECRET'),
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
         'success_url' => env('STRIPE_SUCCESS_URL'),
+        'failed_url' => env('STRIPE_FAILED_URL', env('STRIPE_CANCEL_URL')),
         'cancel_url' => env('STRIPE_CANCEL_URL'),
+    ],
+
+    'paystack' => [
+        'secret' => env('PAYSTACK_SECRET_KEY'),
+        'public' => env('PAYSTACK_PUBLIC_KEY'),
+        'callback_url' => env('PAYSTACK_CALLBACK_URL'),
+        'failed_url' => env('PAYSTACK_FAILED_URL'),
     ],
 
     'sms' => [
