@@ -2,6 +2,7 @@
 
 namespace App\Services\Recognition;
 
+use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
 use App\Jobs\SendDonorRecognitionEmailJob;
 use App\Models\CertificateTemplate;
@@ -321,20 +322,33 @@ SQL;
         }
 
         $keySql = DonorCumulativeTotalService::DONOR_KEY_SQL;
-
+        $innerKeySql = str_replace('transactions.', 't2.', $keySql);
         $placeholders = implode(', ', array_fill(0, count($donorKeys), '?'));
 
-        $ranked = Transaction::query()
+        $uuids = Transaction::query()
             ->countableTowardRevenue()
-            ->select('transactions.*')
-            ->selectRaw('('.$keySql.') as donor_key')
-            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY ('.$keySql.') ORDER BY transactions.paid_at DESC, transactions.id DESC) as row_num')
+            ->select('transactions.uuid')
             ->where('transactions.is_anonymous', false)
-            ->whereRaw('('.$keySql.') IN ('.$placeholders.')', $donorKeys);
-
-        $uuids = DB::query()
-            ->fromSub($ranked, 'ranked_transactions')
-            ->where('row_num', 1)
+            ->whereRaw('('.$keySql.') IN ('.$placeholders.')', $donorKeys)
+            ->whereNotExists(function (Builder $query) use ($keySql, $innerKeySql): void {
+                $query->from('transactions as t2')
+                    ->selectRaw('1')
+                    ->where('t2.status', TransactionStatus::SUCCESSFUL->value)
+                    ->where(function (Builder $builder): void {
+                        $builder->whereNull('t2.application_type')
+                            ->orWhere('t2.application_type', '!=', TransactionApplicationType::PLEDGE_PLACEHOLDER->value);
+                    })
+                    ->where('t2.is_anonymous', false)
+                    ->whereNull('t2.deleted_at')
+                    ->whereRaw('('.$innerKeySql.') = ('.$keySql.')')
+                    ->where(function (Builder $builder): void {
+                        $builder->whereColumn('t2.paid_at', '>', 'transactions.paid_at')
+                            ->orWhere(function (Builder $tieBreaker): void {
+                                $tieBreaker->whereColumn('t2.paid_at', '=', 'transactions.paid_at')
+                                    ->whereColumn('t2.id', '>', 'transactions.id');
+                            });
+                    });
+            })
             ->pluck('uuid')
             ->all();
 
