@@ -14,12 +14,15 @@ use App\Models\Campaign;
 use App\Responser\JsonResponser;
 use App\Services\Admin\Pledge\PledgeService;
 use App\Services\Pledge\PledgeCommittedNgnResolver;
+use App\Services\Pledge\PledgeScheduleInput;
+use App\Services\Pledge\PledgeScheduleService;
 use Illuminate\Http\Request;
 
 class PledgeController extends Controller
 {
     public function __construct(
         private readonly PledgeService $pledgeService,
+        private readonly PledgeScheduleService $pledgeScheduleService,
     ) {}
 
     public function stats(PledgeStatsRequest $request)
@@ -58,6 +61,8 @@ class PledgeController extends Controller
                 (string) $v['currency']
             );
 
+            $scheduleStorage = PledgeScheduleInput::resolveStorage($v);
+
             $data = [
                 'campaign_uuid' => $campaignUuid,
                 'user_uuid' => $v['user_uuid'] ?? null,
@@ -73,12 +78,13 @@ class PledgeController extends Controller
                 'exchange_rate_to_naira' => $fx['exchange_rate_to_naira'],
                 'payment_plan_type' => $v['payment_plan_type'],
                 'installment_count' => $v['installment_count'] ?? null,
-                'schedule' => $v['schedule'] ?? null,
+                'schedule' => $scheduleStorage['schedule'],
                 'status' => PledgeStatus::ACTIVE,
-                'metadata' => $v['metadata'] ?? null,
+                'metadata' => $scheduleStorage['metadata'],
             ];
 
             $pledge = $this->pledgeService->createPledge($data);
+            $pledge = $this->pledgeScheduleService->persistDefaultScheduleIfMissing($pledge);
 
             if (! empty($v['with_placeholder_transaction'])) {
                 $this->pledgeService->createPlaceholderTransaction(

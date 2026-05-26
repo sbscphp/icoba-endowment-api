@@ -6,6 +6,7 @@ use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Public\PublicCampaignDropdownRequest;
 use App\Http\Requests\Public\PublicCampaignListRequest;
+use App\Http\Resources\PublicCampaignDetailResource;
 use App\Http\Resources\PublicCampaignDropdownResource;
 use App\Http\Resources\PublicCampaignListResource;
 use App\Responser\JsonResponser;
@@ -47,6 +48,21 @@ class PublicCampaignController extends Controller
             );
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Public\PublicCampaignController@dropdown');
+        }
+    }
+
+    public function show(string $campaignUuid)
+    {
+        try {
+            $campaign = $this->publicCampaignService->find($campaignUuid);
+
+            return JsonResponser::send(
+                false,
+                'Campaign retrieved.',
+                PublicCampaignDetailResource::make($campaign)->resolve()
+            );
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Public\PublicCampaignController@show');
         }
     }
 

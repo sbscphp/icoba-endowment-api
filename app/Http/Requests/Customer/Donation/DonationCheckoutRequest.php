@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Customer\Donation;
 
 use App\Enums\Currency;
+use App\Enums\PaymentGateway;
 use App\Http\Requests\ApiFormRequest;
 use App\Http\Requests\Concerns\MergesCurrencyFromPledge;
 use App\Http\Requests\Concerns\RequiresResolvableDonorName;
@@ -11,7 +12,7 @@ use App\Models\User;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Validation\Rule;
 
-class StripeCheckoutRequest extends ApiFormRequest
+class DonationCheckoutRequest extends ApiFormRequest
 {
     use MergesCurrencyFromPledge {
         prepareForValidation as mergeCurrencyFromPledge;
@@ -31,6 +32,7 @@ class StripeCheckoutRequest extends ApiFormRequest
     public function rules(): array
     {
         $checkoutRules = [
+            'payment_gateway' => ['required', 'string', Rule::enum(PaymentGateway::class)],
             'amount' => ['required', 'numeric', 'min:0.01'],
             'currency' => [
                 Rule::requiredIf(fn () => ! $this->filled('pledge_uuid')),
@@ -47,6 +49,7 @@ class StripeCheckoutRequest extends ApiFormRequest
             'metadata' => ['sometimes', 'nullable', 'array'],
             'frontend_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
             'success_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
+            'failed_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
             'cancel_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
         ];
 
@@ -75,6 +78,11 @@ class StripeCheckoutRequest extends ApiFormRequest
         } else {
             $this->appendGuestDonorProfileValidation($validator);
         }
+    }
+
+    public function paymentGateway(): PaymentGateway
+    {
+        return PaymentGateway::from($this->validated('payment_gateway'));
     }
 
     /**

@@ -8,7 +8,7 @@ use App\Http\Controllers\v1\Customer\Auth\RegisterController;
 use App\Http\Controllers\v1\Customer\CustomerDashboardController;
 use App\Http\Controllers\v1\Customer\Donation\CustomerReceiptController;
 use App\Http\Controllers\v1\Customer\Donation\DonationIntentController;
-use App\Http\Controllers\v1\Customer\Donation\StripeCheckoutController;
+use App\Http\Controllers\v1\Customer\Donation\DonationCheckoutController;
 use App\Http\Controllers\v1\Customer\Notification\NotificationController;
 use App\Http\Controllers\v1\Customer\Pledge\CustomerPledgeController;
 use App\Http\Controllers\v1\Customer\Settings\SettingsController;
@@ -62,7 +62,6 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/pledges/stats', [CustomerPledgeController::class, 'stats']);
         Route::get('/pledges', [CustomerPledgeController::class, 'index']);
-        Route::post('/pledges', [CustomerPledgeController::class, 'store']);
         Route::get('/pledges/{pledgeUuid}', [CustomerPledgeController::class, 'show'])
             ->whereUuid('pledgeUuid');
         Route::patch('/pledges/{pledgeUuid}/pause', [CustomerPledgeController::class, 'updatePause'])
@@ -83,12 +82,12 @@ Route::prefix('v1')->group(function () {
     // Route::post('donations/intent', [DonationIntentController::class, 'store'])
     //     ->middleware(['throttle:60,1']);
 
-    Route::post('donations/stripe/checkout', [StripeCheckoutController::class, 'store'])
+    Route::post('donations/checkout', [DonationCheckoutController::class, 'store'])
         ->middleware(['throttle:60,1']);
 
-    Route::post('donations/stripe/checkout/verify', [StripeCheckoutController::class, 'verify'])
+    Route::post('donations/checkout/verify', [DonationCheckoutController::class, 'verify'])
         ->middleware(['throttle:60,1']);
 
-    // Route::post('donations/stripe/checkout/guest', [StripeCheckoutController::class, 'store'])
-    //     ->middleware(['throttle:60,1']);
+    Route::post('pledges', [CustomerPledgeController::class, 'store'])
+        ->middleware(['throttle:60,1']);
 });

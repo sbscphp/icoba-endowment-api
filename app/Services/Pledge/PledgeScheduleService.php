@@ -2,6 +2,7 @@
 
 namespace App\Services\Pledge;
 
+use App\Enums\CustomScheduleFrequency;
 use App\Enums\PledgePaymentPlanType;
 use App\Enums\PledgePaymentPreference;
 use App\Enums\PledgeScheduleItemStatus;
@@ -105,12 +106,16 @@ class PledgeScheduleService
             ];
         }
 
+        $config = $this->scheduleConfig($pledge);
+
         return [
             'installment_count' => $pledge->installment_count,
             'payment_plan_type' => $pledge->payment_plan_type instanceof \BackedEnum
                 ? $pledge->payment_plan_type->value
                 : $pledge->payment_plan_type,
             'payment_preference' => $preference->value,
+            'schedule_config' => $config,
+            'amount_per_installment' => $this->amountPerInstallment($enrichedItems),
             'items' => $enrichedItems,
         ];
     }
@@ -121,7 +126,7 @@ class PledgeScheduleService
     public function persistDefaultScheduleIfMissing(Pledge $pledge): Pledge
     {
         $stored = $pledge->schedule;
-        if (is_array($stored) && $stored !== []) {
+        if (is_array($stored) && $stored !== [] && ! PledgeScheduleInput::isConfig($stored)) {
             return $pledge;
         }
 
@@ -310,7 +315,7 @@ class PledgeScheduleService
     private function resolveScheduleItems(Pledge $pledge): array
     {
         $stored = $pledge->schedule;
-        if (is_array($stored) && $stored !== []) {
+        if (is_array($stored) && $stored !== [] && ! PledgeScheduleInput::isConfig($stored)) {
             return $this->normalizeStoredItems($pledge, $stored);
         }
 
@@ -389,7 +394,7 @@ class PledgeScheduleService
             $items[] = [
                 'id' => (string) Str::uuid(),
                 'sequence' => $i,
-                'due_date' => $this->defaultDueDate($plan, $start, $i)->toDateString(),
+                'due_date' => $this->defaultDueDate($plan, $start, $i, $pledge)->toDateString(),
                 'amount' => $amount,
                 'amount_ngn' => $amountNgn,
             ];
@@ -398,14 +403,81 @@ class PledgeScheduleService
         return $items;
     }
 
-    private function defaultDueDate(?PledgePaymentPlanType $plan, CarbonInterface $start, int $sequence): CarbonInterface
-    {
+    private function defaultDueDate(
+        ?PledgePaymentPlanType $plan,
+        CarbonInterface $start,
+        int $sequence,
+        ?Pledge $pledge = null,
+    ): CarbonInterface {
+        if ($plan === PledgePaymentPlanType::CUSTOM) {
+            $config = $pledge !== null ? $this->scheduleConfig($pledge) : null;
+            if (is_array($config)) {
+                return $this->defaultDueDateForCustom(
+                    $start,
+                    $sequence,
+                    (string) $config['frequency'],
+                    (int) $config['interval'],
+                );
+            }
+        }
+
         return match ($plan) {
             PledgePaymentPlanType::MONTHLY => $start->copy()->addMonths($sequence),
             PledgePaymentPlanType::QUARTERLY => $start->copy()->addMonths($sequence * 3),
             PledgePaymentPlanType::ONE_TIME_FUTURE => $start->copy()->addMonth(),
             default => $start->copy()->addMonths($sequence),
         };
+    }
+
+    private function defaultDueDateForCustom(
+        CarbonInterface $start,
+        int $sequence,
+        string $frequency,
+        int $interval,
+    ): CarbonInterface {
+        $step = $sequence * max(1, $interval);
+
+        return match (CustomScheduleFrequency::tryFrom($frequency)) {
+            CustomScheduleFrequency::DAILY => $start->copy()->addDays($step),
+            CustomScheduleFrequency::WEEKLY => $start->copy()->addWeeks($step),
+            CustomScheduleFrequency::MONTHLY => $start->copy()->addMonths($step),
+            default => $start->copy()->addMonths($step),
+        };
+    }
+
+    /**
+     * @return array{frequency: string, interval: int}|null
+     */
+    private function scheduleConfig(Pledge $pledge): ?array
+    {
+        $fromMetadata = data_get($pledge->metadata, 'schedule_config');
+        if (is_array($fromMetadata) && isset($fromMetadata['frequency'])) {
+            return PledgeScheduleInput::normalizeConfig($fromMetadata);
+        }
+
+        $stored = $pledge->schedule;
+        if (is_array($stored) && PledgeScheduleInput::isConfig($stored)) {
+            return PledgeScheduleInput::normalizeConfig($stored);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     */
+    private function amountPerInstallment(array $items): ?string
+    {
+        if ($items === []) {
+            return null;
+        }
+
+        $first = (string) ($items[0]['pledged_amount'] ?? '');
+        $uniform = collect($items)->every(
+            fn (array $item): bool => (string) ($item['pledged_amount'] ?? '') === $first
+        );
+
+        return $uniform ? $first : null;
     }
 
     /**

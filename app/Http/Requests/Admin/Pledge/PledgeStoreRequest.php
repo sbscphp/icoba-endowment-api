@@ -5,15 +5,21 @@ namespace App\Http\Requests\Admin\Pledge;
 use App\Enums\Currency;
 use App\Enums\PledgePaymentPlanType;
 use App\Http\Requests\ApiFormRequest;
+use App\Http\Requests\Concerns\ValidatesPledgeScheduleInput;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Validation\Rule;
 
 class PledgeStoreRequest extends ApiFormRequest
 {
+    use ValidatesPledgeScheduleInput;
+
     protected function prepareForValidation(): void
     {
         if ($this->has('currency')) {
             $this->merge(['currency' => strtoupper(trim((string) $this->input('currency')))]);
         }
+
+        $this->preparePledgeScheduleForValidation();
     }
 
     public function rules(): array
@@ -31,10 +37,14 @@ class PledgeStoreRequest extends ApiFormRequest
             'currency' => ['required', 'string', Rule::in(Currency::values())],
             'exchange_rate_to_naira' => ['prohibited'],
             'payment_plan_type' => ['required', 'string', Rule::in(PledgePaymentPlanType::values())],
-            'installment_count' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:600'],
-            'schedule' => ['sometimes', 'nullable', 'array'],
+            ...$this->pledgeScheduleRules(),
             'with_placeholder_transaction' => ['sometimes', 'boolean'],
             'metadata' => ['sometimes', 'nullable', 'array'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $this->appendPledgeScheduleValidation($validator);
     }
 }

@@ -22,6 +22,8 @@ Route::prefix('v1')->group(function () {
         Route::get('tiers', [PublicTierController::class, 'index']);
         Route::get('campaigns/fund-progress', [LeaderboardController::class, 'fundProgressList']);
         Route::get('campaigns/{campaignUuid}/fund-progress', [LeaderboardController::class, 'fundProgress']);
+        Route::get('campaigns/{campaignUuid}', [PublicCampaignController::class, 'show'])
+            ->whereUuid('campaignUuid');
 
         Route::get('receipts/{receiptNumber}/download', [ReceiptDownloadController::class, 'guestPdf'])
             ->middleware(['throttle:public-receipt']);

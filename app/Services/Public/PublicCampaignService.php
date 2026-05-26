@@ -44,15 +44,32 @@ class PublicCampaignService
             ->get(['uuid', 'name']);
     }
 
+    public function find(string $uuid): Campaign
+    {
+        $query = Campaign::query()->where('uuid', $uuid);
+        $this->applyPublicVisibilityConstraints($query);
+        $this->applyFinancialAggregates($query);
+
+        return $query->firstOrFail();
+    }
+
+    /**
+     * @param  Builder<Campaign>  $query
+     */
+    private function applyPublicVisibilityConstraints(Builder $query): void
+    {
+        $query->where('allow_public_donation', true)
+            ->where('status', '!=', CampaignStatus::DRAFT);
+    }
+
     /**
      * @param  array<string, mixed>  $filters
      * @return Builder<Campaign>
      */
     private function baseQuery(array $filters): Builder
     {
-        $query = Campaign::query()
-            ->where('allow_public_donation', true)
-            ->where('status', '!=', CampaignStatus::DRAFT);
+        $query = Campaign::query();
+        $this->applyPublicVisibilityConstraints($query);
 
         $filter = PublicCampaignVisibilityFilter::tryFrom((string) ($filters['filter'] ?? ''))
             ?? PublicCampaignVisibilityFilter::ALL;

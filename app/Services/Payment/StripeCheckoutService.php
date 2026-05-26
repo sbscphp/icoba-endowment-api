@@ -4,7 +4,6 @@ namespace App\Services\Payment;
 
 use App\Models\Transaction;
 use App\Models\User;
-use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Stripe\Checkout\Session;
 use Stripe\Exception\ApiErrorException;
@@ -12,8 +11,6 @@ use Stripe\StripeClient;
 
 final class StripeCheckoutService
 {
-    private const DEFAULT_FRONTEND_URL = 'https://icoba-endowment.netlify.app';
-
     /** @var list<string> */
     private const ZERO_DECIMAL = ['bif', 'clp', 'djf', 'gnf', 'jpy', 'kmf', 'krw', 'mga', 'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf'];
 
@@ -22,8 +19,9 @@ final class StripeCheckoutService
 
     private StripeClient $stripe;
 
-    public function __construct()
-    {
+    public function __construct(
+        private readonly CheckoutRedirectResolver $redirectResolver,
+    ) {
         $secret = config('services.stripe.secret');
         if (! is_string($secret) || $secret === '') {
             throw new RuntimeException('Stripe is not configured (STRIPE_SECRET).');
@@ -34,7 +32,7 @@ final class StripeCheckoutService
     /**
      * Create a Checkout Session and persist its id on the pending transaction.
      *
-     * @return array{session_id: string, url: string}
+     * @return array{session_id: string, url: string, success_url: string, failed_url: string}
      *
      * @throws ApiErrorException
      */
@@ -42,20 +40,26 @@ final class StripeCheckoutService
         Transaction $transaction,
         ?User $donorUser,
         ?string $successUrl,
-        ?string $cancelUrl,
+        ?string $failedUrl,
+        ?string $legacyCancelUrl = null,
         ?string $frontendUrl = null,
     ): array {
         $currency = strtolower((string) $transaction->currency);
         $unitAmount = $this->unitAmount((float) $transaction->amount, $currency);
 
-        $success = $this->resolveSuccessUrl($successUrl, $frontendUrl);
-        $cancel = $this->resolveCancelUrl($cancelUrl, $frontendUrl);
+        $redirects = $this->redirectResolver->resolve(
+            'stripe',
+            $successUrl,
+            $failedUrl,
+            $legacyCancelUrl,
+            $frontendUrl,
+        );
 
         $params = [
             'mode' => 'payment',
             'client_reference_id' => $transaction->uuid,
-            'success_url' => $success,
-            'cancel_url' => $cancel,
+            'success_url' => $redirects['success_url'],
+            'cancel_url' => $redirects['failed_url'],
             'metadata' => [
                 'transaction_uuid' => $transaction->uuid,
             ],
@@ -98,9 +102,17 @@ final class StripeCheckoutService
             'gateway_reference' => $session->id,
         ])->save();
 
+        $this->redirectResolver->persistOnTransaction(
+            $transaction,
+            $redirects['success_url'],
+            $redirects['failed_url'],
+        );
+
         return [
             'session_id' => $session->id,
             'url' => (string) $session->url,
+            'success_url' => $redirects['success_url'],
+            'failed_url' => $redirects['failed_url'],
         ];
     }
 
@@ -128,73 +140,6 @@ final class StripeCheckoutService
         $user->forceFill(['stripe_customer_id' => $customer->id])->save();
 
         return $customer->id;
-    }
-
-    private function resolveSuccessUrl(?string $fromRequest, ?string $frontendUrl): string
-    {
-        $base = $fromRequest
-            ?? $this->urlFromFrontendBase($frontendUrl, '/donate/success')
-            ?? $this->stripeConfiguredUrl('success_url')
-            ?? self::DEFAULT_FRONTEND_URL.'/donate/success';
-
-        if (! is_string($base) || trim($base) === '') {
-            Log::warning('Stripe checkout: falling back to default frontend URL for success URL.');
-
-            $base = self::DEFAULT_FRONTEND_URL.'/donate/success';
-        }
-
-        return $this->ensureCheckoutSessionPlaceholder($base);
-    }
-
-    private function resolveCancelUrl(?string $fromRequest, ?string $frontendUrl): string
-    {
-        $base = $fromRequest
-            ?? $this->urlFromFrontendBase($frontendUrl, '/donate')
-            ?? $this->stripeConfiguredUrl('cancel_url')
-            ?? self::DEFAULT_FRONTEND_URL.'/donate';
-
-        if (! is_string($base) || trim($base) === '') {
-            $base = self::DEFAULT_FRONTEND_URL.'/donate';
-        }
-
-        return $base;
-    }
-
-    private function urlFromFrontendBase(?string $frontendUrl, string $path): ?string
-    {
-        if (! is_string($frontendUrl) || trim($frontendUrl) === '') {
-            return null;
-        }
-
-        return $this->frontendBase($frontendUrl).$path;
-    }
-
-    private function stripeConfiguredUrl(string $key): ?string
-    {
-        $url = config("services.stripe.{$key}");
-
-        if (! is_string($url) || trim($url) === '') {
-            return null;
-        }
-
-        return $url;
-    }
-
-    private function frontendBase(string $frontendUrl): string
-    {
-        return rtrim($frontendUrl, '/');
-    }
-
-    /**
-     * Stripe replaces the literal `{CHECKOUT_SESSION_ID}` after payment.
-     */
-    private function ensureCheckoutSessionPlaceholder(string $url): string
-    {
-        if (str_contains($url, '{CHECKOUT_SESSION_ID}')) {
-            return $url;
-        }
-
-        return $url.(str_contains($url, '?') ? '&' : '?').'session_id={CHECKOUT_SESSION_ID}';
     }
 
     private function unitAmount(float $amount, string $currencyLower): int

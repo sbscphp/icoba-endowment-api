@@ -110,8 +110,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
     public static function bypassPathProvider(): array
     {
         return [
-            'paystack webhook' => ['/api/payment/paystack/webhook'],
-            'paystack callback' => ['/api/payment/paystack/callback'],
+            'paystack webhook' => ['/api/v1/payment/paystack/webhook'],
             'flutterwave webhook' => ['/api/payment/flutterwave/webhook'],
             'flutterwave callback' => ['/api/payment/flutterwave/callback'],
             'stripe webhook' => ['/api/v1/payment/stripe/webhook'],
@@ -125,9 +124,8 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         $paths = [
             '/api/v1/donations/intent',
             '/api/v1/me/donations/intent',
-            '/api/v1/donations/stripe/checkout',
-            '/api/v1/donations/stripe/checkout/guest',
-            '/api/v1/donations/stripe/checkout/verify',
+            '/api/v1/donations/checkout',
+            '/api/v1/donations/checkout/verify',
         ];
 
         foreach ($paths as $path) {
