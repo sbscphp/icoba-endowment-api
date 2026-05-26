@@ -66,6 +66,10 @@ class GeneralHelper
             return JsonResponser::send(true, $th->validator->errors()->first() ?: 'Validation error.', $th->errors(), 422);
         }
 
+        if ($th instanceof \InvalidArgumentException) {
+            return JsonResponser::send(true, $th->getMessage(), null, 422);
+        }
+
         if ($th instanceof ModelNotFoundException) {
             return JsonResponser::send(true, 'Record not found.', null, 404);
         }

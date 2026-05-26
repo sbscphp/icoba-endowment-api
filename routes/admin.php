@@ -135,6 +135,8 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:certificate_templates.create']);
             Route::get('/{templateId}', [CertificateTemplateController::class, 'show'])
                 ->middleware(['permission:certificate_templates.read']);
+            Route::get('/{templateId}/preview', [CertificateTemplateController::class, 'preview'])
+                ->middleware(['permission:certificate_templates.read']);
             Route::patch('/{templateId}', [CertificateTemplateController::class, 'update'])
                 ->middleware(['permission:certificate_templates.update']);
             Route::patch('/{templateId}/toggle-status', [CertificateTemplateController::class, 'toggleStatus'])

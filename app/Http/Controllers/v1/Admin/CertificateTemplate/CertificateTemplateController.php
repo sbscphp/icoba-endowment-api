@@ -6,12 +6,14 @@ use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\CertificateTemplate\CertificateTemplateListRequest;
 use App\Http\Requests\Admin\CertificateTemplate\CreateCertificateTemplateRequest;
+use App\Http\Requests\Admin\CertificateTemplate\PreviewCertificateTemplateRequest;
 use App\Http\Requests\Admin\CertificateTemplate\UpdateCertificateTemplateRequest;
 use App\Http\Requests\Admin\DateRangeStatsRequest;
 use App\Http\Resources\CertificateTemplateListResource;
 use App\Http\Resources\CertificateTemplateResource;
 use App\Responser\JsonResponser;
 use App\Services\Admin\CertificateTemplate\CertificateTemplateService;
+use App\Services\Recognition\CertificatePdfService;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -20,6 +22,7 @@ class CertificateTemplateController extends Controller
 {
     public function __construct(
         private readonly CertificateTemplateService $certificateTemplateService,
+        private readonly CertificatePdfService $certificatePdfService,
     ) {}
 
     public function index(CertificateTemplateListRequest $request)
@@ -61,6 +64,21 @@ class CertificateTemplateController extends Controller
             return JsonResponser::send(false, 'Certificate template retrieved.', CertificateTemplateResource::make($template)->resolve());
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\CertificateTemplate\CertificateTemplateController@show');
+        }
+    }
+
+    public function preview(PreviewCertificateTemplateRequest $request, string $templateId)
+    {
+        try {
+            $template = $this->certificateTemplateService->findTemplate($templateId);
+            $awardeeName = trim((string) ($request->validated()['awardee_name'] ?? 'Sample Donor'));
+            if ($awardeeName === '') {
+                $awardeeName = 'Sample Donor';
+            }
+
+            return $this->certificatePdfService->streamTemplatePreview($template, $awardeeName);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\CertificateTemplate\CertificateTemplateController@preview');
         }
     }
 

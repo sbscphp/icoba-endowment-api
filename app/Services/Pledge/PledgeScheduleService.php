@@ -69,7 +69,7 @@ class PledgeScheduleService
         $transactions = $transactions ?? $this->loadPaymentTransactions($pledge);
         $items = $this->resolveScheduleItems($pledge);
         $allocated = $this->allocatePayments($items, $transactions, $pledge);
-        $schedulePaused = $this->isSchedulePaused($pledge);
+        $pledgePaused = $this->isPledgePaused($pledge);
         $preference = $this->paymentPreference($pledge);
 
         $enrichedItems = [];
@@ -87,8 +87,7 @@ class PledgeScheduleService
                 $item,
                 $paidAmount,
                 $pledged,
-                $schedulePaused,
-                (bool) ($item['is_paused'] ?? false),
+                $pledgePaused,
             );
 
             $enrichedItems[] = [
@@ -103,7 +102,6 @@ class PledgeScheduleService
                 'remaining_amount_ngn' => $this->money($itemRemainingNgn),
                 'currency' => $pledge->currency,
                 'status' => $status->value,
-                'is_paused' => $status === PledgeScheduleItemStatus::PAUSED,
             ];
         }
 
@@ -113,7 +111,6 @@ class PledgeScheduleService
                 ? $pledge->payment_plan_type->value
                 : $pledge->payment_plan_type,
             'payment_preference' => $preference->value,
-            'schedule_paused' => $schedulePaused,
             'items' => $enrichedItems,
         ];
     }
@@ -136,7 +133,6 @@ class PledgeScheduleService
                 'due_date' => $item['due_date'],
                 'amount' => $item['amount'],
                 'amount_ngn' => $item['amount_ngn'],
-                'is_paused' => false,
             ], $items),
             'installment_count' => $pledge->installment_count ?? count($items),
         ]);
@@ -144,26 +140,69 @@ class PledgeScheduleService
         return $pledge->fresh();
     }
 
-    public function pauseSchedule(Pledge $pledge): Pledge
+    public function isPledgePaused(Pledge $pledge): bool
+    {
+        if (data_get($pledge->metadata, 'is_paused') !== null) {
+            return (bool) data_get($pledge->metadata, 'is_paused');
+        }
+
+        return (bool) data_get($pledge->metadata, 'schedule_paused', false);
+    }
+
+    public function pledgePausedAt(Pledge $pledge): ?string
+    {
+        $at = data_get($pledge->metadata, 'paused_at') ?? data_get($pledge->metadata, 'schedule_paused_at');
+
+        return is_string($at) && $at !== '' ? $at : null;
+    }
+
+    public function pausePledge(Pledge $pledge): Pledge
     {
         $this->assertPledgeIsManageable($pledge);
         $metadata = $pledge->metadata ?? [];
-        $metadata['schedule_paused'] = true;
-        $metadata['schedule_paused_at'] = now()->toIso8601String();
+        $metadata['is_paused'] = true;
+        $metadata['paused_at'] = now()->toIso8601String();
+        unset($metadata['schedule_paused'], $metadata['schedule_paused_at']);
         $pledge->update(['metadata' => $metadata]);
 
         return $pledge->fresh();
     }
 
-    public function resumeSchedule(Pledge $pledge): Pledge
+    public function resumePledge(Pledge $pledge): Pledge
     {
         $this->assertPledgeIsManageable($pledge);
         $metadata = $pledge->metadata ?? [];
-        $metadata['schedule_paused'] = false;
-        unset($metadata['schedule_paused_at']);
+        $metadata['is_paused'] = false;
+        unset($metadata['paused_at'], $metadata['schedule_paused'], $metadata['schedule_paused_at']);
         $pledge->update(['metadata' => $metadata]);
 
         return $pledge->fresh();
+    }
+
+    public function wasPaymentReminderSent(Pledge $pledge, string $scheduleItemId, string $dueDate): bool
+    {
+        $sent = data_get($pledge->metadata, 'payment_reminders_sent', []);
+
+        return is_array($sent) && in_array($this->reminderSentKey($scheduleItemId, $dueDate), $sent, true);
+    }
+
+    public function markPaymentReminderSent(Pledge $pledge, string $scheduleItemId, string $dueDate): void
+    {
+        $metadata = $pledge->metadata ?? [];
+        $sent = is_array($metadata['payment_reminders_sent'] ?? null)
+            ? $metadata['payment_reminders_sent']
+            : [];
+        $key = $this->reminderSentKey($scheduleItemId, $dueDate);
+        if (! in_array($key, $sent, true)) {
+            $sent[] = $key;
+        }
+        $metadata['payment_reminders_sent'] = $sent;
+        $pledge->update(['metadata' => $metadata]);
+    }
+
+    public function reminderSentKey(string $scheduleItemId, string $dueDate): string
+    {
+        return $scheduleItemId.':'.$dueDate;
     }
 
     public function setPaymentPreference(Pledge $pledge, PledgePaymentPreference $preference): Pledge
@@ -181,6 +220,12 @@ class PledgeScheduleService
      */
     public function assertPaymentAllowed(Pledge $pledge, float $amount, ?string $scheduleItemId = null): void
     {
+        if ($this->isPledgePaused($pledge)) {
+            throw ValidationException::withMessages([
+                'pledge_uuid' => ['This pledge is paused. Resume the pledge before making a payment.'],
+            ]);
+        }
+
         $remaining = (float) $this->balanceService->remainingAmount($pledge);
         if ($remaining <= 0.00001) {
             throw ValidationException::withMessages([
@@ -249,11 +294,6 @@ class PledgeScheduleService
         }
     }
 
-    private function isSchedulePaused(Pledge $pledge): bool
-    {
-        return (bool) data_get($pledge->metadata, 'schedule_paused', false);
-    }
-
     private function paymentPreference(Pledge $pledge): PledgePaymentPreference
     {
         $raw = data_get($pledge->metadata, 'payment_preference');
@@ -306,7 +346,6 @@ class PledgeScheduleService
                 'due_date' => $this->normalizeDate($row['due_date'] ?? null),
                 'amount' => $amount,
                 'amount_ngn' => $amountNgn,
-                'is_paused' => (bool) ($row['is_paused'] ?? false),
             ];
         }
 
@@ -353,7 +392,6 @@ class PledgeScheduleService
                 'due_date' => $this->defaultDueDate($plan, $start, $i)->toDateString(),
                 'amount' => $amount,
                 'amount_ngn' => $amountNgn,
-                'is_paused' => false,
             ];
         }
 
@@ -473,8 +511,7 @@ class PledgeScheduleService
         array $item,
         float $paidAmount,
         float $pledgedAmount,
-        bool $schedulePaused,
-        bool $itemPaused,
+        bool $pledgePaused,
     ): PledgeScheduleItemStatus {
         $remaining = $pledgedAmount - $paidAmount;
 
@@ -482,12 +519,12 @@ class PledgeScheduleService
             return PledgeScheduleItemStatus::PAID;
         }
 
-        if ($paidAmount > 0.00001) {
-            return PledgeScheduleItemStatus::PARTIAL;
+        if ($pledgePaused) {
+            return PledgeScheduleItemStatus::PAUSED;
         }
 
-        if ($itemPaused || $schedulePaused) {
-            return PledgeScheduleItemStatus::PAUSED;
+        if ($paidAmount > 0.00001) {
+            return PledgeScheduleItemStatus::PARTIAL;
         }
 
         $due = $item['due_date'] ?? null;

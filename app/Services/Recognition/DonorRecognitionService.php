@@ -64,7 +64,7 @@ final class DonorRecognitionService
                 continue;
             }
 
-            $recognition = $this->issueRecognition(
+            $recognition = $this->issueRecognitionForTier(
                 donorKey: $donorKey,
                 userUuid: $context['user_uuid'],
                 donorEmail: $context['donor_email'],
@@ -195,7 +195,7 @@ final class DonorRecognitionService
         ];
     }
 
-    private function issueRecognition(
+    public function issueRecognitionForTier(
         string $donorKey,
         ?string $userUuid,
         ?string $donorEmail,
@@ -251,7 +251,7 @@ final class DonorRecognitionService
         });
     }
 
-    private function resolveActiveTemplateForTier(TierConfiguration $tier): ?CertificateTemplate
+    public function resolveActiveTemplateForTier(TierConfiguration $tier): ?CertificateTemplate
     {
         return CertificateTemplate::query()
             ->where('tier_uuid', $tier->uuid)

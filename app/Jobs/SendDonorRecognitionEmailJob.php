@@ -36,6 +36,15 @@ class SendDonorRecognitionEmailJob implements ShouldBeUnique, ShouldQueue
         return 'donor-recognition-email:'.$this->recognitionUuid;
     }
 
+    // What blocks issuance
+    // Condition	                Result
+    // Anonymous donation => Skipped
+    // No awardee name => Skipped
+    // Cumulative total below any tier threshold => Skipped
+    // Tier already issued for that donor => Skipped
+    // No active certificate template for tier => Skipped
+    // No donor email => Record created, but email job exits early
+
     public function handle(
         DonorRecognitionService $recognitionService,
         CertificatePdfService $certificatePdfService,

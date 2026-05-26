@@ -3,7 +3,10 @@
 namespace App\Services\Recognition;
 
 use App\Enums\CertificateTextPosition;
+use App\Exceptions\ApiException;
+use App\Models\CertificateTemplate;
 use App\Models\DonorRecognition;
+use App\Models\TierConfiguration;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 use Illuminate\Support\Facades\Http;
@@ -18,6 +21,24 @@ final class CertificatePdfService
         return new Response($this->renderCertificateBinary($recognition), 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ]);
+    }
+
+    public function streamTemplatePreview(CertificateTemplate $template, string $awardeeName = 'Sample Donor'): Response
+    {
+        $template->loadMissing('tier');
+        $tier = $template->tier;
+
+        if ($tier === null) {
+            throw new ApiException('Certificate template is not linked to a tier.', 422);
+        }
+
+        $recognition = $this->buildPreviewRecognition($template, $tier, $awardeeName);
+        $filename = 'certificate-preview-'.preg_replace('/[^a-z0-9\-]+/i', '-', strtolower($template->name)).'.pdf';
+
+        return new Response($this->renderCertificateBinary($recognition), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$filename.'"',
         ]);
     }
 
@@ -119,6 +140,28 @@ final class CertificatePdfService
         $dompdf->render();
 
         return $dompdf->output();
+    }
+
+    private function buildPreviewRecognition(
+        CertificateTemplate $template,
+        TierConfiguration $tier,
+        string $awardeeName,
+    ): DonorRecognition {
+        $design = is_array($template->design) ? $template->design : [];
+        $recognition = new DonorRecognition([
+            'recognition_number' => 'ICOBA-REC-PREVIEW',
+            'awardee_name' => $awardeeName,
+            'issued_at' => now(),
+            'snapshot' => [
+                'tier_name' => $tier->name,
+                'template_name' => $template->name,
+                'design' => $design,
+            ],
+        ]);
+        $recognition->setRelation('tier', $tier);
+        $recognition->setRelation('certificateTemplate', $template);
+
+        return $recognition;
     }
 
     private function resolveTextAlign(string $position): string

@@ -65,10 +65,14 @@ Route::prefix('v1')->group(function () {
         Route::post('/pledges', [CustomerPledgeController::class, 'store']);
         Route::get('/pledges/{pledgeUuid}', [CustomerPledgeController::class, 'show'])
             ->whereUuid('pledgeUuid');
-        Route::patch('/pledges/{pledgeUuid}/schedule', [CustomerPledgeController::class, 'updateSchedule'])
+        Route::patch('/pledges/{pledgeUuid}/pause', [CustomerPledgeController::class, 'updatePause'])
             ->whereUuid('pledgeUuid');
-        Route::post('/pledges/{pledgeUuid}/schedule', [CustomerPledgeController::class, 'updateSchedule'])
+        Route::post('/pledges/{pledgeUuid}/pause', [CustomerPledgeController::class, 'updatePause'])
             ->whereUuid('pledgeUuid');
+        // Route::patch('/pledges/{pledgeUuid}/payment-preference', [CustomerPledgeController::class, 'updateSchedule'])
+        //     ->whereUuid('pledgeUuid');
+        // Route::post('/pledges/{pledgeUuid}/payment-preference', [CustomerPledgeController::class, 'updateSchedule'])
+        //     ->whereUuid('pledgeUuid');
         Route::get('/recognitions', [CustomerRecognitionController::class, 'index']);
         Route::get('/recognitions/{recognitionUuid}/download', [CustomerRecognitionController::class, 'download'])
             ->whereUuid('recognitionUuid');
@@ -76,15 +80,15 @@ Route::prefix('v1')->group(function () {
             ->middleware(['throttle:60,1']);
     });
 
-    Route::post('donations/intent', [DonationIntentController::class, 'store'])
-        ->middleware(['throttle:60,1']);
+    // Route::post('donations/intent', [DonationIntentController::class, 'store'])
+    //     ->middleware(['throttle:60,1']);
 
-    Route::post('donations/stripe/checkout/guest', [StripeCheckoutController::class, 'guest'])
+    Route::post('donations/stripe/checkout', [StripeCheckoutController::class, 'store'])
         ->middleware(['throttle:60,1']);
 
     Route::post('donations/stripe/checkout/verify', [StripeCheckoutController::class, 'verify'])
         ->middleware(['throttle:60,1']);
 
-    Route::post('donations/stripe/checkout', [StripeCheckoutController::class, 'member'])
-        ->middleware(['auth:sanctum', 'throttle:60,1']);
+    // Route::post('donations/stripe/checkout/guest', [StripeCheckoutController::class, 'store'])
+    //     ->middleware(['throttle:60,1']);
 });

@@ -125,6 +125,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         $paths = [
             '/api/v1/donations/intent',
             '/api/v1/me/donations/intent',
+            '/api/v1/donations/stripe/checkout',
             '/api/v1/donations/stripe/checkout/guest',
             '/api/v1/donations/stripe/checkout/verify',
         ];

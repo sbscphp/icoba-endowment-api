@@ -5,6 +5,7 @@ namespace App\Services\Receipt;
 use App\Enums\Currency;
 use App\Enums\DonorTypeSlug;
 use App\Enums\TransactionStatus;
+use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
 use App\Models\Transaction;
 use App\Models\TransactionReceipt;
@@ -25,7 +26,7 @@ class ReceiptService
     public function getOrCreateReceiptRecord(Transaction $transaction): TransactionReceipt
     {
         if ($transaction->status !== TransactionStatus::SUCCESSFUL) {
-            throw new \InvalidArgumentException('Receipts require a successful transaction.');
+            throw new ApiException('Receipt available only for successful payments.', 422);
         }
 
         $this->ensurePublicReceiptAccess($transaction);

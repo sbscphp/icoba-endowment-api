@@ -11,7 +11,7 @@ class UpdatePledgeScheduleRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            'action' => ['required', 'string', Rule::in(['pause', 'resume', 'set_preference'])],
+            'action' => ['required', 'string', Rule::in(['set_preference'])],
             'payment_preference' => [
                 'required_if:action,set_preference',
                 'nullable',
