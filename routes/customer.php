@@ -61,6 +61,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/transactions/{transactionUuid}/tax-receipt', [CustomerReceiptController::class, 'downloadTax']);
 
         Route::get('/pledges/stats', [CustomerPledgeController::class, 'stats']);
+        Route::get('/pledges/overdue', [CustomerPledgeController::class, 'overdue']);
         Route::get('/pledges', [CustomerPledgeController::class, 'index']);
         Route::get('/pledges/{pledgeUuid}', [CustomerPledgeController::class, 'show'])
             ->whereUuid('pledgeUuid');
