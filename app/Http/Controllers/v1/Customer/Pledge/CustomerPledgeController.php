@@ -11,6 +11,7 @@ use App\Http\Requests\Customer\Pledge\PledgeStatsRequest;
 use App\Http\Requests\Customer\Pledge\PledgeStoreRequest;
 use App\Http\Requests\Customer\Pledge\UpdatePledgePauseRequest;
 use App\Http\Requests\Customer\Pledge\UpdatePledgeScheduleRequest;
+use App\Http\Resources\Customer\CustomerOverduePledgeResource;
 use App\Http\Resources\PledgeDetailResource;
 use App\Http\Resources\PledgeListResource;
 use App\Models\Campaign;
@@ -18,6 +19,7 @@ use App\Models\User;
 use App\Repositories\Contracts\User\UserRepositoryInterface;
 use App\Responser\JsonResponser;
 use App\Services\Admin\Pledge\PledgeService;
+use App\Services\Customer\CustomerOverduePledgeService;
 use App\Services\Donation\DonorNameRequirement;
 use App\Services\Donation\GuestDonorProfileSnapshotService;
 use App\Services\Pledge\PledgeBalanceService;
@@ -36,7 +38,28 @@ class CustomerPledgeController extends Controller
         private readonly GuestDonorProfileSnapshotService $guestDonorProfileSnapshot,
         private readonly DonorNameRequirement $donorNameRequirement,
         private readonly UserRepositoryInterface $userRepository,
+        private readonly CustomerOverduePledgeService $customerOverduePledgeService,
     ) {}
+
+    public function overdue(Request $request)
+    {
+        try {
+            $user = $request->user();
+            if (! $user instanceof User) {
+                abort(401);
+            }
+
+            $items = $this->customerOverduePledgeService->listForUser($user->uuid);
+            $data = collect($items)
+                ->map(fn (array $row): array => CustomerOverduePledgeResource::make($row)->resolve())
+                ->values()
+                ->all();
+
+            return JsonResponser::send(false, 'Overdue pledges retrieved.', $data);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Pledge\CustomerPledgeController@overdue');
+        }
+    }
 
     public function stats(PledgeStatsRequest $request)
     {
