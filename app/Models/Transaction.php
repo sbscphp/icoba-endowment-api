@@ -8,6 +8,7 @@ use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -28,6 +29,8 @@ class Transaction extends Model
             'application_type' => TransactionApplicationType::class,
             'metadata' => 'array',
             'paid_at' => 'datetime',
+            'awaiting_bank_verification_at' => 'datetime',
+            'reconciled_at' => 'datetime',
         ];
     }
 
@@ -68,6 +71,16 @@ class Transaction extends Model
     public function receipt(): HasOne
     {
         return $this->hasOne(TransactionReceipt::class, 'transaction_uuid', 'uuid');
+    }
+
+    public function reconciledByAdmin(): BelongsTo
+    {
+        return $this->belongsTo(Admin::class, 'reconciled_by_admin_uuid', 'uuid');
+    }
+
+    public function certificates(): HasMany
+    {
+        return $this->hasMany(DonorRecognition::class, 'trigger_transaction_uuid', 'uuid');
     }
 
     /**

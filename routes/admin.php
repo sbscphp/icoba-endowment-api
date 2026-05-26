@@ -12,6 +12,7 @@ use App\Http\Controllers\v1\Admin\EmailCampaign\EmailCampaignController;
 use App\Http\Controllers\v1\Admin\IssuedCertificate\IssuedCertificateController;
 use App\Http\Controllers\v1\Admin\Notification\NotificationController;
 use App\Http\Controllers\v1\Admin\Pledge\PledgeController;
+use App\Http\Controllers\v1\Admin\Reconciliation\FcmbImportController;
 use App\Http\Controllers\v1\Admin\Reconciliation\ReconciliationController;
 use App\Http\Controllers\v1\Admin\Report\ReportController;
 use App\Http\Controllers\v1\Admin\Settings\SettingsController;
@@ -227,8 +228,32 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:pledges.read']);
         });
 
-        Route::post('reconciliation/link-donation-to-pledge', [ReconciliationController::class, 'linkDonationToPledge'])
-            ->middleware(['permission:reconciliation.update']);
+        Route::prefix('reconciliation')->group(function () {
+            Route::get('stats', [ReconciliationController::class, 'stats'])
+                ->middleware(['permission:reconciliation.read']);
+            Route::get('queue', [ReconciliationController::class, 'queue'])
+                ->middleware(['permission:reconciliation.read']);
+            Route::get('queue/{uuid}', [ReconciliationController::class, 'show'])
+                ->whereUuid('uuid')
+                ->middleware(['permission:reconciliation.read']);
+            Route::get('donors/search', [ReconciliationController::class, 'donorSearch'])
+                ->middleware(['permission:reconciliation.read']);
+            Route::get('bank-accounts', [ReconciliationController::class, 'bankAccounts'])
+                ->middleware(['permission:reconciliation.read']);
+            Route::get('queue/{uuid}/tier-preview', [ReconciliationController::class, 'tierPreview'])
+                ->whereUuid('uuid')
+                ->middleware(['permission:reconciliation.read']);
+            Route::patch('queue/{uuid}/bank', [ReconciliationController::class, 'updateBank'])
+                ->whereUuid('uuid')
+                ->middleware(['permission:reconciliation.update']);
+            Route::post('queue/{uuid}/complete', [ReconciliationController::class, 'complete'])
+                ->whereUuid('uuid')
+                ->middleware(['permission:reconciliation.update']);
+            Route::post('fcmb/import', [FcmbImportController::class, 'store'])
+                ->middleware(['permission:reconciliation.update']);
+            Route::post('link-donation-to-pledge', [ReconciliationController::class, 'linkDonationToPledge'])
+                ->middleware(['permission:reconciliation.update']);
+        });
 
         Route::prefix('reports')->group(function () {
             Route::get('/types', [ReportController::class, 'reportTypes'])

@@ -3,22 +3,15 @@
 namespace App\Services\Payment;
 
 use App\Enums\TransactionStatus;
-use App\Jobs\EvaluateDonorTierRecognitionJob;
-use App\Jobs\SendDonationConfirmationEmailJob;
-use App\Jobs\SendDonationTaxReceiptEmailJob;
 use App\Models\Transaction;
-use App\Services\Pledge\PledgeBalanceService;
-use App\Services\Receipt\ReceiptService;
-use App\Services\Transaction\TransactionNgnSnapshotService;
+use App\Services\Transaction\TransactionFinalizationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 final class PaystackCheckoutSyncService
 {
     public function __construct(
-        private readonly PledgeBalanceService $pledgeBalance,
-        private readonly ReceiptService $receiptService,
-        private readonly TransactionNgnSnapshotService $transactionNgnSnapshot,
+        private readonly TransactionFinalizationService $finalizationService,
     ) {}
 
     /**
@@ -63,89 +56,27 @@ final class PaystackCheckoutSyncService
             ? (string) $checkoutTransaction->paystackTransactionId
             : $checkoutTransaction->reference;
 
-        return (bool) DB::transaction(function () use ($transaction, $checkoutTransaction, $gatewayReference): bool {
-            /** @var Transaction|null $locked */
-            $locked = Transaction::query()
-                ->whereKey($transaction->getKey())
-                ->lockForUpdate()
-                ->first();
+        if (! $this->transactionMatchesCheckout($transaction, $checkoutTransaction)) {
+            Log::warning('Paystack checkout sync: transaction does not match checkout reference.', [
+                'transaction_uuid' => $transaction->uuid,
+                'reference' => $checkoutTransaction->reference,
+                'gateway_reference' => $transaction->gateway_reference,
+            ]);
 
-            if ($locked === null || $locked->status !== TransactionStatus::PENDING || $locked->gateway !== 'paystack') {
-                return false;
-            }
+            return false;
+        }
 
-            if (! $this->transactionMatchesCheckout($locked, $checkoutTransaction)) {
-                Log::warning('Paystack checkout sync: transaction does not match checkout reference.', [
-                    'transaction_uuid' => $locked->uuid,
-                    'reference' => $checkoutTransaction->reference,
-                    'gateway_reference' => $locked->gateway_reference,
-                ]);
-
-                return false;
-            }
-
-            $meta = is_array($locked->metadata) ? $locked->metadata : [];
-            $shouldQueueConfirmationEmail = ! array_key_exists('donation_confirmation_email_queued', $meta);
-            $shouldQueueTaxReceiptEmail = ! array_key_exists('paystack_tax_receipt_email_queued', $meta);
-
-            $meta = array_merge($meta, [
+        return $this->finalizationService->finalizeSuccessful($transaction, [
+            'gateway_reference' => $gatewayReference,
+            'metadata' => [
                 'paystack_reference' => $checkoutTransaction->reference,
                 'paystack_transaction_id' => $checkoutTransaction->paystackTransactionId,
                 'paystack_status' => $checkoutTransaction->status,
                 'payment_method' => 'paystack',
-                'paystack_checkout_finalized_at' => $meta['paystack_checkout_finalized_at'] ?? now()->toIso8601String(),
-            ]);
-
-            if ($shouldQueueConfirmationEmail) {
-                $meta['donation_confirmation_email_queued'] = true;
-            }
-
-            if ($shouldQueueTaxReceiptEmail) {
-                $meta['paystack_tax_receipt_email_queued'] = true;
-            }
-
-            $ngnFields = [];
-            if ($locked->amount_in_naira === null || $locked->exchange_rate_to_naira === null) {
-                $snapshot = $this->transactionNgnSnapshot->resolve(
-                    (float) $locked->amount,
-                    (string) $locked->currency,
-                );
-
-                if ($locked->amount_in_naira === null) {
-                    $ngnFields['amount_in_naira'] = $snapshot['amount_in_naira'];
-                }
-
-                if ($locked->exchange_rate_to_naira === null) {
-                    $ngnFields['exchange_rate_to_naira'] = $snapshot['exchange_rate_to_naira'];
-                }
-            }
-
-            $locked->forceFill(array_merge([
-                'status' => TransactionStatus::SUCCESSFUL,
-                'paid_at' => $locked->paid_at ?? now(),
-                'gateway_reference' => $gatewayReference,
-                'metadata' => $meta,
-            ], $ngnFields))->save();
-
-            $locked->loadMissing('pledge');
-            if ($locked->pledge !== null) {
-                $this->pledgeBalance->refreshPledgeStatus($locked->pledge);
-            }
-
-            $this->receiptService->ensurePublicReceiptAccess($locked);
-
-            if ($shouldQueueConfirmationEmail) {
-                SendDonationConfirmationEmailJob::dispatch($locked->uuid);
-            }
-
-            if ($shouldQueueTaxReceiptEmail) {
-                SendDonationTaxReceiptEmailJob::dispatch($locked->uuid);
-            }
-
-            EvaluateDonorTierRecognitionJob::dispatch($locked->uuid);
-
-            return true;
-        });
+                'paystack_checkout_finalized_at' => now()->toIso8601String(),
+            ],
+            'tax_receipt_email_meta_key' => 'paystack_tax_receipt_email_queued',
+        ]);
     }
 
     /**

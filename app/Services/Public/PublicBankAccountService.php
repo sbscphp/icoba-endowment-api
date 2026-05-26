@@ -2,27 +2,19 @@
 
 namespace App\Services\Public;
 
-use Illuminate\Support\Collection;
+use App\Services\Bank\BankAccountRegistry;
 
 class PublicBankAccountService
 {
+    public function __construct(
+        private readonly BankAccountRegistry $registry,
+    ) {}
+
     /**
-     * @return array{bank_name: string, account_name: string, accounts: Collection<int, array<string, string>>}
+     * @return array{bank_name: string, account_name: string, accounts: array<int, array<string, mixed>>}
      */
     public function list(): array
     {
-        $accounts = collect(config('bank_accounts.accounts', []))
-            ->values()
-            ->map(fn (array $account): array => [
-                'currency' => $account['currency'],
-                'currency_symbol' => $account['currency_symbol'],
-                'account_number' => $account['account_number'],
-            ]);
-
-        return [
-            'bank_name' => (string) config('bank_accounts.bank_name'),
-            'account_name' => (string) config('bank_accounts.account_name'),
-            'accounts' => $accounts,
-        ];
+        return $this->registry->list();
     }
 }

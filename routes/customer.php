@@ -6,6 +6,7 @@ use App\Http\Controllers\v1\Customer\Auth\LoginController;
 use App\Http\Controllers\v1\Customer\Auth\PasswordController;
 use App\Http\Controllers\v1\Customer\Auth\RegisterController;
 use App\Http\Controllers\v1\Customer\CustomerDashboardController;
+use App\Http\Controllers\v1\Customer\Donation\BankTransferController;
 use App\Http\Controllers\v1\Customer\Donation\CustomerReceiptController;
 use App\Http\Controllers\v1\Customer\Donation\DonationIntentController;
 use App\Http\Controllers\v1\Customer\Donation\DonationCheckoutController;
@@ -87,6 +88,13 @@ Route::prefix('v1')->group(function () {
         ->middleware(['throttle:60,1']);
 
     Route::post('donations/checkout/verify', [DonationCheckoutController::class, 'verify'])
+        ->middleware(['throttle:60,1']);
+
+    Route::post('donations/bank-transfer/intent', [BankTransferController::class, 'intent'])
+        ->middleware(['throttle:60,1']);
+
+    Route::post('donations/bank-transfer/{transactionUuid}/confirm-payment', [BankTransferController::class, 'confirmPayment'])
+        ->whereUuid('transactionUuid')
         ->middleware(['throttle:60,1']);
 
     Route::post('pledges', [CustomerPledgeController::class, 'store'])

@@ -3,10 +3,16 @@
 namespace App\Services\Transaction;
 
 use App\Models\Transaction;
+use App\Services\Currency\ExchangeRateService;
 use App\Services\Pledge\PledgeCommittedNgnResolver;
+use Carbon\CarbonInterface;
 
 final class TransactionNgnSnapshotService
 {
+    public function __construct(
+        private readonly ExchangeRateService $exchangeRateService,
+    ) {}
+
     /**
      * @return array{exchange_rate_to_naira: float, amount_in_naira: float}
      */
@@ -24,6 +30,21 @@ final class TransactionNgnSnapshotService
         return [
             'exchange_rate_to_naira' => $ngn['exchange_rate_to_naira'],
             'amount_in_naira' => $ngn['committed_amount_ngn'],
+        ];
+    }
+
+    /**
+     * Snapshot NGN equivalent using the FX rate effective on the supplied date.
+     *
+     * @return array{exchange_rate_to_naira: float, amount_in_naira: float}
+     */
+    public function resolveAtDate(float $amount, string $currency, CarbonInterface $date): array
+    {
+        $rate = $this->exchangeRateService->rateForCurrencyOnDate($currency, $date);
+
+        return [
+            'exchange_rate_to_naira' => round($rate, 6),
+            'amount_in_naira' => round($amount * $rate, 2),
         ];
     }
 
