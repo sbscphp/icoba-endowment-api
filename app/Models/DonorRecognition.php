@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\IssuedCertificateStatus;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,6 +20,7 @@ class DonorRecognition extends Model
             'initial_amount' => 'decimal:2',
             'issued_at' => 'datetime',
             'email_sent_at' => 'datetime',
+            'status' => IssuedCertificateStatus::class,
             'snapshot' => 'array',
         ];
     }

@@ -151,6 +151,7 @@ class DonationCheckoutController extends Controller
                 'payment_status' => $result['payment_status'],
                 'session_status' => $result['session_status'],
                 'sync_action' => $result['sync_action'],
+                'receipt_number' => $result['transaction']->receipt_number,
                 'redirect_url' => $this->checkoutRedirectResolver->redirectForPaymentStatus(
                     $result['transaction'],
                     $result['payment_status'],

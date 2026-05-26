@@ -16,6 +16,6 @@ class PublicTierService
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->orderBy('name')
-            ->get(['uuid', 'name']);
+            ->get(['uuid', 'slug', 'name', 'base_color', 'min_amount', 'max_amount']);
     }
 }

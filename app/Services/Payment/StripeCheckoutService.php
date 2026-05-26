@@ -4,9 +4,11 @@ namespace App\Services\Payment;
 
 use App\Models\Transaction;
 use App\Models\User;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Stripe\Checkout\Session;
 use Stripe\Exception\ApiErrorException;
+use Stripe\Exception\InvalidRequestException;
 use Stripe\StripeClient;
 
 final class StripeCheckoutService
@@ -35,6 +37,7 @@ final class StripeCheckoutService
      * @return array{session_id: string, url: string, success_url: string, failed_url: string}
      *
      * @throws ApiErrorException
+     * @throws ValidationException
      */
     public function createCheckoutSession(
         Transaction $transaction,
@@ -95,7 +98,17 @@ final class StripeCheckoutService
             $params['customer_email'] = $email;
         }
 
-        $session = $this->stripe->checkout->sessions->create($params);
+        try {
+            $session = $this->stripe->checkout->sessions->create($params);
+        } catch (InvalidRequestException $e) {
+            if ($this->isUnsupportedCheckoutAmount($e)) {
+                throw ValidationException::withMessages([
+                    'amount' => ['Amount not supported.'],
+                ]);
+            }
+
+            throw $e;
+        }
 
         $transaction->forceFill([
             'gateway' => 'stripe',
@@ -152,5 +165,10 @@ final class StripeCheckoutService
         }
 
         return (int) round($amount * 100);
+    }
+
+    private function isUnsupportedCheckoutAmount(InvalidRequestException $exception): bool
+    {
+        return in_array($exception->getStripeCode(), ['amount_too_small', 'amount_too_large'], true);
     }
 }
