@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\v1\Customer\Donation;
 
+use App\Enums\PaymentGateway;
+use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Customer\Donation\StripeCheckoutRequest;
-use App\Http\Requests\Customer\Donation\StripeVerifyCheckoutRequest;
+use App\Http\Requests\Customer\Donation\DonationCheckoutRequest;
+use App\Http\Requests\Customer\Donation\DonationVerifyCheckoutRequest;
 use App\Models\Pledge;
 use App\Models\User;
 use App\Responser\JsonResponser;
@@ -16,7 +18,7 @@ use App\Services\Payment\StripeCheckoutService;
 use App\Services\Payment\StripeCheckoutVerificationService;
 use Illuminate\Validation\ValidationException;
 
-class StripeCheckoutController extends Controller
+class DonationCheckoutController extends Controller
 {
     public function __construct(
         private readonly DonationIntentService $donationIntentService,
@@ -26,9 +28,12 @@ class StripeCheckoutController extends Controller
         private readonly DonorNameRequirement $donorNameRequirement,
     ) {}
 
-    public function store(StripeCheckoutRequest $request)
+    public function store(DonationCheckoutRequest $request)
     {
         try {
+            $paymentGateway = $request->paymentGateway();
+            $this->assertGatewayImplemented($paymentGateway);
+
             $user = $request->user();
             $user = $user instanceof User ? $user : null;
 
@@ -46,7 +51,12 @@ class StripeCheckoutController extends Controller
             $successUrl = $validated['success_url'] ?? null;
             $cancelUrl = $validated['cancel_url'] ?? null;
             $frontendUrl = $validated['frontend_url'] ?? null;
-            unset($validated['success_url'], $validated['cancel_url'], $validated['frontend_url']);
+            unset(
+                $validated['success_url'],
+                $validated['cancel_url'],
+                $validated['frontend_url'],
+                $validated['payment_gateway'],
+            );
 
             if ($user !== null) {
                 $validated['user_uuid'] = $user->uuid;
@@ -65,49 +75,71 @@ class StripeCheckoutController extends Controller
             }
 
             $transaction = $this->donationIntentService->createPendingIntent(array_merge($validated, [
-                'gateway' => 'stripe',
+                'gateway' => $paymentGateway->value,
             ]));
 
-            $checkout = $this->stripeCheckoutService->createCheckoutSession(
-                $transaction,
-                $user,
-                $successUrl,
-                $cancelUrl,
-                $frontendUrl,
-            );
+            $checkout = match ($paymentGateway) {
+                PaymentGateway::Stripe => $this->stripeCheckoutService->createCheckoutSession(
+                    $transaction,
+                    $user,
+                    $successUrl,
+                    $cancelUrl,
+                    $frontendUrl,
+                ),
+                default => throw new ApiException('This payment gateway is not yet supported.', 501),
+            };
 
             $transaction = $this->transactionService->findTransaction($transaction->uuid);
 
-            return JsonResponser::send(false, 'Stripe Checkout session created.', [
+            return JsonResponser::send(false, 'Checkout session created.', [
+                'payment_gateway' => $paymentGateway->value,
                 'checkout_url' => $checkout['url'],
                 'checkout_session_id' => $checkout['session_id'],
+                'transaction_uuid' => $transaction->uuid,
             ], 201);
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'Customer\Donation\StripeCheckoutController@store');
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Donation\DonationCheckoutController@store');
         }
     }
 
-    public function verify(StripeVerifyCheckoutRequest $request)
+    public function verify(DonationVerifyCheckoutRequest $request)
     {
         try {
+            $paymentGateway = $request->paymentGateway();
+            $this->assertGatewayImplemented($paymentGateway);
+
             $validated = $request->validated();
             $user = $request->user();
             $user = $user instanceof User ? $user : null;
 
-            $result = $this->stripeCheckoutVerificationService->verify(
-                $validated['checkout_session_id'],
-                $user,
-                $validated['transaction_uuid'] ?? null,
-            );
+            $result = match ($paymentGateway) {
+                PaymentGateway::Stripe => $this->stripeCheckoutVerificationService->verify(
+                    $validated['checkout_session_id'],
+                    $user,
+                    $validated['transaction_uuid'] ?? null,
+                ),
+                default => throw new ApiException('This payment gateway is not yet supported.', 501),
+            };
 
-            return JsonResponser::send(false, 'Stripe checkout verified.', [
+            return JsonResponser::send(false, 'Checkout verified.', [
+                'payment_gateway' => $paymentGateway->value,
                 'checkout_session_id' => $result['checkout_session_id'],
                 'payment_status' => $result['payment_status'],
                 'session_status' => $result['session_status'],
                 'sync_action' => $result['sync_action'],
             ], 200);
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'Customer\Donation\StripeCheckoutController@verify');
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Donation\DonationCheckoutController@verify');
+        }
+    }
+
+    private function assertGatewayImplemented(PaymentGateway $paymentGateway): void
+    {
+        if (! $paymentGateway->isImplemented()) {
+            throw new ApiException(
+                sprintf('%s checkout is not yet available.', ucfirst($paymentGateway->value)),
+                501,
+            );
         }
     }
 }
