@@ -17,6 +17,7 @@ final class PaystackCheckoutVerificationService
         private readonly PaystackCheckoutSyncService $paystackCheckoutSyncService,
         private readonly TransactionService $transactionService,
         private readonly TransactionNgnSnapshotService $transactionNgnSnapshot,
+        private readonly CheckoutVerificationReceiptResolver $receiptResolver,
     ) {}
 
     /**
@@ -31,6 +32,7 @@ final class PaystackCheckoutVerificationService
      *     payment_status: string,
      *     session_status: string,
      *     sync_action: string,
+     *     receipt_number: string|null,
      *     transaction: Transaction
      * }
      */
@@ -79,11 +81,14 @@ final class PaystackCheckoutVerificationService
         $transaction = $this->transactionService->findTransaction($transactionBefore->uuid);
         $syncAction = $this->resolveSyncActionAfter($syncAction, $transaction);
 
+        $paymentStatus = $this->mapPaymentStatus($checkoutTransaction);
+
         return [
             'checkout_session_id' => $checkoutTransaction->reference,
-            'payment_status' => $this->mapPaymentStatus($checkoutTransaction),
+            'payment_status' => $paymentStatus,
             'session_status' => $this->mapSessionStatus($checkoutTransaction),
             'sync_action' => $syncAction,
+            'receipt_number' => $this->receiptResolver->resolve($paymentStatus, $transaction),
             'transaction' => $transaction,
         ];
     }

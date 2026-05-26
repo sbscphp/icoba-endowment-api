@@ -3,14 +3,12 @@
 namespace App\Http\Controllers\v1\Customer\Donation;
 
 use App\Enums\PaymentGateway;
-use App\Enums\TransactionStatus;
 use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\Donation\DonationCheckoutRequest;
 use App\Http\Requests\Customer\Donation\DonationVerifyCheckoutRequest;
 use App\Models\Pledge;
-use App\Models\Transaction;
 use App\Models\User;
 use App\Responser\JsonResponser;
 use App\Services\Admin\Transaction\TransactionService;
@@ -21,7 +19,6 @@ use App\Services\Payment\PaystackCheckoutService;
 use App\Services\Payment\PaystackCheckoutVerificationService;
 use App\Services\Payment\StripeCheckoutService;
 use App\Services\Payment\StripeCheckoutVerificationService;
-use App\Services\Receipt\ReceiptService;
 use Illuminate\Validation\ValidationException;
 
 class DonationCheckoutController extends Controller
@@ -35,7 +32,6 @@ class DonationCheckoutController extends Controller
         private readonly TransactionService $transactionService,
         private readonly DonorNameRequirement $donorNameRequirement,
         private readonly CheckoutRedirectResolver $checkoutRedirectResolver,
-        private readonly ReceiptService $receiptService,
     ) {}
 
     public function store(DonationCheckoutRequest $request)
@@ -157,10 +153,7 @@ class DonationCheckoutController extends Controller
                 'payment_status' => $result['payment_status'],
                 'session_status' => $result['session_status'],
                 'sync_action' => $result['sync_action'],
-                'receipt_number' => $this->resolveReceiptNumberForVerify(
-                    $result['payment_status'],
-                    $transaction,
-                ),
+                'receipt_number' => $result['receipt_number'] ?? null,
                 'redirect_url' => $this->checkoutRedirectResolver->redirectForPaymentStatus(
                     $transaction,
                     $result['payment_status'],
@@ -183,16 +176,4 @@ class DonationCheckoutController extends Controller
         }
     }
 
-    private function resolveReceiptNumberForVerify(string $paymentStatus, Transaction $transaction): ?string
-    {
-        if (! in_array($paymentStatus, ['paid', 'complete', 'no_payment_required'], true)) {
-            return null;
-        }
-
-        if ($transaction->status !== TransactionStatus::SUCCESSFUL) {
-            return null;
-        }
-
-        return $this->receiptService->ensurePublicReceiptAccess($transaction)->receipt_number;
-    }
 }
