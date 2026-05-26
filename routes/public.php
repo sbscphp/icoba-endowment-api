@@ -20,6 +20,7 @@ Route::prefix('v1')->group(function () {
         Route::get('campaigns/dropdown', [PublicCampaignController::class, 'dropdown']);
 
         Route::get('tiers', [PublicTierController::class, 'index']);
+        Route::get('campaigns/fund-progress', [LeaderboardController::class, 'fundProgressList']);
         Route::get('campaigns/{campaignUuid}/fund-progress', [LeaderboardController::class, 'fundProgress']);
 
         Route::get('receipts/{receiptNumber}/download', [ReceiptDownloadController::class, 'guestPdf'])

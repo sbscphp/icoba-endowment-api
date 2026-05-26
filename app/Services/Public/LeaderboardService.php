@@ -2,8 +2,11 @@
 
 namespace App\Services\Public;
 
+use App\Enums\CampaignStatus;
 use App\Enums\Currency;
 use App\Enums\DonorTypeSlug;
+use App\Enums\TransactionApplicationType;
+use App\Enums\TransactionStatus;
 use App\Models\Campaign;
 use App\Models\DonorType;
 use App\Models\TierConfiguration;
@@ -213,6 +216,55 @@ SQL;
         }
 
         return $q->get()->map(fn(Transaction $tx) => $this->mapTransactionForPublic($tx));
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return list<array<string, mixed>>
+     */
+    public function campaignsFundProgressList(array $filters): array
+    {
+        $displayCurrency = $this->resolveDisplayCurrency($filters);
+        $amountColumn = $this->resolveAmountColumn($filters);
+
+        $raisedSubquery = DB::table('transactions')
+            ->select('campaign_uuid')
+            ->selectRaw("COALESCE(SUM({$amountColumn}), 0) as raised")
+            ->where('status', TransactionStatus::SUCCESSFUL->value)
+            ->where(function ($query): void {
+                $query->whereNull('application_type')
+                    ->orWhere('application_type', '!=', TransactionApplicationType::PLEDGE_PLACEHOLDER->value);
+            })
+            ->whereNull('deleted_at')
+            ->groupBy('campaign_uuid');
+
+        return DB::table('campaigns')
+            ->leftJoinSub($raisedSubquery, 'raised_totals', 'raised_totals.campaign_uuid', '=', 'campaigns.uuid')
+            ->where('campaigns.allow_public_donation', true)
+            ->where('campaigns.status', '!=', CampaignStatus::DRAFT->value)
+            ->whereNull('campaigns.deleted_at')
+            ->orderBy('campaigns.name')
+            ->select([
+                'campaigns.uuid as campaign_uuid',
+                'campaigns.target_amount',
+                DB::raw('COALESCE(raised_totals.raised, 0) as raised'),
+            ])
+            ->get()
+            ->map(function (object $row) use ($displayCurrency): array {
+                $raised = (float) $row->raised;
+                $target = (float) $row->target_amount;
+                $percent = $target > 0 ? round(min(100, ($raised / $target) * 100), 2) : 0.0;
+
+                return [
+                    'campaign_uuid' => $row->campaign_uuid,
+                    'currency' => $displayCurrency,
+                    'raised' => (string) $raised,
+                    'target' => (string) $target,
+                    'percent' => $percent,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**
