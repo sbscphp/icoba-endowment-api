@@ -173,7 +173,7 @@ class DonationIntentService
             'modelNamespace' => Transaction::class,
             'modelField' => 'transaction_id',
             'prefix' => 'TRN-',
-            'idLength' => 7,
+            'idLength' => 12,
             'idType' => 'numalpha',
         ]);
         if (is_array($transactionId)) {
