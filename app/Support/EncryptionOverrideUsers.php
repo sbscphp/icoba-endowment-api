@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Support;
 
 use Illuminate\Http\Request;
-use JsonException;
 use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * Dev/support accounts that use plaintext API payloads when OVERRIDE_USERS is enabled.
+ *
+ * Override applies only after login: the request must carry a valid Bearer token
+ * for one of the configured override users. Auth routes (login, register, etc.)
+ * are always encrypted.
  */
 final class EncryptionOverrideUsers
 {
@@ -46,6 +49,29 @@ final class EncryptionOverrideUsers
         return is_string($email) && self::isOverrideEmail($email);
     }
 
+    public static function shouldBypassInboundDecryption(Request $request): bool
+    {
+        return self::isAuthenticatedOverrideUser($request);
+    }
+
+    public static function shouldBypassOutboundEncryption(Request $request): bool
+    {
+        return self::isAuthenticatedOverrideUser($request);
+    }
+
+    /**
+     * True when OVERRIDE_USERS is enabled and the request Bearer token (or
+     * resolved Sanctum user) belongs to a configured override account.
+     */
+    public static function isAuthenticatedOverrideUser(Request $request): bool
+    {
+        if (! self::enabled()) {
+            return false;
+        }
+
+        return self::isOverrideUser(self::resolveUserFromRequest($request));
+    }
+
     /**
      * Resolve the authenticated user before route middleware runs (Bearer token lookup).
      */
@@ -70,53 +96,5 @@ final class EncryptionOverrideUsers
         $accessToken = PersonalAccessToken::findToken($token);
 
         return $accessToken?->tokenable;
-    }
-
-    /**
-     * Email supplied on auth routes (login, etc.) before a Bearer token exists.
-     */
-    public static function emailFromRequest(Request $request): ?string
-    {
-        $email = $request->input('email');
-
-        if (is_string($email) && $email !== '') {
-            return self::normaliseEmail($email);
-        }
-
-        $raw = $request->getContent();
-
-        if (! is_string($raw) || trim($raw) === '') {
-            return null;
-        }
-
-        try {
-            $data = json_decode($raw, associative: true, flags: JSON_THROW_ON_ERROR);
-
-            if (is_array($data) && isset($data['email']) && is_string($data['email'])) {
-                return self::normaliseEmail($data['email']);
-            }
-        } catch (JsonException) {
-            // Encrypted envelope or non-JSON body (e.g. multipart form).
-        }
-
-        return null;
-    }
-
-    public static function requestHasOverrideUser(Request $request): bool
-    {
-        if (! self::enabled()) {
-            return false;
-        }
-
-        if (self::isOverrideUser(self::resolveUserFromRequest($request))) {
-            return true;
-        }
-
-        return self::isOverrideEmail(self::emailFromRequest($request));
-    }
-
-    private static function normaliseEmail(string $email): string
-    {
-        return trim($email, " \t\n\r\0\x0B\"'");
     }
 }
