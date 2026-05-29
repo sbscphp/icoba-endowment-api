@@ -4,6 +4,7 @@ namespace App\Http\Controllers\v1\Admin\Reconciliation;
 
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\DateRangeStatsRequest;
 use App\Http\Requests\Admin\Reconciliation\CompleteReconciliationRequest;
 use App\Http\Requests\Admin\Reconciliation\LinkDonationToPledgeRequest;
 use App\Http\Requests\Admin\Reconciliation\ReconciliationQueueListRequest;
@@ -29,10 +30,10 @@ class ReconciliationController extends Controller
         private readonly BankAccountRegistry $bankAccountRegistry,
     ) {}
 
-    public function stats()
+    public function stats(DateRangeStatsRequest $request)
     {
         try {
-            return JsonResponser::send(false, 'Reconciliation stats.', $this->donationReconciliation->stats());
+            return JsonResponser::send(false, 'Reconciliation stats.', $this->donationReconciliation->stats($request->validated()));
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\Reconciliation\ReconciliationController@stats');
         }
@@ -47,15 +48,10 @@ class ReconciliationController extends Controller
 
             $page = $this->donationReconciliation->queue($validated);
 
-            return JsonResponser::send(false, 'Reconciliation queue.', [
-                'items' => ReconciliationQueueResource::collection($page->items())->resolve(),
-                'meta' => [
-                    'current_page' => $page->currentPage(),
-                    'per_page' => $page->perPage(),
-                    'total' => $page->total(),
-                    'last_page' => $page->lastPage(),
-                ],
-            ]);
+            $payload = $page->toArray();
+            $payload['data'] = ReconciliationQueueResource::collection($page)->resolve();
+
+            return JsonResponser::send(false, 'Reconciliation queue.', $payload);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\Reconciliation\ReconciliationController@queue');
         }

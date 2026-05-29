@@ -104,7 +104,7 @@ class CustomerOverduePledgeService
                     return false;
                 }
 
-                return ($item['status'] ?? '') === PledgeScheduleItemStatus::PENDING->value;
+                return ($item['status'] ?? '') === PledgeScheduleItemStatus::OVERDUE->value;
             })
             ->sort(function (array $a, array $b): int {
                 $dateCompare = $this->compareDueDates($a['due_date'] ?? null, $b['due_date'] ?? null);

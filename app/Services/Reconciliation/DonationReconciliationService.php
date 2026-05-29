@@ -2,6 +2,7 @@
 
 namespace App\Services\Reconciliation;
 
+use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Enums\PaymentGateway;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
@@ -29,14 +30,21 @@ class DonationReconciliationService
         private readonly TransactionFinalizationService $finalizationService,
         private readonly TierResolutionService $tierResolution,
         private readonly DonorCumulativeTotalService $cumulativeTotal,
+        private readonly ReconciliationDonorUserService $reconciliationDonorUser,
     ) {}
 
     /**
+     * @param  array<string, mixed>  $validated
      * @return array<string, mixed>
      */
-    public function stats(): array
+    public function stats(array $validated = []): array
     {
+        $dateWindow = ListingFilterRules::resolveDateWindow($validated);
+        $start = $dateWindow['start'];
+        $end = $dateWindow['end'];
+
         $bankTransfer = Transaction::query()->where('application_type', TransactionApplicationType::BANK_TRANSFER->value);
+        $this->applyCreatedAtRange($bankTransfer, $start, $end);
 
         $totalCount = (clone $bankTransfer)->count();
         $totalValueNgn = (float) (clone $bankTransfer)->sum('amount_in_naira');
@@ -64,6 +72,8 @@ class DonationReconciliationService
                 $b->whereJsonContains('metadata->source', 'fcmb_import')
                     ->orWhereJsonContains('metadata->source', 'fcmb_webhook');
             })
+            ->when($start !== null, fn (Builder $q) => $q->where('created_at', '>=', $start))
+            ->when($end !== null, fn (Builder $q) => $q->where('created_at', '<=', $end))
             ->count();
 
         return [
@@ -266,6 +276,18 @@ class DonationReconciliationService
     /**
      * @param  array{
      *     user_uuid?: ?string,
+     *     donor_type?: ?string,
+     *     donor_type_uuid?: ?string,
+     *     donor_email?: ?string,
+     *     donor_phone?: ?string,
+     *     firstname?: ?string,
+     *     lastname?: ?string,
+     *     set_number?: ?string,
+     *     alumni_identifier?: ?string,
+     *     organization_name?: ?string,
+     *     corporate_category_uuid?: ?string,
+     *     rc_number?: ?string,
+     *     tin?: ?string,
      *     campaign_uuid?: ?string,
      *     pledge_uuid?: ?string,
      *     reconciliation_note?: ?string,
@@ -288,6 +310,8 @@ class DonationReconciliationService
             if ($user === null) {
                 throw ValidationException::withMessages(['user_uuid' => ['Donor not found.']]);
             }
+        } elseif ($this->shouldCreateDonorFromProfile($payload)) {
+            $user = $this->reconciliationDonorUser->createFromProfile($payload);
         }
 
         $pledge = null;
@@ -382,6 +406,25 @@ class DonationReconciliationService
                 'phone_number' => $user->phone_number,
                 'alumni_identifier' => $user->alumni_identifier,
             ]);
+    }
+
+    private function applyCreatedAtRange(Builder $query, Carbon|SupportCarbon|null $start, Carbon|SupportCarbon|null $end): void
+    {
+        if ($start instanceof Carbon || $start instanceof SupportCarbon) {
+            $query->where('created_at', '>=', $start);
+        }
+        if ($end instanceof Carbon || $end instanceof SupportCarbon) {
+            $query->where('created_at', '<=', $end);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function shouldCreateDonorFromProfile(array $payload): bool
+    {
+        return (isset($payload['donor_type']) && trim((string) $payload['donor_type']) !== '')
+            || (isset($payload['donor_type_uuid']) && trim((string) $payload['donor_type_uuid']) !== '');
     }
 
     private function paidAtFromMetadata(Transaction $transaction): ?Carbon

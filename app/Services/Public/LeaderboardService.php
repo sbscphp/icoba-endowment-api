@@ -286,6 +286,7 @@ SQL;
 
         return [
             'campaign_uuid' => $campaign->uuid,
+            'campaign_name' => $campaign->name,
             'currency' => $this->resolveDisplayCurrency($filters),
             'raised' => (string) $raised,
             'target' => (string) $target,
