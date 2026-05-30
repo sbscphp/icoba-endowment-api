@@ -2,6 +2,10 @@
 
 return [
 
+    'project_goal_naira' => env('ENDOWMENT_PROJECT_GOAL_NGN', 10_000_000_000),
+
+    'public_stats_cache_seconds' => env('ENDOWMENT_PUBLIC_STATS_CACHE_SECONDS', 300),
+
     'foundation_name' => env('ENDOWMENT_FOUNDATION_NAME', 'ICOBA Endowment Foundation'),
 
     'tax_id' => env('ENDOWMENT_TAX_ID', '12-3456789'),

@@ -8,6 +8,7 @@ use App\Jobs\SendDonationConfirmationEmailJob;
 use App\Jobs\SendDonationTaxReceiptEmailJob;
 use App\Models\Transaction;
 use App\Services\Pledge\PledgeBalanceService;
+use App\Services\Public\PublicEndowmentStatsService;
 use App\Services\Receipt\ReceiptService;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -142,6 +143,8 @@ final class TransactionFinalizationService
             }
 
             EvaluateDonorTierRecognitionJob::dispatch($locked->uuid);
+
+            PublicEndowmentStatsService::forgetCache();
 
             return true;
         });
