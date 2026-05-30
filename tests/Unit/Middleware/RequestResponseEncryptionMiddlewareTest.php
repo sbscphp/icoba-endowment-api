@@ -365,6 +365,37 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         $this->assertArrayHasKey('response', $decoded);
     }
 
+    public function test_override_user_accepts_form_request_body(): void
+    {
+        Config::set('security.override_users.enabled', true);
+
+        $this->repo->shouldReceive('findByClientKey')->with('test-client-key')->once()->andReturn($this->userResourceBoth);
+
+        $overrideUser = new class {
+            public string $email = 'customer-override@yopmail.com';
+        };
+
+        $request = Request::create('/api/v1/auth/login', 'POST', [
+            'email' => 'customer-override@yopmail.com',
+            'password' => 'password',
+            'client' => 'web',
+        ]);
+        $request->headers->set('X-ClientKey', 'test-client-key');
+        $request->setUserResolver(static fn () => $overrideUser);
+
+        $captured = null;
+        $plainResponse = json_encode(['error' => false, 'message' => 'ok', 'data' => []]);
+
+        $result = $this->middleware->handle($request, function (Request $req) use (&$captured, $plainResponse) {
+            $captured = $req->input('email');
+
+            return new Response($plainResponse);
+        });
+
+        $this->assertSame('customer-override@yopmail.com', $captured);
+        $this->assertSame($plainResponse, $result->getContent());
+    }
+
     public function test_override_user_accepts_plain_json_request_body(): void
     {
         Config::set('security.override_users.enabled', true);
@@ -393,46 +424,84 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         $this->assertSame($plainResponse, $result->getContent());
     }
 
-    public function test_login_with_override_email_still_receives_encrypted_response(): void
+    public function test_login_with_form_body_is_rejected_when_mode_is_both(): void
     {
-        Config::set('security.override_users.enabled', true);
-
         $this->repo->shouldReceive('findByClientKey')->with('test-client-key')->once()->andReturn($this->userResourceBoth);
 
-        $plainResponse = json_encode(['error' => false, 'message' => 'ok', 'data' => ['access_token' => 'token']]);
         $request = Request::create('/api/v1/auth/login', 'POST', [
-            'email' => 'customer-override@yopmail.com',
+            'email' => 'customer@example.com',
             'password' => 'password',
             'client' => 'web',
         ]);
         $request->headers->set('X-ClientKey', 'test-client-key');
 
-        $result = $this->middleware->handle($request, fn () => new Response($plainResponse));
+        $result = $this->middleware->handle($request, fn () => new Response('{}'));
+
+        $this->assertSame(BaseResponse::HTTP_UNPROCESSABLE_ENTITY, $result->getStatusCode());
+        $this->assertStringContainsString(
+            'application/json',
+            (string) json_decode($result->getContent(), true)['message'],
+        );
+    }
+
+    public function test_form_body_is_rejected_for_request_only_mode(): void
+    {
+        $user = $this->userWithMode(ApiEncryptionMode::RequestOnly);
+        $this->repo->shouldReceive('findByClientKey')->with('test-client-key')->once()->andReturn($user);
+
+        $request = Request::create('/api/v1/auth/login', 'POST', [
+            'email' => 'customer@example.com',
+            'password' => 'password',
+        ]);
+        $request->headers->set('X-ClientKey', 'test-client-key');
+
+        $result = $this->middleware->handle($request, fn () => new Response('{}'));
+
+        $this->assertSame(BaseResponse::HTTP_UNPROCESSABLE_ENTITY, $result->getStatusCode());
+    }
+
+    public function test_response_only_accepts_form_body(): void
+    {
+        $user = $this->userWithMode(ApiEncryptionMode::ResponseOnly);
+        $this->repo->shouldReceive('findByClientKey')->with('test-client-key')->once()->andReturn($user);
+
+        $request = Request::create('/api/v1/auth/login', 'POST', [
+            'email' => 'customer@example.com',
+            'password' => 'password',
+            'client' => 'web',
+        ]);
+        $request->headers->set('X-ClientKey', 'test-client-key');
+
+        $capturedEmail = null;
+        $plainResponse = json_encode(['error' => false, 'message' => 'ok', 'data' => []]);
+
+        $result = $this->middleware->handle($request, function (Request $req) use (&$capturedEmail, $plainResponse) {
+            $capturedEmail = $req->input('email');
+
+            return JsonResponse::fromJsonString($plainResponse);
+        });
+
+        $this->assertSame('customer@example.com', $capturedEmail);
 
         $decoded = json_decode($result->getContent(), true);
-
         $this->assertIsArray($decoded);
         $this->assertArrayHasKey('response', $decoded);
     }
 
-    public function test_non_auth_request_with_override_email_in_body_still_encrypts_response(): void
+    public function test_non_auth_request_with_override_email_in_form_body_is_rejected_for_both_mode(): void
     {
         Config::set('security.override_users.enabled', true);
 
         $this->repo->shouldReceive('findByClientKey')->with('test-client-key')->once()->andReturn($this->userResourceBoth);
 
-        $plainResponse = json_encode(['created' => true]);
         $request = Request::create('/api/v1/users', 'POST', [
             'email' => 'customer-override@yopmail.com',
             'name' => 'Test',
         ]);
         $request->headers->set('X-ClientKey', 'test-client-key');
 
-        $result = $this->middleware->handle($request, fn () => new Response($plainResponse));
+        $result = $this->middleware->handle($request, fn () => new Response('{}'));
 
-        $decoded = json_decode($result->getContent(), true);
-
-        $this->assertIsArray($decoded);
-        $this->assertArrayHasKey('response', $decoded);
+        $this->assertSame(BaseResponse::HTTP_UNPROCESSABLE_ENTITY, $result->getStatusCode());
     }
 }

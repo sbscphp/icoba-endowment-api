@@ -67,8 +67,8 @@ Implementation references:
 
 | Mode | Incoming Request | Outgoing Response | Typical Use Case |
 |---|---|---|---|
-| `both` | Decrypt encrypted payload/query | Encrypt response envelope | Full transport confidentiality for partner integrations |
-| `request_only` | Decrypt encrypted payload/query (or accept plain JSON for body fallback) | Plain JSON response | Confidential inbound data, simpler downstream client response handling |
+| `both` | Decrypt encrypted payload/query (JSON body only; form/multipart rejected) | Encrypt response envelope | Full transport confidentiality for partner integrations |
+| `request_only` | Decrypt encrypted payload/query (plain JSON body OK; form/multipart rejected) | Plain JSON response | Confidential inbound data, simpler downstream client response handling |
 | `response_only` | Plain JSON request | Encrypt response envelope | Transitional rollout where clients can encrypt-read before encrypt-write |
 
 > Recommended default for sensitive integrations: `both`.
