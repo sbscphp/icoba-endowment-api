@@ -8,12 +8,17 @@ enum Currency: string
     case USD = 'USD';
     case GBP = 'GBP';
     case EUR = 'EUR';
-    case GHS = 'GHS';
 
     /** @return list<string> */
     public static function values(): array
     {
         return array_column(self::cases(), 'value');
+    }
+
+    /** Currencies fetched from the live FX provider (NGN per 1 unit). */
+    public static function fxFetchable(): array
+    {
+        return [self::USD, self::GBP, self::EUR];
     }
 
     public function symbol(): string
@@ -23,13 +28,11 @@ enum Currency: string
             self::USD => '$',
             self::GBP => '£',
             self::EUR => '€',
-            self::GHS => '₵',
         };
     }
 
     /**
-     * Stub reference: NGN per 1 unit of this currency (aligns with historical seed data).
-     * Replace with a live FX service when available; pledge capture stores the resolved value at creation time.
+     * Fallback NGN per 1 unit when no exchange_rates row exists for the requested date.
      */
     public function referenceNairaRatePerUnit(): float
     {
@@ -38,7 +41,6 @@ enum Currency: string
             self::USD => 1500.0,
             self::GBP => 1900.0,
             self::EUR => 1650.0,
-            self::GHS => 130.0,
         };
     }
 }
