@@ -438,10 +438,13 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
         $result = $this->middleware->handle($request, fn () => new Response('{}'));
 
         $this->assertSame(BaseResponse::HTTP_UNPROCESSABLE_ENTITY, $result->getStatusCode());
-        $this->assertStringContainsString(
-            'application/json',
-            (string) json_decode($result->getContent(), true)['message'],
-        );
+
+        $decoded = json_decode($result->getContent(), true);
+        $this->assertIsArray($decoded);
+        $this->assertArrayHasKey('response', $decoded);
+
+        $plain = json_decode(CryptoService::decryptAes($decoded['response'], self::KEY, self::IV), true);
+        $this->assertStringContainsString('application/json', (string) ($plain['message'] ?? ''));
     }
 
     public function test_form_body_is_rejected_for_request_only_mode(): void
