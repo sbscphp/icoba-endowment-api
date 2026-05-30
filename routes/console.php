@@ -19,3 +19,9 @@ Schedule::command('contact-submissions:auto-close')
 Schedule::command('pledges:send-payment-reminders')
     ->dailyAt('08:00')
     ->withoutOverlapping();
+
+$exchangeRateFetchHours = max(1, min(12, (int) config('endowment.exchange_rate.fetch_interval_hours', 4)));
+
+Schedule::command('exchange:fetch-rates')
+    ->cron(sprintf('0 */%d * * *', $exchangeRateFetchHours))
+    ->withoutOverlapping();

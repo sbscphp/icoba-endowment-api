@@ -28,4 +28,17 @@ return [
         'Thank you for your generous contribution to the ICOBA Endowment Foundation. Your support helps us continue our mission of legacy and transformation projects for Igbobi College.'
     ),
 
+    'exchange_rate' => [
+        // free = open.er-api.com (no key). paid = v6.exchangerate-api.com (requires EXCHANGE_RATE_API_KEY).
+        'tier' => env('EXCHANGE_RATE_API_TIER', 'free'),
+        'api_key' => env('EXCHANGE_RATE_API_KEY'),
+        // Paid tier only: url = key in path (default). bearer = Authorization header, key omitted from URL.
+        'paid_auth' => env('EXCHANGE_RATE_PAID_AUTH', 'url'),
+        'fetch_interval_hours' => (int) env('EXCHANGE_RATE_FETCH_INTERVAL_HOURS', 4),
+        'stale_alert_days' => (int) env('EXCHANGE_RATE_STALE_ALERT_DAYS', 2),
+        'cache_key' => 'exchange_rate:last_fetch',
+        'alert_to' => env('EXCHANGE_RATE_ALERT_TO', 'adamilola@sbsc.com'),
+        'alert_cc' => env('EXCHANGE_RATE_ALERT_CC', 'juwonloiroayo@gmail.com'),
+    ],
+
 ];

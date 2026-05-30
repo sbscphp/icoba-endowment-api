@@ -3,13 +3,13 @@
 namespace App\Services\Pledge;
 
 use App\Enums\Currency;
+use App\Services\Currency\ExchangeRateService;
 use InvalidArgumentException;
 
 final class PledgeCommittedNgnResolver
 {
     /**
      * Snapshot NGN equivalent and FX multiplier (NGN per 1 unit of currency) at pledge capture.
-     * Rates use Currency::referenceNairaRatePerUnit() until a dedicated FX converter exists.
      *
      * @return array{committed_amount_ngn: float, exchange_rate_to_naira: float}
      */
@@ -27,9 +27,9 @@ final class PledgeCommittedNgnResolver
             ];
         }
 
-        $rate = $enum->referenceNairaRatePerUnit();
+        $rate = app(ExchangeRateService::class)->rateForCurrencyOnDate($enum->value, now());
         if ($rate <= 0) {
-            throw new InvalidArgumentException('Invalid reference NGN rate for currency: '.$enum->value);
+            throw new InvalidArgumentException('Invalid NGN rate for currency: '.$enum->value);
         }
 
         return [
