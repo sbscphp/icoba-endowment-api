@@ -27,6 +27,11 @@ final readonly class RequestResponseEncryptionMiddleware
     private const CLIENT_KEY_HEADER = 'X-ClientKey';
 
     /**
+     * Returned as {@see InvalidArgumentException} message and mapped to HTTP 422 in {@see handle()}.
+     */
+    private const NON_JSON_INBOUND_BODY_MESSAGE = 'Request body must be application/json with a JSON object or encrypted payload envelope.';
+
+    /**
      * Route path suffixes that bypass encryption entirely.
      *
      * @var list<string>
@@ -102,7 +107,25 @@ final readonly class RequestResponseEncryptionMiddleware
                 ['message' => 'Request body must be valid JSON.'],
                 BaseResponse::HTTP_UNPROCESSABLE_ENTITY,
             );
-        } catch (RuntimeException|InvalidArgumentException $e) {
+        } catch (InvalidArgumentException $e) {
+            if ($e->getMessage() === self::NON_JSON_INBOUND_BODY_MESSAGE) {
+                return response()->json(
+                    ['message' => $e->getMessage()],
+                    BaseResponse::HTTP_UNPROCESSABLE_ENTITY,
+                );
+            }
+
+            Log::error('Encryption middleware: failed to decrypt inbound payload.', [
+                'error' => $e->getMessage(),
+                'path' => $request->path(),
+                'method' => $request->method(),
+            ]);
+
+            return response()->json(
+                ['message' => 'Invalid encrypted payload.'],
+                BaseResponse::HTTP_UNPROCESSABLE_ENTITY,
+            );
+        } catch (RuntimeException $e) {
             Log::error('Encryption middleware: failed to decrypt inbound payload.', [
                 'error' => $e->getMessage(),
                 'path' => $request->path(),
@@ -242,6 +265,10 @@ final readonly class RequestResponseEncryptionMiddleware
      */
     private function decryptInboundBody(Request $request, ApiUserResource $apiUser, ApiEncryptionMode $mode): void
     {
+        if ($mode->decryptsInbound()) {
+            $this->rejectNonJsonInboundBody($request);
+        }
+
         $raw = $request->getContent();
 
         if (blank($raw)) {
@@ -278,6 +305,23 @@ final readonly class RequestResponseEncryptionMiddleware
 
         // ResponseOnly: plaintext JSON request bodies.
         $request->replace($data);
+    }
+
+    /**
+     * Multipart and form-urlencoded bodies are parsed by PHP with an empty raw stream, which would
+     * otherwise skip decryption while still reaching controllers in plaintext.
+     *
+     * @throws InvalidArgumentException
+     */
+    private function rejectNonJsonInboundBody(Request $request): void
+    {
+        if (! blank($request->getContent())) {
+            return;
+        }
+
+        if ($request->request->count() > 0 || $request->files->count() > 0) {
+            throw new InvalidArgumentException(self::NON_JSON_INBOUND_BODY_MESSAGE);
+        }
     }
 
     private function encryptOutboundResponse(BaseResponse $response, ApiUserResource $apiUser): BaseResponse
