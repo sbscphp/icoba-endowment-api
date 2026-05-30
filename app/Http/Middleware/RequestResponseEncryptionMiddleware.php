@@ -103,15 +103,23 @@ final readonly class RequestResponseEncryptionMiddleware
                 'method' => $request->method(),
             ]);
 
-            return response()->json(
-                ['message' => 'Request body must be valid JSON.'],
-                BaseResponse::HTTP_UNPROCESSABLE_ENTITY,
+            return $this->finalizeOutboundResponse(
+                $request,
+                $apiUser,
+                response()->json(
+                    ['message' => 'Request body must be valid JSON.'],
+                    BaseResponse::HTTP_UNPROCESSABLE_ENTITY,
+                ),
             );
         } catch (InvalidArgumentException $e) {
             if ($e->getMessage() === self::NON_JSON_INBOUND_BODY_MESSAGE) {
-                return response()->json(
-                    ['message' => $e->getMessage()],
-                    BaseResponse::HTTP_UNPROCESSABLE_ENTITY,
+                return $this->finalizeOutboundResponse(
+                    $request,
+                    $apiUser,
+                    response()->json(
+                        ['message' => $e->getMessage()],
+                        BaseResponse::HTTP_UNPROCESSABLE_ENTITY,
+                    ),
                 );
             }
 
@@ -121,9 +129,13 @@ final readonly class RequestResponseEncryptionMiddleware
                 'method' => $request->method(),
             ]);
 
-            return response()->json(
-                ['message' => 'Invalid encrypted payload.'],
-                BaseResponse::HTTP_UNPROCESSABLE_ENTITY,
+            return $this->finalizeOutboundResponse(
+                $request,
+                $apiUser,
+                response()->json(
+                    ['message' => 'Invalid encrypted payload.'],
+                    BaseResponse::HTTP_UNPROCESSABLE_ENTITY,
+                ),
             );
         } catch (RuntimeException $e) {
             Log::error('Encryption middleware: failed to decrypt inbound payload.', [
@@ -132,14 +144,24 @@ final readonly class RequestResponseEncryptionMiddleware
                 'method' => $request->method(),
             ]);
 
-            return response()->json(
-                ['message' => 'Invalid encrypted payload.'],
-                BaseResponse::HTTP_UNPROCESSABLE_ENTITY,
+            return $this->finalizeOutboundResponse(
+                $request,
+                $apiUser,
+                response()->json(
+                    ['message' => 'Invalid encrypted payload.'],
+                    BaseResponse::HTTP_UNPROCESSABLE_ENTITY,
+                ),
             );
         }
 
-        $response = $next($request);
+        return $this->finalizeOutboundResponse($request, $apiUser, $next($request));
+    }
 
+    private function finalizeOutboundResponse(
+        Request $request,
+        ApiUserResource $apiUser,
+        BaseResponse $response,
+    ): BaseResponse {
         if (EncryptionOverrideUsers::shouldBypassOutboundEncryption($request)) {
             return $response;
         }
