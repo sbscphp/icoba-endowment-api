@@ -1,17 +1,16 @@
 <?php
 
-namespace App\Http\Requests\Admin\CertificateTemplate;
+namespace App\Http\Requests\Admin\IssuedCertificate;
 
 use App\Enums\CertificatePreviewFormat;
 use App\Http\Requests\ApiFormRequest;
 use Illuminate\Validation\Rule;
 
-class PreviewCertificateTemplateRequest extends ApiFormRequest
+class PreviewIssuedCertificateRequest extends ApiFormRequest
 {
     public function rules(): array
     {
         return [
-            'awardee_name' => ['sometimes', 'nullable', 'string', 'max:120'],
             'format' => ['sometimes', 'nullable', 'string', Rule::in(CertificatePreviewFormat::values())],
         ];
     }

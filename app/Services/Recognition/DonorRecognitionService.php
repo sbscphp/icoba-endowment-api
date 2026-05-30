@@ -5,15 +5,17 @@ namespace App\Services\Recognition;
 use App\Enums\IssuedCertificateStatus;
 use App\Enums\TransactionStatus;
 use App\Helpers\GeneralHelper;
+use App\Http\Requests\Concerns\ListingFilterRules;
+use App\Jobs\GenerateCertificateImageJob;
 use App\Jobs\SendDonorRecognitionEmailJob;
 use App\Models\CertificateTemplate;
 use App\Models\DonorRecognition;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
-use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\User;
 use App\Services\Donation\DonorCumulativeTotalService;
 use App\Services\Tier\TierResolutionService;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -87,9 +89,9 @@ final class DonorRecognitionService
 
     /**
      * @param  array<string, mixed>  $filters
-     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<int, DonorRecognition>
+     * @return LengthAwarePaginator<int, DonorRecognition>
      */
-    public function listForUser(User $user, array $filters = []): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    public function listForUser(User $user, array $filters = []): LengthAwarePaginator
     {
         $perPage = max(1, min((int) ($filters['per_page'] ?? 15), 100));
         $email = strtolower(trim((string) $user->email));
@@ -114,9 +116,20 @@ final class DonorRecognitionService
             $query->where('issued_at', '<=', $dateWindow['end']);
         }
 
-        return $query
+        $paginator = $query
             ->orderByDesc('issued_at')
             ->paginate($perPage);
+
+        foreach ($paginator->items() as $recognition) {
+            if (
+                blank($recognition->certificate_image_url)
+                && $recognition->status !== IssuedCertificateStatus::REVOKED
+            ) {
+                GenerateCertificateImageJob::dispatch($recognition->uuid);
+            }
+        }
+
+        return $paginator;
     }
 
     public function resolveOwnedRecognition(User $user, string $recognitionUuid): DonorRecognition
@@ -192,6 +205,7 @@ final class DonorRecognitionService
             'initial_amount' => $recognition->initial_amount !== null ? (string) $recognition->initial_amount : null,
             'initial_currency' => $recognition->initial_currency,
             'issued_at' => $recognition->issued_at,
+            'certificate_image_url' => $recognition->certificate_image_url,
             'download_url' => $this->guestCertificateDownloadUrl($recognition),
         ];
     }
@@ -228,7 +242,7 @@ final class DonorRecognitionService
 
             $design = is_array($template->design) ? $template->design : [];
 
-            return DonorRecognition::query()->create([
+            $recognition = DonorRecognition::query()->create([
                 'recognition_number' => $this->generateUniqueRecognitionNumber(),
                 'donor_key' => $donorKey,
                 'user_uuid' => $userUuid,
@@ -250,6 +264,10 @@ final class DonorRecognitionService
                     'initial_currency' => strtoupper((string) $triggerTransaction->currency),
                 ],
             ]);
+
+            GenerateCertificateImageJob::dispatch($recognition->uuid);
+
+            return $recognition;
         });
     }
 

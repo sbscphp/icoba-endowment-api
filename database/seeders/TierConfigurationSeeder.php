@@ -22,6 +22,7 @@ class TierConfigurationSeeder extends Seeder
                 'sort_order' => 1,
                 'badge_slug' => 'friends-of-igbobi-college',
                 'base_color' => '#64748B',
+                'tier_badge_url' => 'https://res.cloudinary.com/sbsc/image/upload/v1780082977/tier-badges/67186_2026-05-29_1780082976.png',
             ],
             [
                 'name' => 'Bronze Contributor',
@@ -31,6 +32,7 @@ class TierConfigurationSeeder extends Seeder
                 'sort_order' => 2,
                 'badge_slug' => 'bronze-contributor',
                 'base_color' => '#CD7F32',
+                'tier_badge_url' => 'https://res.cloudinary.com/sbsc/image/upload/v1780082901/tier-badges/31533_2026-05-29_1780082901.png',
             ],
             [
                 'name' => 'Silver Supporter',
@@ -40,6 +42,7 @@ class TierConfigurationSeeder extends Seeder
                 'sort_order' => 3,
                 'badge_slug' => 'silver-supporter',
                 'base_color' => '#C0C0C0',
+                'tier_badge_url' => 'https://res.cloudinary.com/sbsc/image/upload/v1780082616/tier-badges/39338_2026-05-29_1780082615.png',
             ],
             [
                 'name' => 'Gold Benefactor',
@@ -49,6 +52,7 @@ class TierConfigurationSeeder extends Seeder
                 'sort_order' => 4,
                 'badge_slug' => 'gold-benefactor',
                 'base_color' => '#FFD700',
+                'tier_badge_url' => 'https://res.cloudinary.com/sbsc/image/upload/v1780083139/tier-badges/37434_2026-05-29_1780083138.png',
             ],
             [
                 'name' => 'Platinum Benefactor',
@@ -58,6 +62,7 @@ class TierConfigurationSeeder extends Seeder
                 'sort_order' => 5,
                 'badge_slug' => 'platinum-benefactor',
                 'base_color' => '#E5E4E2',
+                'tier_badge_url' => 'https://res.cloudinary.com/sbsc/image/upload/v1780083255/tier-badges/14762_2026-05-29_1780083254.png',
             ],
             [
                 'name' => "Founders/Principals' Circle",
@@ -67,6 +72,7 @@ class TierConfigurationSeeder extends Seeder
                 'sort_order' => 6,
                 'badge_slug' => 'founders-principals-circle',
                 'base_color' => '#7C3AED',
+                'tier_badge_url' => 'https://res.cloudinary.com/sbsc/image/upload/v1780083455/tier-badges/28269_2026-05-29_1780083454.png',
             ],
         ];
 

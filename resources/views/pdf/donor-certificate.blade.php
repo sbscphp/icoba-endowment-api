@@ -4,52 +4,83 @@
     <meta charset="utf-8">
     <title>Donor Certificate</title>
     <style>
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         @page { margin: 0; size: A4 landscape; }
         html, body {
             font-family: DejaVu Sans, sans-serif;
             margin: 0;
             padding: 0;
             color: #1f2937;
-            width: 100%;
-            height: 100%;
+            width: 842px;
+            height: 595px;
         }
         .page {
             position: relative;
-            width: 100%;
-            min-height: 595px;
+            width: 842px;
+            height: 595px;
+            margin: 0;
+            padding: 0;
         }
         .background {
             position: absolute;
             top: 0;
             left: 0;
-            width: 100%;
+            width: 842px;
             height: 595px;
             z-index: 0;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            display: block;
         }
-        .layout-table {
-            position: relative;
+        .side-image {
+            position: absolute;
+            top: 0;
+            width: 269px;
+            height: 595px;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            display: block;
             z-index: 1;
+        }
+        .side-image--left { left: 0; }
+        .side-image--right { right: 0; background-position: right center; }
+        .content-panel {
+            position: absolute;
+            top: 0;
+            height: 595px;
+            z-index: 2;
+            margin: 0;
+            padding: 0;
+        }
+        .content-panel--left-image { left: 269px; width: 573px; }
+        .content-panel--right-image { left: 0; width: 573px; }
+        .content-panel--full { left: 0; width: 842px; }
+        .content-layout {
             width: 100%;
-            min-height: 595px;
+            height: 595px;
             border-collapse: collapse;
+            table-layout: fixed;
         }
         .meta-cell {
-            padding: 28px 48px 8px 48px;
+            padding: 16px 40px 4px 40px;
             text-align: center;
             font-size: 9px;
             color: #6b7280;
             line-height: 1.5;
         }
         .body-cell {
-            padding: 12px 64px 160px 64px;
+            padding: 8px 40px;
             text-align: center;
             vertical-align: middle;
         }
+        .icon-wrap {
+            margin-bottom: 10px;
+        }
         .icon {
-            width: 72px;
+            width: 88px;
             height: auto;
-            margin: 0 auto 12px auto;
         }
         .awardee-name {
             font-family: {{ $awardeeFont ?? 'DejaVu Sans' }}, DejaVu Sans, sans-serif;
@@ -57,16 +88,22 @@
             font-weight: {{ $awardeeFontWeight ?? 'bold' }};
             text-align: {{ $awardeeTextAlign ?? 'center' }};
             color: #122168;
-            margin: 0 0 18px 0;
+            margin: 8px auto 6px auto;
             line-height: 1.3;
         }
+        .awardee-rule {
+            width: 72%;
+            margin: 0 auto 12px auto;
+            border-top: 1px dashed #9ca3af;
+            height: 0;
+        }
         .line {
-            margin: 8px auto;
+            margin: 6px auto;
             line-height: 1.5;
-            max-width: 620px;
+            max-width: 500px;
         }
         .signatories-cell {
-            padding: 0 64px 40px 64px;
+            padding: 0 40px 28px 40px;
             vertical-align: bottom;
         }
         .signatories-table {
@@ -74,11 +111,12 @@
             border-collapse: collapse;
         }
         .signatories-table td {
-            width: 50%;
             vertical-align: bottom;
             text-align: center;
-            padding: 0 12px;
+            padding: 0 8px;
         }
+        .signatory-col { width: 33%; }
+        .seal-col { width: 34%; }
         .signature-image {
             max-width: 120px;
             max-height: 48px;
@@ -94,76 +132,120 @@
             color: #6b7280;
             margin: 4px 0 0 0;
         }
-        .seal-wrap {
-            text-align: center;
-            margin-top: 16px;
-        }
         .seal {
             width: 96px;
             height: auto;
+            margin: 0 auto;
         }
     </style>
 </head>
 <body>
-    <div class="page">
-        @if(!empty($backgroundDataUri))
-            <img src="{{ $backgroundDataUri }}" alt="" class="background">
-        @endif
+@php
+    $sideImageSrc = $sideImageDataUri ?: ($sideImageUrl ?? null);
+    $backgroundSrc = $backgroundDataUri ?: ($backgroundUrl ?? null);
+    $iconSrc = $iconDataUri ?: ($iconUrl ?? null);
+    $sealSrc = $sealDataUri ?: ($sealUrl ?? null);
+    $linesBeforeName = $linesBeforeName ?? [];
+    $linesAfterName = $linesAfterName ?? [];
+    $isSideLayout = in_array($imageType ?? 'background', ['image_left', 'image_right'], true);
+    $isImageRight = ($imageType ?? 'background') === 'image_right';
+    $contentPanelClass = $isSideLayout
+        ? ($isImageRight ? 'content-panel--right-image' : 'content-panel--left-image')
+        : 'content-panel--full';
+@endphp
 
-        <table class="layout-table" cellpadding="0" cellspacing="0">
+<div class="page">
+    @if(!$isSideLayout && !empty($backgroundSrc))
+        <img src="{{ $backgroundSrc }}" alt="" class="background">
+    @endif
+
+    @if($isSideLayout && !empty($sideImageSrc))
+        <img
+            src="{{ $sideImageSrc }}"
+            alt=""
+            class="side-image {{ $isImageRight ? 'side-image--right' : 'side-image--left' }}"
+            width="269"
+            height="595"
+        >
+    @endif
+
+    <div class="content-panel {{ $contentPanelClass }}">
+        <table class="content-layout" cellpadding="0" cellspacing="0" height="595">
             <tr>
-                <td class="meta-cell">
+                <td class="meta-cell" height="8%" valign="top">
                     {{ $recognitionNumber }}<br>
                     {{ $issuedAt }}
                 </td>
             </tr>
             <tr>
-                <td class="body-cell" align="center" valign="middle">
-                    @if(!empty($iconDataUri))
-                        <table width="100%" cellpadding="0" cellspacing="0">
-                            <tr>
-                                <td align="{{ $iconPosition === 'left' ? 'left' : ($iconPosition === 'right' ? 'right' : 'center') }}">
-                                    <img src="{{ $iconDataUri }}" alt="" class="icon">
-                                </td>
-                            </tr>
-                        </table>
+                <td class="body-cell" height="57%" align="center" valign="middle">
+                    @if(!empty($iconSrc))
+                        <div class="icon-wrap">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td align="{{ $iconPosition === 'left' ? 'left' : ($iconPosition === 'right' ? 'right' : 'center') }}">
+                                        <img src="{{ $iconSrc }}" alt="" class="icon">
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
                     @endif
 
-                    <div class="awardee-name">{{ $awardeeName }}</div>
-
-                    @foreach($lines as $line)
+                    @foreach($linesBeforeName as $line)
                         <div class="line" style="font-family: {{ $line['font'] }}, DejaVu Sans, sans-serif; font-size: {{ $line['size'] }}; font-weight: {{ $line['weight'] }}; text-align: {{ $line['position'] }};">
                             {{ $line['text'] }}
                         </div>
                     @endforeach
 
-                    @if(!empty($sealDataUri))
-                        <div class="seal-wrap">
-                            <img src="{{ $sealDataUri }}" alt="" class="seal">
+                    <div class="awardee-name">{{ $awardeeName }}</div>
+                    <div class="awardee-rule"></div>
+
+                    @foreach($linesAfterName as $line)
+                        <div class="line" style="font-family: {{ $line['font'] }}, DejaVu Sans, sans-serif; font-size: {{ $line['size'] }}; font-weight: {{ $line['weight'] }}; text-align: {{ $line['position'] }};">
+                            {{ $line['text'] }}
                         </div>
-                    @endif
+                    @endforeach
                 </td>
             </tr>
-            @if(!empty($signatories))
+            @if(!empty($leftSignatory) || !empty($rightSignatory) || !empty($sealSrc))
                 <tr>
-                    <td class="signatories-cell">
+                    <td class="signatories-cell" height="35%" valign="bottom">
                         <table class="signatories-table" cellpadding="0" cellspacing="0">
                             <tr>
-                                @foreach($signatories as $signatory)
-                                    <td>
-                                        @if(!empty($signatory['signature_data_uri']))
-                                            <img src="{{ $signatory['signature_data_uri'] }}" alt="" class="signature-image">
+                                <td class="signatory-col">
+                                    @if(!empty($leftSignatory))
+                                        @if(!empty($leftSignatory['signature_data_uri']) || !empty($leftSignatory['signature_url']))
+                                            <img src="{{ $leftSignatory['signature_data_uri'] ?: $leftSignatory['signature_url'] }}" alt="" class="signature-image">
                                         @endif
-                                        <p class="signature-name">{{ $signatory['name'] }}</p>
-                                        <p class="signature-position">{{ $signatory['position'] }}</p>
-                                    </td>
-                                @endforeach
+                                        <p class="signature-name">{{ $leftSignatory['name'] }}</p>
+                                        <p class="signature-position">{{ $leftSignatory['position'] }}</p>
+                                    @endif
+                                </td>
+                                <td class="seal-col">
+                                    @if(!empty($sealSrc))
+                                        <img src="{{ $sealSrc }}" alt="" class="seal">
+                                    @endif
+                                </td>
+                                <td class="signatory-col">
+                                    @if(!empty($rightSignatory))
+                                        @if(!empty($rightSignatory['signature_data_uri']) || !empty($rightSignatory['signature_url']))
+                                            <img src="{{ $rightSignatory['signature_data_uri'] ?: $rightSignatory['signature_url'] }}" alt="" class="signature-image">
+                                        @endif
+                                        <p class="signature-name">{{ $rightSignatory['name'] }}</p>
+                                        <p class="signature-position">{{ $rightSignatory['position'] }}</p>
+                                    @endif
+                                </td>
                             </tr>
                         </table>
                     </td>
                 </tr>
+            @else
+                <tr>
+                    <td class="signatories-cell" height="35%" valign="bottom">&nbsp;</td>
+                </tr>
             @endif
         </table>
     </div>
+</div>
 </body>
 </html>

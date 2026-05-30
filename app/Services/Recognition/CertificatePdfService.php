@@ -2,6 +2,8 @@
 
 namespace App\Services\Recognition;
 
+use App\Enums\CertificateImageType;
+use App\Enums\CertificatePreviewFormat;
 use App\Enums\CertificateTextPosition;
 use App\Exceptions\ApiException;
 use App\Models\CertificateTemplate;
@@ -9,11 +11,13 @@ use App\Models\DonorRecognition;
 use App\Models\TierConfiguration;
 use Dompdf\Dompdf;
 use Dompdf\Options;
-use Illuminate\Support\Facades\Http;
 use Symfony\Component\HttpFoundation\Response;
 
 final class CertificatePdfService
 {
+    public function __construct(
+        private readonly CertificateAssetResolver $assetResolver,
+    ) {}
     public function streamCertificate(DonorRecognition $recognition): Response
     {
         $filename = 'donor-certificate-'.$recognition->recognition_number.'.pdf';
@@ -36,20 +40,7 @@ final class CertificatePdfService
 
     public function streamTemplatePreview(CertificateTemplate $template, string $awardeeName = 'Sample Donor'): Response
     {
-        $template->loadMissing('tier');
-        $tier = $template->tier;
-
-        if ($tier === null) {
-            throw new ApiException('Certificate template is not linked to a tier.', 422);
-        }
-
-        $recognition = $this->buildPreviewRecognition($template, $tier, $awardeeName);
-        $filename = 'certificate-preview-'.preg_replace('/[^a-z0-9\-]+/i', '-', strtolower($template->name)).'.pdf';
-
-        return new Response($this->renderCertificateBinary($recognition), 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="'.$filename.'"',
-        ]);
+        return $this->streamTemplatePreviewByFormat($template, $awardeeName, CertificatePreviewFormat::Pdf);
     }
 
     public function renderCertificateBinary(DonorRecognition $recognition): string
@@ -60,6 +51,47 @@ final class CertificatePdfService
             'pdf.donor-certificate',
             $this->certificateViewData($recognition),
         );
+    }
+
+    public function renderCertificateHtml(DonorRecognition $recognition): string
+    {
+        $recognition->loadMissing('tier', 'certificateTemplate');
+
+        return view('pdf.donor-certificate', $this->certificateViewData($recognition))->render();
+    }
+
+    public function streamCertificateByFormat(DonorRecognition $recognition, CertificatePreviewFormat $format): Response
+    {
+        return match ($format) {
+            CertificatePreviewFormat::Html => new Response(
+                $this->renderCertificateHtml($recognition),
+                200,
+                ['Content-Type' => 'text/html; charset=UTF-8'],
+            ),
+            CertificatePreviewFormat::Png => new Response(
+                app(CertificateImageService::class)->renderPngBinary($recognition),
+                200,
+                ['Content-Type' => 'image/png'],
+            ),
+            CertificatePreviewFormat::Pdf => $this->streamCertificateInline($recognition),
+        };
+    }
+
+    public function streamTemplatePreviewByFormat(
+        CertificateTemplate $template,
+        string $awardeeName,
+        CertificatePreviewFormat $format,
+    ): Response {
+        $template->loadMissing('tier');
+        $tier = $template->tier;
+
+        if ($tier === null) {
+            throw new ApiException('Certificate template is not linked to a tier.', 422);
+        }
+
+        $recognition = $this->buildPreviewRecognition($template, $tier, $awardeeName);
+
+        return $this->streamCertificateByFormat($recognition, $format);
     }
 
     /**
@@ -97,10 +129,12 @@ final class CertificatePdfService
                 'text' => $text,
                 'font' => (string) ($line['font'] ?? 'DejaVu Sans'),
                 'size' => (string) ($line['size'] ?? '14px'),
-                'weight' => (string) ($line['weight'] ?? 'normal'),
+                'weight' => $this->normalizeFontWeight((string) ($line['weight'] ?? 'normal')),
                 'position' => $this->resolveTextAlign((string) ($line['position'] ?? 'center')),
             ];
         }
+
+        [$linesBeforeName, $linesAfterName] = $this->splitLinesAroundAwardeeName($lines, $design);
 
         $signatories = [];
         foreach ((array) ($design['signatories'] ?? []) as $signatory) {
@@ -108,28 +142,47 @@ final class CertificatePdfService
                 continue;
             }
 
+            $signature = $this->assetResolver->resolve($signatory['signature_url'] ?? null);
+
             $signatories[] = [
                 'name' => (string) ($signatory['name'] ?? ''),
                 'position' => (string) ($signatory['position'] ?? ''),
-                'signature_data_uri' => $this->resolveRemoteImageDataUri($signatory['signature_url'] ?? null),
+                'signature_data_uri' => $signature['data_uri'],
+                'signature_url' => $signature['url'],
             ];
         }
+
+        $background = $this->assetResolver->resolve($design['image_url'] ?? null);
+        $icon = $this->assetResolver->resolve($design['icon_url'] ?? null);
+        $seal = $this->assetResolver->resolve($design['seal_image_url'] ?? null);
+        $imageType = CertificateImageType::tryFrom((string) ($design['image_type'] ?? ''))
+            ?? CertificateImageType::BACKGROUND;
 
         return [
             'recognitionNumber' => $recognition->recognition_number,
             'awardeeName' => $recognition->awardee_name,
             'tierName' => (string) ($recognition->tier?->name ?? $snapshot['tier_name'] ?? ''),
             'issuedAt' => $recognition->issued_at?->format('F j, Y') ?? now()->format('F j, Y'),
-            'backgroundDataUri' => $this->resolveRemoteImageDataUri($design['image_url'] ?? null),
-            'iconDataUri' => $this->resolveRemoteImageDataUri($design['icon_url'] ?? null),
-            'sealDataUri' => $this->resolveRemoteImageDataUri($design['seal_image_url'] ?? null),
+            'imageType' => $imageType->value,
+            'sideImageDataUri' => $background['data_uri'],
+            'sideImageUrl' => $background['url'],
+            'backgroundDataUri' => $imageType === CertificateImageType::BACKGROUND ? $background['data_uri'] : null,
+            'backgroundUrl' => $imageType === CertificateImageType::BACKGROUND ? $background['url'] : null,
+            'iconDataUri' => $icon['data_uri'],
+            'iconUrl' => $icon['url'],
+            'sealDataUri' => $seal['data_uri'],
+            'sealUrl' => $seal['url'],
             'awardeeFont' => (string) ($design['awardee_font'] ?? 'DejaVu Sans'),
             'awardeeFontSize' => (string) ($design['awardee_font_size'] ?? '28px'),
-            'awardeeFontWeight' => (string) ($design['awardee_font_weight'] ?? 'bold'),
+            'awardeeFontWeight' => $this->normalizeFontWeight((string) ($design['awardee_font_weight'] ?? 'bold')),
             'awardeeTextAlign' => $this->resolveTextAlign((string) ($design['general_text_position'] ?? 'center')),
             'iconPosition' => $this->resolveTextAlign((string) ($design['icon_position'] ?? 'center')),
+            'linesBeforeName' => $linesBeforeName,
+            'linesAfterName' => $linesAfterName,
             'lines' => $lines,
             'signatories' => $signatories,
+            'leftSignatory' => $signatories[0] ?? null,
+            'rightSignatory' => $signatories[1] ?? null,
         ];
     }
 
@@ -141,7 +194,7 @@ final class CertificatePdfService
         $html = view($view, $viewData)->render();
 
         $options = new Options;
-        $options->set('isRemoteEnabled', false);
+        $options->set('isRemoteEnabled', true);
         $options->set('defaultFont', 'DejaVu Sans');
 
         $dompdf = new Dompdf($options);
@@ -183,35 +236,44 @@ final class CertificatePdfService
         };
     }
 
-    private function resolveRemoteImageDataUri(mixed $url): ?string
+    /**
+     * @param  list<array{text: string, font: string, size: string, weight: string, position: string}>  $lines
+     * @param  array<string, mixed>  $design
+     * @return array{0: list<array{text: string, font: string, size: string, weight: string, position: string}>, 1: list<array{text: string, font: string, size: string, weight: string, position: string}>}
+     */
+    private function splitLinesAroundAwardeeName(array $lines, array $design): array
     {
-        if (! is_string($url) || trim($url) === '') {
-            return null;
+        if ($lines === []) {
+            return [[], []];
         }
 
-        $url = trim($url);
-
-        if (str_starts_with($url, 'data:')) {
-            return $url;
-        }
-
-        try {
-            $response = Http::timeout(8)->get($url);
-            if (! $response->successful()) {
-                return null;
+        $afterIndex = $design['awardee_name_after_line'] ?? null;
+        if ($afterIndex === null) {
+            foreach ($lines as $index => $line) {
+                if (stripos($line['text'], 'presented to') !== false) {
+                    $afterIndex = $index;
+                    break;
+                }
             }
-
-            $body = $response->body();
-            if ($body === '') {
-                return null;
-            }
-
-            $mime = $response->header('Content-Type') ?: 'image/png';
-            $mime = strtok($mime, ';') ?: 'image/png';
-
-            return 'data:'.$mime.';base64,'.base64_encode($body);
-        } catch (\Throwable) {
-            return null;
         }
+
+        if ($afterIndex === null) {
+            return [[], $lines];
+        }
+
+        $afterIndex = max(0, min((int) $afterIndex, count($lines) - 1));
+
+        return [
+            array_slice($lines, 0, $afterIndex + 1),
+            array_slice($lines, $afterIndex + 1),
+        ];
+    }
+
+    private function normalizeFontWeight(string $weight): string
+    {
+        return match (strtolower(trim($weight))) {
+            'bold', '700', '800', '900' => 'bold',
+            default => 'normal',
+        };
     }
 }
