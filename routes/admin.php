@@ -10,6 +10,7 @@ use App\Http\Controllers\v1\Admin\ContactSubmission\ContactSubmissionController;
 use App\Http\Controllers\v1\Admin\Dashboard\DashboardController;
 use App\Http\Controllers\v1\Admin\EmailCampaign\EmailCampaignController;
 use App\Http\Controllers\v1\Admin\IssuedCertificate\IssuedCertificateController;
+use App\Http\Controllers\v1\Admin\Media\ImageUploadController;
 use App\Http\Controllers\v1\Admin\Notification\NotificationController;
 use App\Http\Controllers\v1\Admin\Pledge\PledgeController;
 use App\Http\Controllers\v1\Admin\Reconciliation\FcmbImportController;
@@ -63,6 +64,8 @@ Route::prefix('v1/admin')->group(function () {
     });
 
     Route::middleware(['auth:sanctum'])->group(function () {
+        Route::post('uploads/image', [ImageUploadController::class, 'store']);
+
         Route::prefix('roles')->group(function () {
             Route::get('/dropdown/{status?}', [UserManagementController::class, 'roleDropdown'])
                 ->where('status', 'active|inactive|all')

@@ -3,14 +3,16 @@
 namespace App\Services\Admin\IssuedCertificate;
 
 use App\Enums\IssuedCertificateStatus;
-use App\Exceptions\ApiException;
 use App\Enums\PaymentGateway;
+use App\Exceptions\ApiException;
 use App\Http\Requests\Concerns\ListingFilterRules;
+use App\Jobs\GenerateCertificateImageJob;
+use App\Jobs\SendDonorRecognitionEmailJob;
 use App\Models\DonorRecognition;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
-use App\Jobs\SendDonorRecognitionEmailJob;
 use App\Services\Recognition\DonorRecognitionService;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -152,6 +154,8 @@ class IssuedCertificateService
 
             $fresh = $recognition->fresh($this->detailRelations()) ?? $recognition;
 
+            GenerateCertificateImageJob::dispatch($fresh->uuid, force: true);
+
             if (($payload['send_email'] ?? true) && filled($fresh->trigger_transaction_uuid)) {
                 SendDonorRecognitionEmailJob::dispatch($fresh->uuid, (string) $fresh->trigger_transaction_uuid);
             }
@@ -277,7 +281,7 @@ class IssuedCertificateService
         return $query;
     }
 
-    private function applyIssuedAtRange(Builder $query, ?\Carbon\Carbon $start, ?\Carbon\Carbon $end): void
+    private function applyIssuedAtRange(Builder $query, ?Carbon $start, ?Carbon $end): void
     {
         if ($start !== null) {
             $query->where('issued_at', '>=', $start);

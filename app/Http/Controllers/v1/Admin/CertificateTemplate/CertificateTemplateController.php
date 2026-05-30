@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\v1\Admin\CertificateTemplate;
 
+use App\Enums\CertificatePreviewFormat;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\CertificateTemplate\CertificateTemplateListRequest;
@@ -76,7 +77,9 @@ class CertificateTemplateController extends Controller
                 $awardeeName = 'Sample Donor';
             }
 
-            return $this->certificatePdfService->streamTemplatePreview($template, $awardeeName);
+            $format = CertificatePreviewFormat::tryFromRequest($request->validated()['format'] ?? null);
+
+            return $this->certificatePdfService->streamTemplatePreviewByFormat($template, $awardeeName, $format);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\CertificateTemplate\CertificateTemplateController@preview');
         }

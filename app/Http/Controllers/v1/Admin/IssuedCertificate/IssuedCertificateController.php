@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\v1\Admin\IssuedCertificate;
 
+use App\Enums\CertificatePreviewFormat;
 use App\Helpers\GeneralHelper;
 use App\Helpers\PDFReportHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\DateRangeStatsRequest;
 use App\Http\Requests\Admin\IssuedCertificate\IssuedCertificateListRequest;
+use App\Http\Requests\Admin\IssuedCertificate\PreviewIssuedCertificateRequest;
 use App\Http\Requests\Admin\IssuedCertificate\ReissueIssuedCertificateRequest;
 use App\Http\Resources\IssuedCertificateListResource;
 use App\Http\Resources\IssuedCertificateResource;
@@ -76,12 +78,13 @@ class IssuedCertificateController extends Controller
         }
     }
 
-    public function preview(string $recognitionId)
+    public function preview(PreviewIssuedCertificateRequest $request, string $recognitionId)
     {
         try {
             $recognition = $this->issuedCertificateService->findRecognition($recognitionId);
+            $format = CertificatePreviewFormat::tryFromRequest($request->validated()['format'] ?? null);
 
-            return $this->certificatePdfService->streamCertificateInline($recognition);
+            return $this->certificatePdfService->streamCertificateByFormat($recognition, $format);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\IssuedCertificate\IssuedCertificateController@preview');
         }
