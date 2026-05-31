@@ -258,7 +258,7 @@ SQL;
 
                 return [
                     'campaign_uuid' => $row->campaign_uuid,
-                    'campaign_name' => $row->name,
+                    'campaign_name' => $row->campaign_name,
                     'currency' => $displayCurrency,
                     'raised' => (string) $raised,
                     'target' => (string) $target,
