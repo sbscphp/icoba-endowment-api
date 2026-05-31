@@ -246,6 +246,7 @@ SQL;
             ->orderBy('campaigns.name')
             ->select([
                 'campaigns.uuid as campaign_uuid',
+                'campaigns.name as campaign_name',
                 'campaigns.target_amount',
                 DB::raw('COALESCE(raised_totals.raised, 0) as raised'),
             ])
@@ -257,6 +258,7 @@ SQL;
 
                 return [
                     'campaign_uuid' => $row->campaign_uuid,
+                    'campaign_name' => $row->name,
                     'currency' => $displayCurrency,
                     'raised' => (string) $raised,
                     'target' => (string) $target,
