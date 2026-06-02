@@ -2,9 +2,12 @@
 
 namespace App\Jobs;
 
+use App\Enums\ModuleEnums;
 use App\Enums\PledgeStatus;
 use App\Mail\PledgePaymentReminderMail;
 use App\Models\Pledge;
+use App\Notifications\GenericDatabaseNotification;
+use App\Services\Notifications\NotificationDispatchService;
 use App\Services\Pledge\PledgeScheduleService;
 use App\Services\Theme\ThemeResolver;
 use Illuminate\Bus\Queueable;
@@ -33,8 +36,11 @@ class SendPledgePaymentReminderJob implements ShouldBeUnique, ShouldQueue
         return 'pledge-payment-reminder:'.$this->pledgeUuid.':'.$this->scheduleItemId.':'.$this->dueDate;
     }
 
-    public function handle(PledgeScheduleService $scheduleService, ThemeResolver $themeResolver): void
-    {
+    public function handle(
+        PledgeScheduleService $scheduleService,
+        ThemeResolver $themeResolver,
+        NotificationDispatchService $notificationDispatch,
+    ): void {
         $pledge = Pledge::query()
             ->where('uuid', $this->pledgeUuid)
             ->with(['campaign:uuid,name', 'donor:uuid,firstname,lastname,email'])
@@ -92,6 +98,34 @@ class SendPledgePaymentReminderJob implements ShouldBeUnique, ShouldQueue
                 $pledge->fresh() ?? $pledge,
                 $this->scheduleItemId,
                 $this->dueDate
+            );
+
+            $frontendBase = rtrim((string) config('app.frontend_url'), '/');
+            $actionUrl = $frontendBase !== ''
+                ? $frontendBase.'/pledges/'.$pledge->uuid
+                : null;
+
+            $notificationDispatch->notifyDonor(
+                $pledge->user_uuid,
+                $pledge->donor_email ?? $pledge->donor?->email,
+                new GenericDatabaseNotification(
+                    module: ModuleEnums::pledges->value,
+                    event: 'pledge.payment_reminder',
+                    title: 'Pledge payment reminder',
+                    message: 'A pledge installment is due on '.$this->dueDate.'. We have emailed you the payment details.',
+                    meta: [
+                        'pledge_uuid' => $pledge->uuid,
+                        'schedule_item_id' => $this->scheduleItemId,
+                        'due_date' => $this->dueDate,
+                        'remaining_amount' => (string) ($item['remaining_amount'] ?? ''),
+                        'campaign_name' => $pledge->campaign?->name ?? 'General Endowment Fund',
+                    ],
+                    actionUrl: $actionUrl,
+                    icon: '/icons/pledge-reminder.png',
+                    severity: 'warning',
+                    tags: ['pledge', 'reminder'],
+                    sendMail: false,
+                ),
             );
         } catch (\Throwable $e) {
             Log::warning('Pledge payment reminder email failed: '.$e->getMessage(), [
