@@ -54,6 +54,25 @@ final readonly class RequestResponseEncryptionMiddleware
         '/dev/crypto',
     ];
 
+    /**
+     * Route path regex patterns that bypass encryption entirely.
+     *
+     * Used for public guest download endpoints that are opened directly in a
+     * browser from an email link (donation receipts, tax receipts, donor
+     * recognition certificates, campaign update reports). These responses are
+     * streamed binary PDFs and authenticate via their own per-resource
+     * `?token=` query parameter, so they cannot rely on the `X-ClientKey`
+     * header that the encryption middleware otherwise requires.
+     *
+     * @var list<string>
+     */
+    private const BYPASS_REGEX = [
+        '#^/api/v1/public/recognitions/[^/]+/download$#i',
+        '#^/api/v1/public/receipts/[^/]+/download$#i',
+        '#^/api/v1/public/receipts/[^/]+/tax/download$#i',
+        '#^/api/v1/public/blog/report/[^/]+/download$#i',
+    ];
+
     public function __construct(
         private ApiUserRepositoryInterface $apiUsers,
     ) {}
@@ -148,6 +167,12 @@ final readonly class RequestResponseEncryptionMiddleware
 
         foreach (self::BYPASS_CONTAINS as $needle) {
             if (str_contains(strtolower($path), strtolower($needle))) {
+                return true;
+            }
+        }
+
+        foreach (self::BYPASS_REGEX as $pattern) {
+            if (preg_match($pattern, $path) === 1) {
                 return true;
             }
         }
