@@ -96,9 +96,10 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
     }
 
     /** @dataProvider bypassPathProvider */
-    public function test_bypass_paths_skip_auth_and_crypto(string $path): void
+    public function test_bypass_paths_skip_auth_and_crypto(string $path, string $method = 'POST'): void
     {
-        $request = Request::create($path, 'POST', content: '{"data":"plain"}');
+        $content = $method === 'GET' ? null : '{"data":"plain"}';
+        $request = Request::create($path, $method, content: $content);
         $response = JsonResponse::fromJsonString('{"ok":true}');
 
         $result = $this->middleware->handle($request, fn () => $response);
@@ -116,6 +117,10 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
             'stripe webhook' => ['/api/v1/payment/stripe/webhook'],
             'dev api registration' => ['/api/v1/dev/api-users'],
             'dev crypto encrypt' => ['/api/v1/dev/crypto/encrypt'],
+            'guest recognition download' => ['/api/v1/public/recognitions/REC-001/download', 'GET'],
+            'guest donation receipt download' => ['/api/v1/public/receipts/RCP-001/download', 'GET'],
+            'guest tax receipt download' => ['/api/v1/public/receipts/RCP-001/tax/download', 'GET'],
+            'guest blog report download' => ['/api/v1/public/blog/report/abc-123/download', 'GET'],
         ];
     }
 
