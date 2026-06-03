@@ -37,4 +37,22 @@ class UpdateAdminRequest extends ApiFormRequest
             'can_login' => ['sometimes', 'boolean'],
         ];
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'email.unique' => 'Another admin is already using this email.',
+            'role_id.exists' => 'The selected role does not exist.',
+            'role_id.uuid' => 'The selected role is invalid.',
+        ]);
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $email = $this->input('email');
+
+        if (is_string($email)) {
+            $this->merge(['email' => strtolower(trim($email))]);
+        }
+    }
 }
