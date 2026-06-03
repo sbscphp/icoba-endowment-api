@@ -25,7 +25,7 @@ class PledgeStoreRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            'campaign_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:campaigns,uuid'],
+            'campaign_uuid' => ['required', 'uuid', 'exists:campaigns,uuid'],
             'user_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:users,uuid'],
             'donor_type_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:donor_types,uuid'],
             'graduation_set_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:sets,uuid'],

@@ -10,7 +10,6 @@ use App\Http\Requests\Admin\Pledge\PledgeStatsRequest;
 use App\Http\Requests\Admin\Pledge\PledgeStoreRequest;
 use App\Http\Resources\PledgeDetailResource;
 use App\Http\Resources\PledgeListResource;
-use App\Models\Campaign;
 use App\Responser\JsonResponser;
 use App\Services\Admin\Pledge\PledgeService;
 use App\Services\Pledge\PledgeCommittedNgnResolver;
@@ -54,7 +53,7 @@ class PledgeController extends Controller
     {
         try {
             $v = $request->validated();
-            $campaignUuid = $v['campaign_uuid'] ?? Campaign::defaultCampaign()->uuid;
+            $campaignUuid = (string) $v['campaign_uuid'];
 
             $fx = PledgeCommittedNgnResolver::atCapture(
                 (float) $v['committed_amount'],

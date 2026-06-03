@@ -70,7 +70,6 @@ class PublicEndowmentStatsService
     private function campaignsCount(): int
     {
         return (int) Campaign::query()
-            ->where('is_default', false)
             ->whereIn('status', [CampaignStatus::ACTIVE, CampaignStatus::COMPLETED])
             ->count();
     }

@@ -123,7 +123,6 @@ class CampaignController extends Controller
                 'public_campaign_code' => $c->campaign_id,
                 'name' => $c->name,
                 'status' => $c->status->value,
-                'is_default' => (bool) $c->is_default,
             ])->values()->all();
 
             return JsonResponser::send(false, 'Campaign dropdown retrieved.', $payload);

@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\Cache;
 
 class Campaign extends Model
 {
@@ -31,42 +30,8 @@ class Campaign extends Model
             'allow_anonymous_donation' => 'boolean',
             'allow_public_donation' => 'boolean',
             'applies_to_all_graduation_sets' => 'boolean',
-            'is_default' => 'boolean',
             'status' => CampaignStatus::class,
         ];
-    }
-
-    protected static function booted(): void
-    {
-        static::saved(function (Campaign $campaign): void {
-            if ($campaign->wasChanged(['is_default', 'uuid'])) {
-                Cache::forget('campaigns.default_uuid');
-            }
-        });
-
-        static::deleted(function (): void {
-            Cache::forget('campaigns.default_uuid');
-        });
-    }
-
-    public static function defaultCampaign(): Campaign
-    {
-        $uuid = Cache::rememberForever('campaigns.default_uuid', function (): ?string {
-            return self::query()->where('is_default', true)->value('uuid');
-        });
-
-        if ($uuid === null || $uuid === '') {
-            throw new \RuntimeException('Default campaign is not configured. Run DefaultCampaignSeeder.');
-        }
-
-        $campaign = self::query()->where('uuid', $uuid)->first();
-
-        if ($campaign === null) {
-            Cache::forget('campaigns.default_uuid');
-            throw new \RuntimeException('Default campaign is not configured. Run DefaultCampaignSeeder.');
-        }
-
-        return $campaign;
     }
 
     public function graduationSets(): BelongsToMany

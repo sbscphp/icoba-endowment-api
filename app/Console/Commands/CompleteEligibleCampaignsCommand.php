@@ -23,7 +23,6 @@ class CompleteEligibleCampaignsCommand extends Command
         $today = today((string) config('app.timezone'));
 
         $candidates = Campaign::query()
-            ->where('is_default', false)
             ->whereIn('status', [CampaignStatus::ACTIVE, CampaignStatus::PAUSED])
             ->withSum(['transactions as successful_ngn' => function ($q): void {
                 $q->where('status', TransactionStatus::SUCCESSFUL);

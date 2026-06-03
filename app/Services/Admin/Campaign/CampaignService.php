@@ -43,8 +43,6 @@ class CampaignService
      */
     public function create(array $data, Admin $actor, Request $request): Campaign
     {
-        unset($data['is_default']);
-
         return DB::transaction(function () use ($data, $actor, $request): Campaign {
             $campaignId = $this->generateCampaignPublicId();
             $cover = $this->uploadCover($data['cover_image'] ?? null);
@@ -111,16 +109,9 @@ class CampaignService
      */
     public function update(string $campaignId, array $data, Admin $actor, Request $request): Campaign
     {
-        unset($data['is_default']);
-
         $campaign = $this->resolveCampaign($campaignId);
 
-        if ($campaign->is_default) {
-            // Default campaign: allow only descriptive / media updates
-            $data = $this->onlyKeys($data, [
-                'short_description', 'long_description', 'cover_image', 'gallery_images',
-            ]);
-        } elseif ($campaign->status !== CampaignStatus::DRAFT) {
+        if ($campaign->status !== CampaignStatus::DRAFT) {
             $data = $this->onlyKeys($data, [
                 'short_description', 'long_description', 'cover_image', 'gallery_images',
             ]);
@@ -311,10 +302,6 @@ class CampaignService
     {
         $campaign = $this->resolveCampaign($campaignId);
 
-        if ($campaign->is_default) {
-            throw new ApiException('Default campaign cannot be deactivated.', 422);
-        }
-
         if (! in_array($campaign->status, [CampaignStatus::ACTIVE, CampaignStatus::PAUSED], true)) {
             throw new ApiException('Campaign cannot be deactivated in its current state.', 422);
         }
@@ -357,10 +344,6 @@ class CampaignService
     public function complete(string $campaignId, ?Admin $actor, string $reason, Request $request): Campaign
     {
         $campaign = $this->resolveCampaign($campaignId);
-
-        if ($campaign->is_default) {
-            throw new ApiException('Default campaign cannot be auto-completed.', 422);
-        }
 
         if (! in_array($campaign->status, [CampaignStatus::ACTIVE, CampaignStatus::PAUSED], true)) {
             throw new ApiException('Campaign cannot be completed in its current state.', 422);
@@ -415,10 +398,6 @@ class CampaignService
     public function delete(string $campaignId): array
     {
         $campaign = $this->resolveCampaign($campaignId);
-
-        if ($campaign->is_default) {
-            return ['blocked' => 1, 'transactions_count' => $campaign->transactions()->count()];
-        }
 
         if ($campaign->status !== CampaignStatus::DRAFT) {
             return ['blocked' => 1, 'transactions_count' => $campaign->transactions()->count()];
@@ -546,7 +525,7 @@ class CampaignService
             $query->where('status', CampaignStatus::DEACTIVATED);
         }
 
-        return $query->get(['uuid', 'name', 'campaign_id', 'status', 'is_default']);
+        return $query->get(['uuid', 'name', 'campaign_id', 'status']);
     }
 
     /**

@@ -8,7 +8,7 @@ use Illuminate\Validation\ValidationException;
 
 final class DonationCurrencyValidator
 {
-    public function assertAllowed(string $currency, ?string $campaignUuid = null): void
+    public function assertAllowed(string $currency, string $campaignUuid): void
     {
         $normalized = strtoupper(trim($currency));
 
@@ -24,9 +24,13 @@ final class DonationCurrencyValidator
             ]);
         }
 
-        $campaign = $campaignUuid !== null && $campaignUuid !== ''
-            ? Campaign::query()->where('uuid', $campaignUuid)->firstOrFail()
-            : Campaign::defaultCampaign();
+        if ($campaignUuid === '') {
+            throw ValidationException::withMessages([
+                'campaign_uuid' => ['Campaign is required.'],
+            ]);
+        }
+
+        $campaign = Campaign::query()->where('uuid', $campaignUuid)->firstOrFail();
 
         $allowed = collect(is_array($campaign->available_donation_currencies) ? $campaign->available_donation_currencies : [])
             ->map(fn (mixed $value): string => strtoupper(trim((string) $value)))

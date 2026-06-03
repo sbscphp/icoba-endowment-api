@@ -29,7 +29,7 @@ class TransactionsSeeder extends Seeder
         $users = User::query()->get(['uuid', 'firstname', 'lastname', 'email', 'phone_number']);
 
         if ($campaigns->isEmpty()) {
-            $this->command?->warn('No campaigns found - run DefaultCampaignSeeder first.');
+            $this->command?->warn('No campaigns found - create at least one campaign before running this seeder.');
 
             return;
         }

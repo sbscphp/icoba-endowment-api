@@ -20,7 +20,6 @@ class DatabaseSeeder extends Seeder
             CustomerSeeder::class,
             // UsersSeeder::class,
             AdminSeeder::class,
-            DefaultCampaignSeeder::class,
             ThemeSeeder::class,
             TierConfigurationSeeder::class,
             CertificateTemplateSeeder::class,
