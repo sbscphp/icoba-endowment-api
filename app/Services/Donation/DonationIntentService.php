@@ -7,7 +7,6 @@ use App\Enums\PaymentGateway;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
 use App\Helpers\GeneralHelper;
-use App\Models\Campaign;
 use App\Models\Pledge;
 use App\Models\Transaction;
 use App\Models\User;
@@ -171,6 +170,12 @@ class DonationIntentService
             $campaignUuid = $pledge->campaign_uuid;
         }
 
+        if ($campaignUuid === null || $campaignUuid === '') {
+            throw ValidationException::withMessages([
+                'campaign_uuid' => ['Campaign is required.'],
+            ]);
+        }
+
         $this->donationCurrencyValidator->assertAllowed($currency, $campaignUuid);
 
         $transactionId = GeneralHelper::getModelUniqueRandomId([
@@ -204,7 +209,7 @@ class DonationIntentService
 
         return Transaction::query()->create([
             'transaction_id' => $transactionId,
-            'campaign_uuid' => $campaignUuid ?? Campaign::defaultCampaign()->uuid,
+            'campaign_uuid' => $campaignUuid,
             'pledge_uuid' => $pledgeUuid,
             'user_uuid' => $clean['user_uuid'] ?? null,
             'donor_type_uuid' => $guestSnapshot['donor_type_uuid'] ?? ($clean['donor_type_uuid'] ?? $linkedUser?->donor_type_uuid),

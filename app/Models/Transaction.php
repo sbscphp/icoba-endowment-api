@@ -34,15 +34,6 @@ class Transaction extends Model
         ];
     }
 
-    protected static function booted(): void
-    {
-        static::creating(function (Transaction $transaction): void {
-            if ($transaction->campaign_uuid === null || $transaction->campaign_uuid === '') {
-                $transaction->campaign_uuid = Campaign::defaultCampaign()->uuid;
-            }
-        });
-    }
-
     public function campaign(): BelongsTo
     {
         return $this->belongsTo(Campaign::class, 'campaign_uuid', 'uuid');

@@ -49,7 +49,6 @@ class CampaignResource extends JsonResource
             'allow_public_donation' => (bool) $this->allow_public_donation,
             'applies_to_all_graduation_sets' => (bool) $this->applies_to_all_graduation_sets,
             'graduation_sets' => $this->graduationSetsPayload(),
-            'is_default' => (bool) $this->is_default,
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
             'total_raised' => $filteredRaised !== null ? (string) $filteredRaised : '0',
             'total_raised_currency' => $raisedCurrency,

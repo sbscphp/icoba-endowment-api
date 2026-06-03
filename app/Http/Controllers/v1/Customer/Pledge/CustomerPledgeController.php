@@ -15,7 +15,6 @@ use App\Http\Requests\Customer\Pledge\UpdatePledgeScheduleRequest;
 use App\Http\Resources\Customer\CustomerOverduePledgeResource;
 use App\Http\Resources\PledgeDetailResource;
 use App\Http\Resources\PledgeListResource;
-use App\Models\Campaign;
 use App\Models\User;
 use App\Repositories\Contracts\User\UserRepositoryInterface;
 use App\Responser\JsonResponser;
@@ -117,7 +116,7 @@ class CustomerPledgeController extends Controller
             $user = $user instanceof User ? $user : null;
 
             $v = $request->validated();
-            $campaignUuid = $v['campaign_uuid'] ?? Campaign::defaultCampaign()->uuid;
+            $campaignUuid = (string) $v['campaign_uuid'];
 
             $userUuid = null;
             $donorTypeUuid = $v['donor_type_uuid'] ?? null;
