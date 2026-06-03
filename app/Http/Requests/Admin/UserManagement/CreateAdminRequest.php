@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Requests\Admin;
+namespace App\Http\Requests\Admin\UserManagement;
 
 use App\Http\Requests\ApiFormRequest;
 use App\Models\Role;
@@ -29,9 +29,12 @@ class CreateAdminRequest extends ApiFormRequest
     public function messages(): array
     {
         return array_merge(parent::messages(), [
+            'name.max' => 'Admin name may not be longer than 255 characters.',
             'email.unique' => 'An admin with this email already exists.',
-            'role_id.exists' => 'The selected role does not exist.',
+            'email.max' => 'Email address may not be longer than 255 characters.',
+            'role_id.required' => 'Please select a role for the admin.',
             'role_id.uuid' => 'The selected role is invalid.',
+            'role_id.exists' => 'The selected role does not exist.',
         ]);
     }
 

@@ -6,7 +6,7 @@ use App\Enums\UserTypeEnum;
 use App\Helpers\GeneralHelper;
 use App\Helpers\PDFReportHelper;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\AuditTrailListingRequest;
+use App\Http\Requests\Admin\AuditTrail\AuditTrailListingRequest;
 use App\Http\Resources\AuditLogResource;
 use App\Models\AuditLog;
 use App\Responser\JsonResponser;

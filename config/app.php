@@ -88,6 +88,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Admin Frontend URL
+    |--------------------------------------------------------------------------
+    |
+    | Base URL of the standalone admin frontend SPA. Used to build admin-only
+    | links such as the invite "Set Your Password" email. Falls back to the
+    | customer frontend URL only if no admin frontend URL is configured.
+    |
+    */
+    'admin_frontend_url' => env('ADMIN_FRONTEND_URL', 'https://icoba-endowment-admin.onrender.com'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Frontend login URL (optional)
     |--------------------------------------------------------------------------
     |
@@ -96,6 +108,18 @@ return [
     |
     */
     'frontend_login_url' => env('FRONTEND_LOGIN_URL'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Admin set-password URL (optional override)
+    |--------------------------------------------------------------------------
+    |
+    | Full URL the admin invite email should link to for first-time password
+    | setup. Defaults to {admin_frontend_url}/set-password when not set. The
+    | reset token is appended as a query parameter automatically.
+    |
+    */
+    'admin_frontend_set_password_url' => env('ADMIN_FRONTEND_SET_PASSWORD_URL'),
 
     /*
     |--------------------------------------------------------------------------
