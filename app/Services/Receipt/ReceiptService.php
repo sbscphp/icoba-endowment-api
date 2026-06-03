@@ -244,13 +244,14 @@ class ReceiptService
 
     /**
      * Single display line for PDF/JSON: prefer linked profile (firstname + lastname), else snapshot on the transaction.
+     *
+     * The anonymous flag intentionally does NOT affect this method. Anonymity only governs how a donor appears
+     * on the public leaderboard (handled in LeaderboardService); the donor's own receipt and confirmation emails
+     * must still display their real name. Callers that need to mask the name for public-facing surfaces should
+     * check `$transaction->is_anonymous` themselves.
      */
     public function donorDisplayLine(Transaction $transaction): ?string
     {
-        if ($transaction->is_anonymous) {
-            return null;
-        }
-
         if ($this->isCorporateDonation($transaction)) {
             $corporate = $this->corporateDetails($transaction);
             if (filled($corporate['organization_name'])) {
