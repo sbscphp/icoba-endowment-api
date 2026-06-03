@@ -41,4 +41,11 @@ class Admin extends Authenticatable
             'last_active_at' => 'datetime',
         ];
     }
+
+    public function displayName(): string
+    {
+        $name = trim((string) ($this->name ?? ''));
+
+        return $name !== '' ? $name : (string) $this->email;
+    }
 }

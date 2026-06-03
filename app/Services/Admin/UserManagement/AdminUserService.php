@@ -5,7 +5,7 @@ namespace App\Services\Admin\UserManagement;
 use App\Exceptions\ApiException;
 use App\Models\Admin;
 use App\Models\Role;
-use App\Notifications\Auth\ResetPasswordMail;
+use App\Notifications\Auth\AdminInviteSetPasswordMail;
 use App\Services\Auth\PasswordResetService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -211,7 +211,7 @@ class AdminUserService
     private function dispatchInviteResetLink(Admin $admin): void
     {
         $resetToken = $this->passwordResetService->issueResetTokenFor($admin);
-        $admin->notify(new ResetPasswordMail(
+        $admin->notify(new AdminInviteSetPasswordMail(
             token: $resetToken,
             resetUrl: $this->adminSetPasswordUrl($resetToken),
         ));
