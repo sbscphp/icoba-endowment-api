@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Requests\Admin;
+namespace App\Http\Requests\Admin\UserManagement;
 
 use App\Http\Requests\ApiFormRequest;
 use App\Models\Permission;
@@ -29,5 +29,16 @@ class CreateRoleRequest extends ApiFormRequest
                 ),
             ],
         ];
+    }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'name.unique' => 'A role with this name already exists.',
+            'name.max' => 'Role name may not be longer than 50 characters.',
+            'description.max' => 'Description may not be longer than 255 characters.',
+            'permissions.array' => 'Permissions must be provided as a list.',
+            'permissions.*.exists' => 'One or more of the selected permissions are invalid.',
+        ]);
     }
 }

@@ -199,8 +199,11 @@ class AdminUserService
     {
         $base = config('app.admin_frontend_set_password_url');
         if (! is_string($base) || $base === '') {
-            $frontend = rtrim((string) config('app.frontend_url'), '/');
-            $base = $frontend !== '' ? $frontend.'/admin/set-password' : url('/');
+            $adminFrontend = rtrim((string) config('app.admin_frontend_url'), '/');
+            if ($adminFrontend === '') {
+                $adminFrontend = rtrim((string) config('app.frontend_url'), '/');
+            }
+            $base = $adminFrontend !== '' ? $adminFrontend.'/set-password' : url('/');
         }
 
         $sep = str_contains($base, '?') ? '&' : '?';
