@@ -23,6 +23,7 @@ class CreateAdminRequest extends ApiFormRequest
             ],
             'is_active' => ['sometimes', 'boolean'],
             'can_login' => ['sometimes', 'boolean'],
+            'frontend_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
         ];
     }
 
@@ -44,6 +45,11 @@ class CreateAdminRequest extends ApiFormRequest
 
         if (is_string($email)) {
             $this->merge(['email' => strtolower(trim($email))]);
+        }
+
+        $frontendUrl = $this->input('frontend_url');
+        if (is_string($frontendUrl)) {
+            $this->merge(['frontend_url' => rtrim(trim($frontendUrl), '/')]);
         }
     }
 }

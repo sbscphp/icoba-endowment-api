@@ -40,7 +40,11 @@ class AdminUserService
 
         $admin->syncRoles([$role->name]);
 
-        $this->dispatchInviteResetLink($admin);
+        $frontendUrl = isset($payload['frontend_url']) && is_string($payload['frontend_url'])
+            ? $payload['frontend_url']
+            : null;
+
+        $this->dispatchInviteResetLink($admin, $frontendUrl);
 
         return $admin->fresh() ?? $admin;
     }
@@ -195,15 +199,17 @@ class AdminUserService
         }
     }
 
-    private function adminSetPasswordUrl(string $resetToken): string
+    private function adminSetPasswordUrl(string $resetToken, ?string $frontendUrl = null): string
     {
-        $base = config('app.admin_frontend_set_password_url');
-        if (! is_string($base) || $base === '') {
-            $adminFrontend = rtrim((string) config('app.admin_frontend_url'), '/');
+        $override = config('app.admin_frontend_set_password_url');
+        if (is_string($override) && $override !== '') {
+            $base = $override;
+        } else {
+            $adminFrontend = rtrim((string) ($frontendUrl ?? config('app.admin_frontend_url')), '/');
             if ($adminFrontend === '') {
                 $adminFrontend = rtrim((string) config('app.frontend_url'), '/');
             }
-            $base = $adminFrontend !== '' ? $adminFrontend.'/set-password' : url('/');
+            $base = $adminFrontend !== '' ? $adminFrontend.'/create-new-password' : url('/');
         }
 
         $sep = str_contains($base, '?') ? '&' : '?';
@@ -211,12 +217,12 @@ class AdminUserService
         return $base.$sep.'token='.urlencode($resetToken);
     }
 
-    private function dispatchInviteResetLink(Admin $admin): void
+    private function dispatchInviteResetLink(Admin $admin, ?string $frontendUrl = null): void
     {
         $resetToken = $this->passwordResetService->issueResetTokenFor($admin);
         $admin->notify(new AdminInviteSetPasswordMail(
             token: $resetToken,
-            resetUrl: $this->adminSetPasswordUrl($resetToken),
+            resetUrl: $this->adminSetPasswordUrl($resetToken, $frontendUrl),
         ));
     }
 }

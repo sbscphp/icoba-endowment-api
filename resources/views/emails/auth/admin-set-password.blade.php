@@ -9,7 +9,7 @@
 @endphp
 
 @section('content')
-    @include('emails.components.button', ['url' => $resetUrl, 'label' => 'Set Your Password'])
+    @include('emails.components.button', ['url' => $resetUrl, 'label' => 'Create Your Password'])
 
     <p style="margin:0 0 16px 0; font-size:14px; line-height:1.6; color:{{ $theme->text_color }};">For your security, choose a strong password you have not used elsewhere. You will be asked to sign in immediately after setting it.</p>
 
