@@ -115,8 +115,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | Full URL the admin invite email should link to for first-time password
-    | setup. Defaults to {admin_frontend_url}/set-password when not set. The
-    | reset token is appended as a query parameter automatically.
+    | setup. Defaults to {admin_frontend_url}/create-new-password when not set.
+    | The reset token is appended as a query parameter automatically.
     |
     */
     'admin_frontend_set_password_url' => env('ADMIN_FRONTEND_SET_PASSWORD_URL'),
