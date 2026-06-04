@@ -237,21 +237,59 @@ class PasswordResetService
      */
     private function decodeResetToken(string $resetToken): array
     {
+        $payload = null;
+
         try {
-            $payload = decrypt($resetToken);
+            $decoded = decrypt($resetToken);
+            $payload = is_array($decoded) ? $decoded : null;
         } catch (\Throwable) {
-            throw new ApiException('Unable to reset password. Please restart the forgot password process.', 422);
+            throw new ApiException($this->resetTokenErrorMessage($payload, expired: false), 422);
         }
 
-        if (! is_array($payload) || ($payload['purpose'] ?? null) !== 'RESET_PASSWORD') {
-            throw new ApiException('Unable to reset password. Please restart the forgot password process.', 422);
+        if ($payload === null || ($payload['purpose'] ?? null) !== 'RESET_PASSWORD') {
+            throw new ApiException($this->resetTokenErrorMessage($payload, expired: false), 422);
         }
 
         if (now()->timestamp > (int) ($payload['exp'] ?? 0)) {
-            throw new ApiException('Unable to reset password. Please restart the forgot password process.', 422);
+            throw new ApiException($this->resetTokenErrorMessage($payload, expired: true), 422);
         }
 
         return $payload;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $payload
+     */
+    private function resetTokenErrorMessage(?array $payload, bool $expired): string
+    {
+        if ($this->isAdminAccountSetupToken($payload)) {
+            return $expired
+                ? 'This account setup link has expired. Please contact your administrator to resend the invitation, or use Forgot Password on the login page.'
+                : 'This account setup link is invalid. Please contact your administrator to resend the invitation.';
+        }
+
+        return $expired
+            ? 'This password reset link has expired. Please restart the forgot password process.'
+            : 'Unable to reset password. Please restart the forgot password process.';
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $payload
+     */
+    private function isAdminAccountSetupToken(?array $payload): bool
+    {
+        if ($payload === null || ($payload['subject_type'] ?? null) !== UserTypeEnum::ADMIN->value) {
+            return false;
+        }
+
+        $subjectId = $payload['subject_id'] ?? null;
+        if (! is_string($subjectId) || $subjectId === '') {
+            return false;
+        }
+
+        $admin = Admin::query()->where('uuid', $subjectId)->first();
+
+        return $admin !== null && (bool) $admin->must_reset_password;
     }
 
     /**
