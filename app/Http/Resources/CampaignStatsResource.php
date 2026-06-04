@@ -16,6 +16,9 @@ class CampaignStatsResource extends JsonResource
         $data = is_array($this->resource) ? $this->resource : [];
 
         return [
+            'period' => $data['period'] ?? null,
+            'start_date' => $data['start_date'] ?? null,
+            'end_date' => $data['end_date'] ?? null,
             'total_count' => (int) ($data['total_count'] ?? 0),
             'active_count' => (int) ($data['active_count'] ?? 0),
             'completed_count' => (int) ($data['completed_count'] ?? 0),

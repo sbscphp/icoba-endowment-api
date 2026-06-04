@@ -11,6 +11,7 @@ use App\Exceptions\ApiException;
 use App\Helpers\FileUploadHelper;
 use App\Helpers\GeneralHelper;
 use App\Helpers\PDFReportHelper;
+use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\Admin;
 use App\Models\Campaign;
 use App\Models\CampaignStatusLog;
@@ -416,21 +417,20 @@ class CampaignService
     }
 
     /**
+     * @param  array<string, mixed>  $validated
      * @return array<string, mixed>
      */
-    public function stats(?string $startDate, ?string $endDate): array
+    public function stats(array $validated): array
     {
-        $validated = array_filter([
-            'start_date' => $startDate,
-            'end_date' => $endDate,
-        ], fn ($v) => $v !== null && $v !== '');
+        $window = ListingFilterRules::resolveDateWindow($validated);
 
         $query = Campaign::query();
         $this->applyDateRange($query, $validated, 'created_at');
 
         return [
-            'start_date' => $startDate,
-            'end_date' => $endDate,
+            'period' => $window['period'],
+            'start_date' => $window['start']?->toDateString(),
+            'end_date' => $window['end']?->toDateString(),
             'total_count' => (clone $query)->count(),
             'active_count' => (clone $query)->where('status', CampaignStatus::ACTIVE)->count(),
             'completed_count' => (clone $query)->where('status', CampaignStatus::COMPLETED)->count(),
@@ -788,8 +788,8 @@ class CampaignService
         if ($search !== '') {
             $query->where(function (Builder $builder) use ($search): void {
                 $builder->where('name', 'like', '%'.$search.'%')
-                    ->orWhere('uuid', 'like', '%'.$search.'%')
-                    ->orWhere('campaign_id', 'like', '%'.$search.'%')
+                    // ->orWhere('uuid', 'like', '%'.$search.'%')
+                    // ->orWhere('campaign_id', 'like', '%'.$search.'%')
                     ->orWhere('short_description', 'like', '%'.$search.'%');
             });
         }
@@ -840,9 +840,12 @@ class CampaignService
      */
     private function applyTransactionRaisedAggregates(Builder $query, array $validated): void
     {
+        $window = ListingFilterRules::resolveDateWindow($validated);
+
         $query->withSum([
-            'transactions as successful_contributions_sum_naira' => function (Builder $q): void {
+            'transactions as successful_contributions_sum_naira' => function (Builder $q) use ($window): void {
                 $q->where('status', TransactionStatus::SUCCESSFUL);
+                $this->applyTransactionCreatedAtWindow($q, $window['start'], $window['end']);
             },
         ], 'amount_in_naira');
 
@@ -853,8 +856,9 @@ class CampaignService
 
         if ($raisedCurrency === 'NGN') {
             $query->withSum([
-                'transactions as total_raised_filtered' => function (Builder $q): void {
+                'transactions as total_raised_filtered' => function (Builder $q) use ($window): void {
                     $q->where('status', TransactionStatus::SUCCESSFUL);
+                    $this->applyTransactionCreatedAtWindow($q, $window['start'], $window['end']);
                 },
             ], 'amount_in_naira');
 
@@ -862,9 +866,10 @@ class CampaignService
         }
 
         $query->withSum([
-            'transactions as total_raised_filtered' => function (Builder $q) use ($raisedCurrency): void {
+            'transactions as total_raised_filtered' => function (Builder $q) use ($raisedCurrency, $window): void {
                 $q->where('status', TransactionStatus::SUCCESSFUL)
                     ->where('currency', $raisedCurrency);
+                $this->applyTransactionCreatedAtWindow($q, $window['start'], $window['end']);
             },
         ], 'amount');
     }
@@ -890,19 +895,30 @@ class CampaignService
         }
 
         $statusValue = TransactionStatus::SUCCESSFUL->value;
+        $window = ListingFilterRules::resolveDateWindow($validated);
+        $dateSql = '';
+        $dateBindings = [];
+        if ($window['start'] !== null) {
+            $dateSql .= ' and transactions.created_at >= ?';
+            $dateBindings[] = $window['start'];
+        }
+        if ($window['end'] !== null) {
+            $dateSql .= ' and transactions.created_at <= ?';
+            $dateBindings[] = $window['end'];
+        }
 
         if ($raisedCurrency === 'NGN') {
             $query->whereRaw(
-                '(select coalesce(sum(amount_in_naira), 0) from transactions where transactions.campaign_uuid = campaigns.uuid and transactions.status = ? and transactions.deleted_at is null) >= ?',
-                [$statusValue, $minVal]
+                '(select coalesce(sum(amount_in_naira), 0) from transactions where transactions.campaign_uuid = campaigns.uuid and transactions.status = ? and transactions.deleted_at is null'.$dateSql.') >= ?',
+                array_merge([$statusValue], $dateBindings, [$minVal])
             );
 
             return;
         }
 
         $query->whereRaw(
-            '(select coalesce(sum(amount), 0) from transactions where transactions.campaign_uuid = campaigns.uuid and transactions.status = ? and transactions.currency = ? and transactions.deleted_at is null) >= ?',
-            [$statusValue, $raisedCurrency, $minVal]
+            '(select coalesce(sum(amount), 0) from transactions where transactions.campaign_uuid = campaigns.uuid and transactions.status = ? and transactions.currency = ? and transactions.deleted_at is null'.$dateSql.') >= ?',
+            array_merge([$statusValue, $raisedCurrency], $dateBindings, [$minVal])
         );
     }
 
@@ -911,15 +927,25 @@ class CampaignService
      */
     private function applyDateRange(Builder $query, array $validated, string $column): void
     {
-        $startDate = ! empty($validated['start_date']) ? Carbon::parse((string) $validated['start_date'])->startOfDay() : null;
-        $endDate = ! empty($validated['end_date']) ? Carbon::parse((string) $validated['end_date'])->endOfDay() : null;
+        $window = ListingFilterRules::resolveDateWindow($validated);
 
-        if ($startDate !== null) {
-            $query->where($column, '>=', $startDate);
+        if ($window['start'] !== null) {
+            $query->where($column, '>=', $window['start']);
         }
 
-        if ($endDate !== null) {
-            $query->where($column, '<=', $endDate);
+        if ($window['end'] !== null) {
+            $query->where($column, '<=', $window['end']);
+        }
+    }
+
+    private function applyTransactionCreatedAtWindow(Builder $query, ?Carbon $start, ?Carbon $end): void
+    {
+        if ($start !== null) {
+            $query->where('created_at', '>=', $start);
+        }
+
+        if ($end !== null) {
+            $query->where('created_at', '<=', $end);
         }
     }
 }

@@ -13,6 +13,21 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Admin dashboard aggregates (overview, trends, breakdowns, active campaigns).
+ *
+ * Currency handling (query param `currency` on {@see DashboardFilterRequest}):
+ *
+ * - Omitted or empty: no transaction currency WHERE clause; sums use `amount_in_naira`
+ *   so all successful donations roll up to one naira total. Response `currency` is NGN
+ *   as a display label only; `currency_filter_applied` is false.
+ * - Present (NGN, USD, GBP, EUR): only rows with `transactions.currency` matching;
+ *   sums use native `amount`. `currency=NGN` means naira-denominated txs only, not
+ *   “all currencies converted to naira”. `currency_filter_applied` is true.
+ *
+ * Pledges are never filtered by currency (date window only). Period comparison reuses
+ * the same currency semantics on the previous equivalent date range.
+ */
 class DashboardService
 {
     /**
@@ -28,7 +43,9 @@ class DashboardService
         $previous = $this->previousOverviewMetrics($filters, $period, $amountColumn);
 
         return [
-            'currency' => $this->resolvedCurrency($filters),
+            'currency' => $this->responseCurrency($filters),
+            // Lets the UI distinguish naira rollup (false) from currency-specific totals (true).
+            'currency_filter_applied' => $this->currencyFilterActive($filters),
             'period' => $period['period'],
             'start_date' => $period['start']?->toDateString(),
             'end_date' => $period['end']?->toDateString(),
@@ -79,7 +96,8 @@ class DashboardService
             }
 
             return [
-                'currency' => $this->resolvedCurrency($filters),
+                'currency' => $this->responseCurrency($filters),
+                'currency_filter_applied' => $this->currencyFilterActive($filters),
                 'year' => $resolvedYear,
                 'series' => $series,
             ];
@@ -96,7 +114,8 @@ class DashboardService
             ->get();
 
         return [
-            'currency' => $this->resolvedCurrency($filters),
+            'currency' => $this->responseCurrency($filters),
+            'currency_filter_applied' => $this->currencyFilterActive($filters),
             'year' => null,
             'series' => $rows->map(fn ($row): array => [
                 'label' => (string) $row->bucket,
@@ -176,6 +195,7 @@ class DashboardService
         $result = [];
         foreach ($tiers as $tier) {
             $query = $this->successfulTransactionsQuery($filters);
+            // Tier thresholds are configured in naira; currency filter only affects which txs count.
             $query->where('amount_in_naira', '>=', $tier->min_amount);
             if ($tier->max_amount !== null) {
                 $query->where('amount_in_naira', '<=', $tier->max_amount);
@@ -198,11 +218,13 @@ class DashboardService
      */
     public function activeCampaigns(array $filters): array
     {
-        $currency = $this->resolvedCurrency($filters);
+        $currency = $this->responseCurrency($filters);
         $campaignQuery = Campaign::query()
             ->where('status', CampaignStatus::ACTIVE);
 
-        if ($currency !== Currency::NGN->value) {
+        // Without a currency filter, list every active campaign. With a filter, only
+        // campaigns that accept donations in that currency (base or available list).
+        if ($this->currencyFilterActive($filters)) {
             $campaignQuery->where(function (Builder $builder) use ($currency): void {
                 $builder->where('base_currency', $currency)
                     ->orWhereJsonContains('available_donation_currencies', $currency);
@@ -220,6 +242,7 @@ class DashboardService
         return $campaigns->map(function (Campaign $campaign) use ($filters, $currency): array {
             $tx = $this->successfulTransactionsQuery($filters)
                 ->where('campaign_uuid', $campaign->uuid);
+            // Reference totals ignore currency filter so clients can show naira/base breakdowns.
             $baseTx = $this->successfulTransactionsQueryWithoutCurrency($filters)
                 ->where('campaign_uuid', $campaign->uuid);
             $raised = (float) (clone $tx)->sum($this->amountColumn($filters));
@@ -277,16 +300,17 @@ class DashboardService
     }
 
     /**
-     * @param  array<string, mixed>  $filters
+     * Successful transactions in the resolved date window, optionally scoped by currency.
+     *
+     * @param  array<string, mixed>  $filters  Validated dashboard filters (see class docblock).
      * @return Builder<Transaction>
      */
     private function successfulTransactionsQuery(array $filters): Builder
     {
         $query = Transaction::query()->countableTowardRevenue();
 
-        $currency = $this->resolvedCurrency($filters);
-        if ($currency !== Currency::NGN->value) {
-            $query->where('transactions.currency', $currency);
+        if ($this->currencyFilterActive($filters)) {
+            $query->where('transactions.currency', $this->resolvedCurrency($filters));
         }
 
         $range = ListingFilterRules::resolveDateWindow($filters);
@@ -308,15 +332,17 @@ class DashboardService
     {
         $query = Transaction::query()->countableTowardRevenue();
 
-        $currency = $this->resolvedCurrency($filters);
-        if ($currency !== Currency::NGN->value) {
-            $query->where('currency', $currency);
+        if ($this->currencyFilterActive($filters)) {
+            $query->where('currency', $this->resolvedCurrency($filters));
         }
 
         return $query;
     }
 
     /**
+     * Same date window as {@see successfulTransactionsQuery()} but never filters by currency.
+     * Used where the API exposes parallel naira / base-currency figures (e.g. active campaigns).
+     *
      * @param  array<string, mixed>  $filters
      * @return Builder<Transaction>
      */
@@ -336,14 +362,52 @@ class DashboardService
     }
 
     /**
+     * Column to SUM for fund-raised metrics: naira rollup vs native donation amount.
+     *
      * @param  array<string, mixed>  $filters
      */
     private function amountColumn(array $filters): string
     {
-        return $this->resolvedCurrency($filters) === Currency::NGN->value ? 'amount_in_naira' : 'amount';
+        if (! $this->currencyFilterActive($filters)) {
+            return 'amount_in_naira';
+        }
+
+        return 'amount';
     }
 
     /**
+     * True when the client sent a non-empty `currency` query param (after request normalization).
+     * Absence means “all currencies, reported in naira” — not the same as `currency=NGN`.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    private function currencyFilterActive(array $filters): bool
+    {
+        if (! array_key_exists('currency', $filters)) {
+            return false;
+        }
+
+        $currency = $filters['currency'];
+
+        return $currency !== null && $currency !== '';
+    }
+
+    /**
+     * `currency` field returned to the client. When no filter is active this is NGN even though
+     * USD/GBP/EUR rows are included; pair with `currency_filter_applied` on overview/trend payloads.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    private function responseCurrency(array $filters): string
+    {
+        return $this->currencyFilterActive($filters)
+            ? $this->resolvedCurrency($filters)
+            : Currency::NGN->value;
+    }
+
+    /**
+     * Normalized currency code when a filter is active; invalid values fall back to NGN.
+     *
      * @param  array<string, mixed>  $filters
      */
     private function resolvedCurrency(array $filters): string

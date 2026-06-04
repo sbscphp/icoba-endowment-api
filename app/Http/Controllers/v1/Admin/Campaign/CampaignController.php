@@ -58,11 +58,7 @@ class CampaignController extends Controller
     public function stats(CampaignStatsRequest $request)
     {
         try {
-            $v = $request->validated();
-            $payload = $this->campaignService->stats(
-                $v['start_date'] ?? null,
-                $v['end_date'] ?? null,
-            );
+            $payload = $this->campaignService->stats($request->validated());
 
             return JsonResponser::send(false, 'Campaign stats retrieved.', CampaignStatsResource::make($payload)->resolve());
         } catch (\Throwable $th) {
