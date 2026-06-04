@@ -39,4 +39,19 @@ class PledgeStatsRequest extends ApiFormRequest
             ]
         );
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), ListingFilterRules::periodDateMessages(), [
+            'filters.array' => 'Filters must be a structured set of values.',
+            'filters.status.in' => 'Pledge status filter is invalid.',
+            'filters.campaign_uuid.uuid' => 'Campaign filter must be a valid UUID.',
+            'filters.campaign_uuid.exists' => 'Selected campaign does not exist.',
+            'filters.user_uuid.uuid' => 'User filter must be a valid UUID.',
+            'filters.user_uuid.exists' => 'Selected user does not exist.',
+            'filters.currency.in' => 'Currency filter is invalid.',
+            'filters.payment_plan_type.in' => 'Payment plan type filter is invalid.',
+            'filters.is_anonymous.in' => 'Anonymous filter must be a boolean value.',
+        ]);
+    }
 }

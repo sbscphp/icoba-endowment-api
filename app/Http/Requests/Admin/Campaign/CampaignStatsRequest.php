@@ -24,4 +24,9 @@ class CampaignStatsRequest extends ApiFormRequest
     {
         return ListingFilterRules::periodDateRules();
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), ListingFilterRules::periodDateMessages());
+    }
 }

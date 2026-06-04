@@ -14,4 +14,12 @@ class UpdateContactSubmissionStatusRequest extends ApiFormRequest
             'status' => ['required', 'string', Rule::in(ContactSubmissionStatus::values())],
         ];
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'status.required' => 'Please select a status.',
+            'status.in' => 'Selected status is invalid.',
+        ]);
+    }
 }

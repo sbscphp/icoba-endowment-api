@@ -21,4 +21,16 @@ class UploadImageRequest extends ApiFormRequest
             'image' => 'image',
         ];
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'file.required_without' => 'Please upload an image file or provide an image data string.',
+            'file.file' => 'The uploaded value is not a valid file.',
+            'file.image' => 'The uploaded file must be an image.',
+            'file.max' => 'Image file may not be larger than 10MB.',
+            'image.required_without' => 'Please upload an image file or provide an image data string.',
+            'image.string' => 'Image data must be a valid string.',
+        ]);
+    }
 }

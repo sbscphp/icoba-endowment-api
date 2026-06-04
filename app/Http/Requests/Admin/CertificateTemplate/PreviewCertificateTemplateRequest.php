@@ -15,4 +15,12 @@ class PreviewCertificateTemplateRequest extends ApiFormRequest
             'format' => ['sometimes', 'nullable', 'string', Rule::in(CertificatePreviewFormat::values())],
         ];
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'awardee_name.max' => 'Awardee name may not be longer than 120 characters.',
+            'format.in' => 'Preview format is invalid.',
+        ]);
+    }
 }

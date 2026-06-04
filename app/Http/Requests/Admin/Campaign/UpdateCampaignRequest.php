@@ -41,6 +41,31 @@ class UpdateCampaignRequest extends ApiFormRequest
         ];
     }
 
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'name.unique' => 'Another campaign is already using this name.',
+            'name.max' => 'Campaign name may not be longer than 60 characters.',
+            'short_description.max' => 'Short description may not be longer than 500 characters.',
+            'categories.array' => 'Categories must be provided as a list.',
+            'categories.min' => 'Please choose at least one campaign category.',
+            'categories.*.in' => 'One or more selected categories are invalid.',
+            'base_currency.in' => 'Base currency is invalid.',
+            'available_donation_currencies.array' => 'Donation currencies must be provided as a list.',
+            'available_donation_currencies.min' => 'Please select at least one donation currency.',
+            'available_donation_currencies.*.in' => 'One or more selected donation currencies are invalid.',
+            'target_amount.numeric' => 'Target amount must be a number.',
+            'target_amount.min' => 'Target amount must be at least 0.',
+            'start_date.date' => 'Start date must be a valid date.',
+            'end_date.date' => 'End date must be a valid date.',
+            'end_date.after_or_equal' => 'End date must be on or after the start date.',
+            'gallery_images.array' => 'Gallery images must be provided as a list.',
+            'gallery_images.max' => 'You may upload at most 4 gallery images.',
+            'graduation_set_uuids.array' => 'Graduation sets must be provided as a list.',
+            'graduation_set_uuids.*.exists' => 'One or more selected graduation sets do not exist.',
+        ]);
+    }
+
     protected function prepareForValidation(): void
     {
         $all = $this->input('applies_to_all_graduation_sets');

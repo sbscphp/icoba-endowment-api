@@ -124,6 +124,53 @@ final class ListingFilterRules
         ];
     }
 
+    /**
+     * Shared validation messages that pair with the rules in self::rules().
+     *
+     * Requests should array_merge this with their domain-specific messages.
+     *
+     * @return array<string, string>
+     */
+    public static function listingMessages(): array
+    {
+        return [
+            'search.string' => 'Search query must be text.',
+            'search.max' => 'Search query may not be longer than 255 characters.',
+            'period.in' => 'Period filter is invalid.',
+            'start_date.date' => 'Start date must be a valid date.',
+            'start_date.required_if' => 'Start date is required when period is set to "custom".',
+            'end_date.date' => 'End date must be a valid date.',
+            'end_date.required_if' => 'End date is required when period is set to "custom".',
+            'end_date.after_or_equal' => 'End date must be on or after the start date.',
+            'sort_by.in' => 'Sort field is invalid.',
+            'sort_direction.in' => 'Sort direction must be either "asc" or "desc".',
+            'page.integer' => 'Page must be a number.',
+            'page.min' => 'Page must be at least 1.',
+            'per_page.integer' => 'Per page must be a number.',
+            'per_page.min' => 'Per page must be at least 1.',
+            'per_page.max' => 'Per page may not be greater than the allowed maximum.',
+            'filters.array' => 'Filters must be a structured set of values.',
+        ];
+    }
+
+    /**
+     * Shared messages that pair with self::periodDateRules().
+     *
+     * @return array<string, string>
+     */
+    public static function periodDateMessages(): array
+    {
+        return [
+            'period.in' => 'Period filter is invalid.',
+            'start_date.date' => 'Start date must be a valid date.',
+            'start_date.required_if' => 'Start date is required when period is set to "custom".',
+            'end_date.date' => 'End date must be a valid date.',
+            'end_date.required_if' => 'End date is required when period is set to "custom".',
+            'end_date.after_or_equal' => 'End date must be on or after the start date.',
+            'currency.in' => 'Currency filter is invalid.',
+        ];
+    }
+
     public static function applyPeriodDateRangeToRequest($request): void
     {
         $period = strtolower((string) $request->input('period', ''));

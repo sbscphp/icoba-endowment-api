@@ -43,4 +43,18 @@ class UpdateReconciliationBankRequest extends ApiFormRequest
             }
         });
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'paid_into_account_number.required_without' => 'Provide either an account number or an account key.',
+            'paid_into_account_number.string' => 'Account number must be a text value.',
+            'paid_into_account_number.max' => 'Account number may not be longer than 64 characters.',
+            'paid_into_account_number.in' => 'Selected account number is not configured.',
+            'paid_into_account_key.required_without' => 'Provide either an account key or an account number.',
+            'paid_into_account_key.string' => 'Account key must be a text value.',
+            'paid_into_account_key.max' => 'Account key may not be longer than 64 characters.',
+            'paid_into_account_key.in' => 'Selected account key is not configured.',
+        ]);
+    }
 }

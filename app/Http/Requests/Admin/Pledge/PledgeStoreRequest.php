@@ -47,4 +47,32 @@ class PledgeStoreRequest extends ApiFormRequest
     {
         $this->appendPledgeScheduleValidation($validator);
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'campaign_uuid.required' => 'Please select a campaign for this pledge.',
+            'campaign_uuid.uuid' => 'Campaign must be referenced by a valid UUID.',
+            'campaign_uuid.exists' => 'Selected campaign does not exist.',
+            'user_uuid.uuid' => 'User must be referenced by a valid UUID.',
+            'user_uuid.exists' => 'Selected user does not exist.',
+            'donor_type_uuid.uuid' => 'Donor type must be referenced by a valid UUID.',
+            'donor_type_uuid.exists' => 'Selected donor type does not exist.',
+            'graduation_set_uuid.uuid' => 'Graduation set must be referenced by a valid UUID.',
+            'graduation_set_uuid.exists' => 'Selected graduation set does not exist.',
+            'donor_name.max' => 'Donor name may not be longer than 190 characters.',
+            'donor_email.email' => 'Please provide a valid donor email address.',
+            'donor_email.max' => 'Donor email may not be longer than 190 characters.',
+            'donor_phone.max' => 'Donor phone may not be longer than 32 characters.',
+            'committed_amount.required' => 'Please specify a committed amount.',
+            'committed_amount.numeric' => 'Committed amount must be a number.',
+            'committed_amount.min' => 'Committed amount must be at least 0.01.',
+            'currency.required' => 'Please select a currency.',
+            'currency.in' => 'Selected currency is invalid.',
+            'exchange_rate_to_naira.prohibited' => 'Exchange rate to Naira is set automatically and cannot be provided.',
+            'payment_plan_type.required' => 'Please select a payment plan type.',
+            'payment_plan_type.in' => 'Selected payment plan type is invalid.',
+            'metadata.array' => 'Metadata must be a structured object.',
+        ]);
+    }
 }
