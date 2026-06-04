@@ -19,6 +19,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Rate Limiter Cache Store
+    |--------------------------------------------------------------------------
+    |
+    | Throttling (e.g. throttle:60,1 on auth routes) uses this store, not the
+    | default above. Avoid "database" here on MySQL: concurrent insertOrIgnore
+    | on the cache table causes deadlocks (SQLSTATE 1213) under load.
+    |
+    */
+
+    'limiter' => env('CACHE_LIMITER_STORE', 'rate_limit'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache Stores
     |--------------------------------------------------------------------------
     |
@@ -51,6 +64,12 @@ return [
             'driver' => 'file',
             'path' => storage_path('framework/cache/data'),
             'lock_path' => storage_path('framework/cache/data'),
+        ],
+
+        'rate_limit' => [
+            'driver' => 'file',
+            'path' => storage_path('framework/cache/rate-limit'),
+            'lock_path' => storage_path('framework/cache/rate-limit'),
         ],
 
         'memcached' => [

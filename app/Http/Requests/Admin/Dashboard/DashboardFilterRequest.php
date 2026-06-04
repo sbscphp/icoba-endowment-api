@@ -12,6 +12,11 @@ class DashboardFilterRequest extends ApiFormRequest
         return ListingFilterRules::periodDateRules(includeCurrency: true);
     }
 
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), ListingFilterRules::periodDateMessages());
+    }
+
     protected function prepareForValidation(): void
     {
         ListingFilterRules::applyPeriodDateRangeToRequest($this);

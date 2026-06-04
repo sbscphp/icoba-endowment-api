@@ -13,4 +13,12 @@ class ReissueIssuedCertificateRequest extends ApiFormRequest
             'send_email' => ['sometimes', 'boolean'],
         ];
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'awardee_name.max' => 'Awardee name may not be longer than 255 characters.',
+            'send_email.boolean' => 'Send email flag must be true or false.',
+        ]);
+    }
 }

@@ -29,4 +29,16 @@ class BulkEmailListRequest extends ApiFormRequest
             ]
         );
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), ListingFilterRules::listingMessages(), [
+            'export.in' => "Export format must be either 'csv' or 'pdf'.",
+            'filters.campaign_uuid.exists' => 'Selected campaign does not exist.',
+            'filters.status.in' => 'Bulk email status filter is invalid.',
+            'filters.audience.in' => 'Audience filter is invalid.',
+            'filters.created_by_admin_uuid.exists' => 'Selected admin does not exist.',
+            'filters.is_active.in' => 'Active filter must be a boolean value.',
+        ]);
+    }
 }

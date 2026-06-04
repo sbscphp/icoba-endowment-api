@@ -63,4 +63,25 @@ class UpdateTierConfigurationRequest extends ApiFormRequest
             'is_active' => ['sometimes', 'boolean'],
         ];
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'name.unique' => 'Another tier is already using this name.',
+            'name.max' => 'Tier name may not be longer than 100 characters.',
+            'description.max' => 'Description may not be longer than 255 characters.',
+            'slug.max' => 'Slug may not be longer than 120 characters.',
+            'slug.regex' => 'Slug must be lowercase letters, numbers, and hyphens (e.g. "gold-tier").',
+            'slug.unique' => 'Another tier is already using this slug.',
+            'base_color.regex' => 'Base color must be a hex color (e.g. "#fff" or "#ffffff").',
+            'min_amount.numeric' => 'Minimum amount must be a number.',
+            'min_amount.min' => 'Minimum amount must be at least 0.',
+            'max_amount.numeric' => 'Maximum amount must be a number.',
+            'benefits.array' => 'Benefits must be provided as a list.',
+            'benefits.max' => 'You may define at most 20 benefits.',
+            'benefits.*.in' => 'One or more selected benefits are invalid.',
+            'sort_order.integer' => 'Sort order must be a whole number.',
+            'sort_order.min' => 'Sort order must be at least 0.',
+        ]);
+    }
 }

@@ -43,4 +43,20 @@ class CampaignListRequest extends ApiFormRequest
             ]
         );
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), ListingFilterRules::listingMessages(), [
+            'export.in' => "Export format must be either 'csv' or 'pdf'.",
+            'filters.status.in' => 'Campaign status filter is invalid.',
+            'filters.category.in' => 'Campaign category filter is invalid.',
+            'filters.currency.in' => 'Currency filter is invalid.',
+            'filters.graduation_set_uuid.exists' => 'Selected graduation set does not exist.',
+            'filters.created_by_admin_uuid.exists' => 'Selected admin does not exist.',
+            'filters.date_field.in' => "Date field filter must be either 'created_at' or 'start_date'.",
+            'filters.raised_currency.in' => 'Raised currency filter is invalid.',
+            'filters.min_total_raised.numeric' => 'Minimum total raised must be a number.',
+            'filters.min_total_raised.min' => 'Minimum total raised must be at least 0.',
+        ]);
+    }
 }

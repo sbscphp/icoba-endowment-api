@@ -38,4 +38,13 @@ class GenerateReportRequest extends ApiFormRequest
             ]
         );
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), ListingFilterRules::listingMessages(), [
+            'report_type.required' => 'Please select a report type to generate.',
+            'report_type.in' => 'Selected report type is invalid.',
+            'export.in' => "Export format must be either 'csv' or 'pdf'.",
+        ]);
+    }
 }

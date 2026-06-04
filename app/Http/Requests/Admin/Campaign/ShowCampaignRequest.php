@@ -14,4 +14,11 @@ class ShowCampaignRequest extends ApiFormRequest
             'filters.raised_currency' => ['sometimes', 'nullable', Rule::in(Currency::values())],
         ];
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'filters.raised_currency.in' => 'Raised currency filter is invalid.',
+        ]);
+    }
 }

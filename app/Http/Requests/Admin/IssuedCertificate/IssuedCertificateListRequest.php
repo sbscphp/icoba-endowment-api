@@ -42,4 +42,14 @@ class IssuedCertificateListRequest extends ApiFormRequest
             ]
         );
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), ListingFilterRules::listingMessages(), [
+            'export.in' => "Export format must be either 'csv' or 'pdf'.",
+            'filters.status.in' => 'Certificate status filter is invalid.',
+            'filters.tier_uuid.exists' => 'Selected tier does not exist.',
+            'filters.gateway.in' => 'Payment gateway filter is invalid.',
+        ]);
+    }
 }
