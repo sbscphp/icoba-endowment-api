@@ -4,6 +4,7 @@ namespace App\Http\Controllers\v1\Admin\TierConfiguration;
 
 use App\Enums\TierBenefit;
 use App\Helpers\GeneralHelper;
+use App\Helpers\PDFReportHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\DateRangeStatsRequest;
 use App\Http\Requests\Admin\Tier\CreateTierConfigurationRequest;
@@ -11,16 +12,19 @@ use App\Http\Requests\Admin\Tier\TierListRequest;
 use App\Http\Requests\Admin\Tier\UpdateTierConfigurationRequest;
 use App\Http\Resources\TierConfigurationListResource;
 use App\Http\Resources\TierConfigurationResource;
+use App\Models\TierConfiguration;
 use App\Responser\JsonResponser;
 use App\Services\Admin\TierConfiguration\TierConfigurationService;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TierConfigurationController extends Controller
 {
     public function __construct(
         private readonly TierConfigurationService $tierConfigurationService,
+        private readonly PDFReportHelper $pdfReportHelper,
     ) {}
 
     public function stats(DateRangeStatsRequest $request)
@@ -35,9 +39,14 @@ class TierConfigurationController extends Controller
     public function index(TierListRequest $request)
     {
         try {
-            $paginator = $this->tierConfigurationService->list($request->validated());
+            $listing = $request->validated();
+            $export = $listing['export'] ?? null;
 
-            return JsonResponser::send(false, 'Tier configurations retrieved.', $this->paginatedPayload($paginator, TierConfigurationListResource::class));
+            return match ($export) {
+                'csv' => $this->respondListCsv($listing),
+                'pdf' => $this->respondListPdf($listing),
+                default => $this->respondListPaginated($listing),
+            };
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\TierConfiguration\TierConfigurationController@index');
         }
@@ -132,6 +141,121 @@ class TierConfigurationController extends Controller
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\TierConfiguration\TierConfigurationController@benefitOptions');
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $listing
+     */
+    private function respondListPaginated(array $listing)
+    {
+        $paginator = $this->tierConfigurationService->list($listing);
+
+        return JsonResponser::send(false, 'Tier configurations retrieved.', $this->paginatedPayload($paginator, TierConfigurationListResource::class));
+    }
+
+    /**
+     * @param  array<string, mixed>  $listing
+     */
+    private function respondListCsv(array $listing): StreamedResponse
+    {
+        [$collection, $truncated] = $this->tierConfigurationService->exportCollection($listing);
+        $filename = 'tier-configurations-'.now()->format('Y-m-d-His').'.csv';
+
+        return response()->streamDownload(function () use ($collection): void {
+            $out = fopen('php://output', 'w');
+            if ($out === false) {
+                return;
+            }
+
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, [
+                'Tier ID',
+                'Name',
+                'Min amount',
+                'Max amount',
+                'Benefits count',
+                'Templates count',
+                'Sort order',
+                'Status',
+                'Last updated',
+            ]);
+
+            foreach ($collection as $tier) {
+                /** @var TierConfiguration $tier */
+                fputcsv($out, $this->tabularRow($tier));
+            }
+
+            fclose($out);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'X-Export-Truncated' => $truncated ? '1' : '0',
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $listing
+     */
+    private function respondListPdf(array $listing)
+    {
+        [$collection, $truncated] = $this->tierConfigurationService->exportCollection($listing);
+        $filename = 'tier-configurations-'.now()->format('Y-m-d-His').'.pdf';
+        $periodStart = ! empty($listing['start_date']) ? (string) $listing['start_date'] : 'All dates';
+        $periodEnd = ! empty($listing['end_date']) ? (string) $listing['end_date'] : 'All dates';
+
+        $headings = [
+            'Tier ID',
+            'Name',
+            'Min amount',
+            'Max amount',
+            'Benefits',
+            'Templates',
+            'Sort',
+            'Status',
+            'Updated',
+        ];
+
+        $rows = $collection->map(fn (TierConfiguration $tier): array => [
+            $tier->uuid,
+            $tier->name,
+            $tier->min_amount !== null ? (string) $tier->min_amount : '',
+            $tier->max_amount !== null ? (string) $tier->max_amount : '',
+            (string) (is_array($tier->benefits) ? count($tier->benefits) : 0),
+            (string) (int) ($tier->templates_count ?? 0),
+            (string) (int) $tier->sort_order,
+            $tier->is_active ? 'active' : 'inactive',
+            $tier->updated_at?->format('Y-m-d H:i') ?? '',
+        ]);
+
+        return $this->pdfReportHelper->download(
+            rows: $rows,
+            headings: $headings,
+            title: 'Tier configurations',
+            filename: $filename,
+            orientation: 'landscape',
+            periodStart: $periodStart,
+            periodEnd: $periodEnd,
+            generatedAt: now((string) config('app.timezone')),
+            truncated: $truncated,
+            includedRows: $rows->count(),
+        );
+    }
+
+    /**
+     * @return list<int|string|null>
+     */
+    private function tabularRow(TierConfiguration $tier): array
+    {
+        return [
+            $tier->uuid,
+            $tier->name,
+            $tier->min_amount !== null ? (string) $tier->min_amount : '',
+            $tier->max_amount !== null ? (string) $tier->max_amount : '',
+            is_array($tier->benefits) ? count($tier->benefits) : 0,
+            (int) ($tier->templates_count ?? 0),
+            (int) $tier->sort_order,
+            $tier->is_active ? 'active' : 'inactive',
+            $tier->updated_at?->toIso8601String() ?? '',
+        ];
     }
 
     /**

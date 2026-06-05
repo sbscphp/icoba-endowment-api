@@ -16,6 +16,8 @@ use InvalidArgumentException;
 class TierConfigurationService
 {
     private const UPLOAD_FOLDER = 'tier-badges';
+
+    private const MAX_EXPORT_ROWS = 5000;
     /**
      * @param  array<string, mixed>  $payload
      */
@@ -62,9 +64,33 @@ class TierConfigurationService
      */
     public function list(array $validated): LengthAwarePaginator
     {
+        $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
+
+        return $this->baseListQuery($validated)->paginate($perPage);
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array{0: Collection<int, TierConfiguration>, 1: bool}
+     */
+    public function exportCollection(array $validated): array
+    {
+        $query = $this->baseListQuery($validated);
+        $total = (clone $query)->count();
+        $truncated = $total > self::MAX_EXPORT_ROWS;
+        /** @var Collection<int, TierConfiguration> $rows */
+        $rows = $query->limit(self::MAX_EXPORT_ROWS)->get();
+
+        return [$rows, $truncated];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function baseListQuery(array $validated): Builder
+    {
         $sortBy = (string) ($validated['sort_by'] ?? 'sort_order');
         $sortDirection = strtolower((string) ($validated['sort_direction'] ?? 'asc')) === 'desc' ? 'desc' : 'asc';
-        $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
 
         $query = TierConfiguration::query()
             ->withCount('certificateTemplates as templates_count');
@@ -91,9 +117,7 @@ class TierConfigurationService
             $sortBy = 'sort_order';
         }
 
-        return $query
-            ->orderBy($sortBy, $sortDirection)
-            ->paginate($perPage);
+        return $query->orderBy($sortBy, $sortDirection);
     }
 
     public function findTier(string $tierId): TierConfiguration
