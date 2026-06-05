@@ -4,6 +4,7 @@ namespace App\Http\Controllers\v1\Admin\Notification;
 
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\Notification\NotificationListRequest;
 use App\Http\Resources\DatabaseNotificationResource;
 use App\Models\Admin;
 use App\Responser\JsonResponser;
@@ -14,17 +15,19 @@ class NotificationController extends Controller
 {
     public function __construct(private readonly NotificationInboxService $inbox) {}
 
-    public function index(Request $request)
+    public function index(NotificationListRequest $request)
     {
         try {
             $admin = $this->requireAdmin($request);
+            $validated = $request->validated();
 
-            $perPage = min(max((int) $request->query('per_page', 15), 1), 100);
+            $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
+            $page = max(1, (int) ($validated['page'] ?? 1));
 
-            $paginator = $this->inbox->paginate($admin, $perPage);
+            $paginator = $this->inbox->paginate($admin, $perPage, $page, $validated);
 
             $notifications = DatabaseNotificationResource::collection($paginator)->resource;
-    
+
             return JsonResponser::send(
                 false,
                 'Notifications retrieved.',
