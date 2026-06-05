@@ -5,6 +5,7 @@ namespace App\Http\Requests\Concerns;
 use App\Enums\Currency;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\Rule;
 
 final class ListingFilterRules
@@ -122,6 +123,37 @@ final class ListingFilterRules
             'end' => $end,
             'period' => ($period !== null && $period !== '') ? $period : null,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array{period: string|null, start_date: string|null, end_date: string|null}
+     */
+    public static function periodMeta(array $validated): array
+    {
+        $window = self::resolveDateWindow($validated);
+
+        return [
+            'period' => $window['period'],
+            'start_date' => $window['start']?->toDateString(),
+            'end_date' => $window['end']?->toDateString(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    public static function applyResolvedDateRange(Builder $query, array $validated, string $column = 'created_at'): void
+    {
+        $window = self::resolveDateWindow($validated);
+
+        if ($window['start'] !== null) {
+            $query->where($column, '>=', $window['start']);
+        }
+
+        if ($window['end'] !== null) {
+            $query->where($column, '<=', $window['end']);
+        }
     }
 
     /**

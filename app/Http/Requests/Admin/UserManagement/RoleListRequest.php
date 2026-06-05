@@ -25,7 +25,7 @@ class RoleListRequest extends ApiFormRequest
 
     public function messages(): array
     {
-        return array_merge(parent::messages(), [
+        return array_merge(parent::messages(), ListingFilterRules::listingMessages(), [
             'filters.status.in' => "Status filter must be either 'active' or 'inactive'.",
         ]);
     }

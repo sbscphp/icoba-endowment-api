@@ -7,6 +7,7 @@ use App\Helpers\GeneralHelper;
 use App\Helpers\PDFReportHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Report\GenerateReportRequest;
+use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Responser\JsonResponser;
 use App\Services\Admin\Report\ReportService;
 use Illuminate\Http\Request;
@@ -101,8 +102,9 @@ class ReportController extends Controller
         $result = $this->reportService->exportRows($validated);
         $type = ReportType::from((string) $validated['report_type']);
         $filename = $type->value.'-report-'.now()->format('Y-m-d-His').'.pdf';
-        $periodStart = ! empty($validated['start_date']) ? (string) $validated['start_date'] : 'All dates';
-        $periodEnd = ! empty($validated['end_date']) ? (string) $validated['end_date'] : 'All dates';
+        $period = ListingFilterRules::periodMeta($validated);
+        $periodStart = $period['start_date'] ?? 'All dates';
+        $periodEnd = $period['end_date'] ?? 'All dates';
 
         return $this->pdfReportHelper->download(
             rows: $result['rows'],
