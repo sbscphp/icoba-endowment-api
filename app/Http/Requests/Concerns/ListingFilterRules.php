@@ -6,6 +6,7 @@ use App\Enums\Currency;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Validation\Rule;
 
 final class ListingFilterRules
@@ -143,7 +144,7 @@ final class ListingFilterRules
     /**
      * @param  array<string, mixed>  $validated
      */
-    public static function applyResolvedDateRange(Builder $query, array $validated, string $column = 'created_at'): void
+    public static function applyResolvedDateRange(Builder|Relation $query, array $validated, string $column = 'created_at'): void
     {
         $window = self::resolveDateWindow($validated);
 
