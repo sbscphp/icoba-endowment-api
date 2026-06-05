@@ -5,6 +5,7 @@ namespace App\Services\Admin\Campaign;
 use App\Enums\AuditActionEnum;
 use App\Enums\CampaignStatus;
 use App\Enums\ModuleEnums;
+use App\Enums\PledgeStatus;
 use App\Enums\TransactionStatus;
 use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
@@ -422,22 +423,17 @@ class CampaignService
      */
     public function stats(array $validated): array
     {
-        $window = ListingFilterRules::resolveDateWindow($validated);
-
         $query = Campaign::query();
         $this->applyDateRange($query, $validated, 'created_at');
 
-        return [
-            'period' => $window['period'],
-            'start_date' => $window['start']?->toDateString(),
-            'end_date' => $window['end']?->toDateString(),
+        return array_merge(ListingFilterRules::periodMeta($validated), [
             'total_count' => (clone $query)->count(),
             'active_count' => (clone $query)->where('status', CampaignStatus::ACTIVE)->count(),
             'completed_count' => (clone $query)->where('status', CampaignStatus::COMPLETED)->count(),
             'paused_count' => (clone $query)->where('status', CampaignStatus::PAUSED)->count(),
             'deactivated_count' => (clone $query)->where('status', CampaignStatus::DEACTIVATED)->count(),
             'draft_count' => (clone $query)->where('status', CampaignStatus::DRAFT)->count(),
-        ];
+        ]);
     }
 
     public function findCampaign(string $campaignId): Campaign
@@ -455,6 +451,7 @@ class CampaignService
         $validated = ['filters' => $filters];
         $query = Campaign::query()->where('uuid', $campaign->uuid);
         $this->applyTransactionRaisedAggregates($query, $validated);
+        $this->applyPledgeCommittedAggregates($query, $validated);
         $row = $query->first();
 
         if ($row === null) {
@@ -463,6 +460,10 @@ class CampaignService
 
         $campaign->setAttribute('successful_contributions_sum_naira', $row->successful_contributions_sum_naira);
         $campaign->setAttribute('total_raised_filtered', $row->total_raised_filtered);
+        $campaign->setAttribute('successful_transactions_count', $row->successful_transactions_count);
+        $campaign->setAttribute('pledges_committed_sum_naira', $row->pledges_committed_sum_naira);
+        $campaign->setAttribute('pledges_committed_filtered', $row->pledges_committed_filtered);
+        $campaign->setAttribute('pledges_count', $row->pledges_count);
 
         return $campaign;
     }
@@ -838,16 +839,77 @@ class CampaignService
      *
      * @param  array<string, mixed>  $validated
      */
+    /**
+     * Non-cancelled pledges: committed totals for campaign progress.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function applyPledgeCommittedAggregates(Builder $query, array $validated): void
+    {
+        $window = ListingFilterRules::resolveDateWindow($validated);
+
+        $activePledges = function (Builder $q) use ($window): void {
+            $q->where('status', '!=', PledgeStatus::CANCELLED);
+            $this->applyPledgeCreatedAtWindow($q, $window['start'], $window['end']);
+        };
+
+        $query->withSum([
+            'pledges as pledges_committed_sum_naira' => $activePledges,
+        ], 'committed_amount_ngn');
+
+        $query->withCount([
+            'pledges as pledges_count' => $activePledges,
+        ]);
+
+        $pledgeCurrency = strtoupper((string) data_get($validated, 'filters.raised_currency', 'NGN'));
+        if ($pledgeCurrency === '') {
+            $pledgeCurrency = 'NGN';
+        }
+
+        if ($pledgeCurrency === 'NGN') {
+            $query->withSum([
+                'pledges as pledges_committed_filtered' => $activePledges,
+            ], 'committed_amount_ngn');
+
+            return;
+        }
+
+        $query->withSum([
+            'pledges as pledges_committed_filtered' => function (Builder $q) use ($pledgeCurrency, $window): void {
+                $q->where('status', '!=', PledgeStatus::CANCELLED)
+                    ->where('currency', $pledgeCurrency);
+                $this->applyPledgeCreatedAtWindow($q, $window['start'], $window['end']);
+            },
+        ], 'committed_amount');
+    }
+
+    private function applyPledgeCreatedAtWindow(Builder $query, ?Carbon $start, ?Carbon $end): void
+    {
+        if ($start !== null) {
+            $query->where('created_at', '>=', $start);
+        }
+
+        if ($end !== null) {
+            $query->where('created_at', '<=', $end);
+        }
+    }
+
     private function applyTransactionRaisedAggregates(Builder $query, array $validated): void
     {
         $window = ListingFilterRules::resolveDateWindow($validated);
 
+        $successfulTransactions = function (Builder $q) use ($window): void {
+            $q->where('status', TransactionStatus::SUCCESSFUL);
+            $this->applyTransactionCreatedAtWindow($q, $window['start'], $window['end']);
+        };
+
         $query->withSum([
-            'transactions as successful_contributions_sum_naira' => function (Builder $q) use ($window): void {
-                $q->where('status', TransactionStatus::SUCCESSFUL);
-                $this->applyTransactionCreatedAtWindow($q, $window['start'], $window['end']);
-            },
+            'transactions as successful_contributions_sum_naira' => $successfulTransactions,
         ], 'amount_in_naira');
+
+        $query->withCount([
+            'transactions as successful_transactions_count' => $successfulTransactions,
+        ]);
 
         $raisedCurrency = strtoupper((string) data_get($validated, 'filters.raised_currency', 'NGN'));
         if ($raisedCurrency === '') {
@@ -927,15 +989,7 @@ class CampaignService
      */
     private function applyDateRange(Builder $query, array $validated, string $column): void
     {
-        $window = ListingFilterRules::resolveDateWindow($validated);
-
-        if ($window['start'] !== null) {
-            $query->where($column, '>=', $window['start']);
-        }
-
-        if ($window['end'] !== null) {
-            $query->where($column, '<=', $window['end']);
-        }
+        ListingFilterRules::applyResolvedDateRange($query, $validated, $column);
     }
 
     private function applyTransactionCreatedAtWindow(Builder $query, ?Carbon $start, ?Carbon $end): void

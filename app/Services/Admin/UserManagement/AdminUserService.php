@@ -3,11 +3,11 @@
 namespace App\Services\Admin\UserManagement;
 
 use App\Exceptions\ApiException;
+use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\Admin;
 use App\Models\Role;
 use App\Notifications\Auth\AdminInviteSetPasswordMail;
 use App\Services\Auth\PasswordResetService;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -69,13 +69,13 @@ class AdminUserService
     public function stats(array $validated): array
     {
         $query = Admin::query();
-        $this->applyDateRange($query, $validated, 'created_at');
+        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
 
-        return [
+        return array_merge(ListingFilterRules::periodMeta($validated), [
             'total' => (clone $query)->count(),
             'active' => (clone $query)->where('is_active', true)->count(),
             'inactive' => (clone $query)->where('is_active', false)->count(),
-        ];
+        ]);
     }
 
     /**
@@ -88,6 +88,7 @@ class AdminUserService
         $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
 
         $query = Admin::query()->with('roles:id,name');
+        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
 
         $search = trim((string) ($validated['search'] ?? ''));
         if ($search !== '') {
@@ -180,23 +181,6 @@ class AdminUserService
             ->where('uuid', $adminId)
             ->orWhere('id', is_numeric($adminId) ? (int) $adminId : -1)
             ->firstOrFail();
-    }
-
-    /**
-     * @param  array<string, mixed>  $validated
-     */
-    private function applyDateRange(Builder $query, array $validated, string $column): void
-    {
-        $startDate = ! empty($validated['start_date']) ? Carbon::parse((string) $validated['start_date'])->startOfDay() : null;
-        $endDate = ! empty($validated['end_date']) ? Carbon::parse((string) $validated['end_date'])->endOfDay() : null;
-
-        if ($startDate !== null) {
-            $query->where($column, '>=', $startDate);
-        }
-
-        if ($endDate !== null) {
-            $query->where($column, '<=', $endDate);
-        }
     }
 
     private function adminSetPasswordUrl(string $resetToken, ?string $frontendUrl = null): string

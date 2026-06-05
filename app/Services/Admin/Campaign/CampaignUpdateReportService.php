@@ -5,9 +5,9 @@ namespace App\Services\Admin\Campaign;
 use App\Enums\CampaignUpdateReportStatus;
 use App\Exceptions\ApiException;
 use App\Helpers\FileUploadHelper;
+use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\Campaign;
 use App\Models\CampaignUpdateReport;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -57,7 +57,7 @@ class CampaignUpdateReportService
         $query = CampaignUpdateReport::query()
             ->where('campaign_uuid', $campaign->uuid);
 
-        $this->applyDateRange($query, $validated, 'created_at');
+        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
 
         $search = trim((string) ($validated['search'] ?? ''));
         if ($search !== '') {
@@ -301,20 +301,4 @@ class CampaignUpdateReportService
         return $url;
     }
 
-    /**
-     * @param  array<string, mixed>  $validated
-     */
-    private function applyDateRange(Builder $query, array $validated, string $column): void
-    {
-        $startDate = ! empty($validated['start_date']) ? Carbon::parse((string) $validated['start_date'])->startOfDay() : null;
-        $endDate = ! empty($validated['end_date']) ? Carbon::parse((string) $validated['end_date'])->endOfDay() : null;
-
-        if ($startDate !== null) {
-            $query->where($column, '>=', $startDate);
-        }
-
-        if ($endDate !== null) {
-            $query->where($column, '<=', $endDate);
-        }
-    }
 }

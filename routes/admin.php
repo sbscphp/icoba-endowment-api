@@ -184,6 +184,10 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:campaigns.create']);
             Route::get('/{campaignId}', [CampaignController::class, 'show'])
                 ->middleware(['permission:campaigns.read']);
+            Route::get('/{campaignId}/donors', [CampaignController::class, 'donors'])
+                ->middleware(['permission:campaigns.read']);
+            Route::get('/{campaignId}/pledges', [CampaignController::class, 'pledges'])
+                ->middleware(['permission:campaigns.read']);
             Route::patch('/{campaignId}', [CampaignController::class, 'update'])
                 ->middleware(['permission:campaigns.update']);
             Route::delete('/{campaignId}', [CampaignController::class, 'destroy'])

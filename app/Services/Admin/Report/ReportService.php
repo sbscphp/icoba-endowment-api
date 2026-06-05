@@ -3,6 +3,7 @@
 namespace App\Services\Admin\Report;
 
 use App\Enums\ReportType;
+use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\Admin;
 use App\Models\Campaign;
 use App\Models\CampaignEmail;
@@ -10,7 +11,6 @@ use App\Models\Pledge;
 use App\Models\Role;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -199,15 +199,7 @@ class ReportService
      */
     private function applyDateRange(Builder $query, array $validated): void
     {
-        $startDate = ! empty($validated['start_date']) ? Carbon::parse((string) $validated['start_date'])->startOfDay() : null;
-        $endDate = ! empty($validated['end_date']) ? Carbon::parse((string) $validated['end_date'])->endOfDay() : null;
-
-        if ($startDate !== null) {
-            $query->where('created_at', '>=', $startDate);
-        }
-        if ($endDate !== null) {
-            $query->where('created_at', '<=', $endDate);
-        }
+        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
     }
 
     /**

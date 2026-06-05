@@ -10,21 +10,29 @@ use App\Enums\UserTypeEnum;
 use App\Helpers\GeneralHelper;
 use App\Helpers\PDFReportHelper;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\Campaign\CampaignDonorListRequest;
 use App\Http\Requests\Admin\Campaign\CampaignLifecycleRequest;
 use App\Http\Requests\Admin\Campaign\CampaignListRequest;
+use App\Http\Requests\Admin\Campaign\CampaignPledgeListRequest;
 use App\Http\Requests\Admin\Campaign\CampaignReportRequest;
 use App\Http\Requests\Admin\Campaign\CampaignStatsRequest;
 use App\Http\Requests\Admin\Campaign\CampaignStatusLogListRequest;
 use App\Http\Requests\Admin\Campaign\CreateCampaignRequest;
 use App\Http\Requests\Admin\Campaign\ShowCampaignRequest;
 use App\Http\Requests\Admin\Campaign\UpdateCampaignRequest;
+use App\Http\Resources\CampaignDonorListResource;
 use App\Http\Resources\CampaignListResource;
+use App\Http\Resources\CampaignPledgeListResource;
 use App\Http\Resources\CampaignResource;
 use App\Http\Resources\CampaignStatsResource;
 use App\Http\Resources\CampaignStatusLogResource;
 use App\Models\Admin;
 use App\Models\Campaign;
+use App\Models\Pledge;
+use App\Models\Transaction;
 use App\Responser\JsonResponser;
+use App\Services\Admin\Campaign\CampaignDonorService;
+use App\Services\Admin\Campaign\CampaignPledgeService;
 use App\Services\Admin\Campaign\CampaignService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -36,6 +44,8 @@ class CampaignController extends Controller
 {
     public function __construct(
         private readonly CampaignService $campaignService,
+        private readonly CampaignDonorService $campaignDonorService,
+        private readonly CampaignPledgeService $campaignPledgeService,
         private readonly PDFReportHelper $pdfReportHelper,
     ) {}
 
@@ -150,6 +160,40 @@ class CampaignController extends Controller
             return JsonResponser::send(false, 'Campaign retrieved.', $this->campaignResourcePayload($request, $campaign, $raiseFilters));
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\Campaign\CampaignController@show');
+        }
+    }
+
+    public function donors(CampaignDonorListRequest $request, string $campaignId)
+    {
+        try {
+            $this->requireAdmin($request);
+            $listing = $request->validated();
+            $export = $listing['export'] ?? null;
+
+            return match ($export) {
+                'csv' => $this->respondCampaignDonorListCsv($campaignId, $listing),
+                'pdf' => $this->respondCampaignDonorListPdf($campaignId, $listing),
+                default => $this->respondCampaignDonorListPaginated($campaignId, $listing),
+            };
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\Campaign\CampaignController@donors');
+        }
+    }
+
+    public function pledges(CampaignPledgeListRequest $request, string $campaignId)
+    {
+        try {
+            $this->requireAdmin($request);
+            $listing = $request->validated();
+            $export = $listing['export'] ?? null;
+
+            return match ($export) {
+                'csv' => $this->respondCampaignPledgeListCsv($campaignId, $listing),
+                'pdf' => $this->respondCampaignPledgeListPdf($campaignId, $listing),
+                default => $this->respondCampaignPledgeListPaginated($campaignId, $listing),
+            };
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\Campaign\CampaignController@pledges');
         }
     }
 
@@ -277,6 +321,228 @@ class CampaignController extends Controller
         $this->campaignService->hydrateCampaignRaiseTotals($campaign, $raiseFilters);
 
         return CampaignResource::make($campaign)->resolve();
+    }
+
+    /**
+     * @param  array<string, mixed>  $listing
+     */
+    private function respondCampaignDonorListPaginated(string $campaignId, array $listing)
+    {
+        $paginator = $this->campaignDonorService->list($campaignId, $listing);
+
+        return JsonResponser::send(false, 'Campaign donors retrieved.', $this->paginatedPayload($paginator, CampaignDonorListResource::class));
+    }
+
+    /**
+     * @param  array<string, mixed>  $listing
+     */
+    private function respondCampaignDonorListCsv(string $campaignId, array $listing): StreamedResponse
+    {
+        [$collection, $truncated] = $this->campaignDonorService->exportCollection($campaignId, $listing);
+        $campaign = $this->campaignService->findCampaign($campaignId);
+        $filename = 'campaign-donors-'.$campaign->campaign_id.'-'.now()->format('Y-m-d-His').'.csv';
+
+        return response()->streamDownload(function () use ($collection): void {
+            $out = fopen('php://output', 'w');
+            if ($out === false) {
+                return;
+            }
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, [
+                'Transaction ID',
+                'Donor name',
+                'Anonymous',
+                'Donation value',
+                'Currency',
+                'Transaction date',
+                'Donor type',
+                'Graduation set',
+                'Status',
+                'Donor tier',
+                'Payment gateway',
+                'Amount (NGN)',
+            ]);
+            foreach ($collection as $tx) {
+                /** @var Transaction $tx */
+                $row = CampaignDonorListResource::make($tx)->resolve();
+
+                fputcsv($out, [
+                    $row['transaction_id'],
+                    $row['donor_name'] ?? '',
+                    ($row['is_anonymous'] ?? false) ? '1' : '0',
+                    $row['donation_value'],
+                    $row['donation_currency'],
+                    $row['transaction_date']?->toIso8601String() ?? '',
+                    $row['donor_type']['label'] ?? '',
+                    $row['graduation_set']['name'] ?? '',
+                    $row['transaction_status'],
+                    $row['donor_tier']['name'] ?? '',
+                    $row['payment_gateway'] ?? '',
+                    $row['amount_in_naira'] ?? '',
+                ]);
+            }
+            fclose($out);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'X-Export-Truncated' => $truncated ? '1' : '0',
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $listing
+     */
+    private function respondCampaignDonorListPdf(string $campaignId, array $listing)
+    {
+        [$collection, $truncated] = $this->campaignDonorService->exportCollection($campaignId, $listing);
+        $campaign = $this->campaignService->findCampaign($campaignId);
+        $filename = 'campaign-donors-'.$campaign->campaign_id.'-'.now()->format('Y-m-d-His').'.pdf';
+        $periodStart = ! empty($listing['start_date']) ? (string) $listing['start_date'] : 'All dates';
+        $periodEnd = ! empty($listing['end_date']) ? (string) $listing['end_date'] : 'All dates';
+
+        $headings = ['Transaction ID', 'Donor', 'Anonymous', 'Amount', 'Currency', 'Date', 'Donor type', 'Set', 'Tier', 'Gateway', 'Status', 'Amount (NGN)'];
+        $rows = $collection->map(function (Transaction $tx): array {
+            $row = CampaignDonorListResource::make($tx)->resolve();
+
+            return [
+                $row['transaction_id'],
+                $row['donor_name'] ?? '',
+                ($row['is_anonymous'] ?? false) ? '1' : '0',
+                $row['donation_value'],
+                $row['donation_currency'],
+                $row['transaction_date']?->format('Y-m-d H:i') ?? '',
+                $row['donor_type']['label'] ?? '',
+                $row['graduation_set']['name'] ?? '',
+                $row['donor_tier']['name'] ?? '',
+                $row['payment_gateway'] ?? '',
+                $row['transaction_status'],
+                $row['amount_in_naira'] ?? '',
+            ];
+        });
+
+        return $this->pdfReportHelper->download(
+            rows: $rows,
+            headings: $headings,
+            title: 'Campaign donors: '.$campaign->name,
+            filename: $filename,
+            orientation: 'landscape',
+            periodStart: $periodStart,
+            periodEnd: $periodEnd,
+            truncated: $truncated,
+            includedRows: $rows->count(),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $listing
+     */
+    private function respondCampaignPledgeListPaginated(string $campaignId, array $listing)
+    {
+        $paginator = $this->campaignPledgeService->list($campaignId, $listing);
+
+        return JsonResponser::send(false, 'Campaign pledges retrieved.', $this->paginatedPayload($paginator, CampaignPledgeListResource::class));
+    }
+
+    /**
+     * @param  array<string, mixed>  $listing
+     */
+    private function respondCampaignPledgeListCsv(string $campaignId, array $listing): StreamedResponse
+    {
+        [$collection, $truncated] = $this->campaignPledgeService->exportCollection($campaignId, $listing);
+        $campaign = $this->campaignService->findCampaign($campaignId);
+        $filename = 'campaign-pledges-'.$campaign->campaign_id.'-'.now()->format('Y-m-d-His').'.csv';
+
+        return response()->streamDownload(function () use ($collection): void {
+            $out = fopen('php://output', 'w');
+            if ($out === false) {
+                return;
+            }
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, [
+                'Pledge ID',
+                'Donor name',
+                'Anonymous',
+                'Email',
+                'Donor type',
+                'Graduation set',
+                'Committed',
+                'Currency',
+                'Committed (NGN)',
+                'Fulfilled',
+                'Remaining',
+                'Plan',
+                'Installments',
+                'Status',
+                'Created',
+            ]);
+            foreach ($collection as $pledge) {
+                /** @var Pledge $pledge */
+                $row = CampaignPledgeListResource::make($pledge)->resolve();
+
+                fputcsv($out, [
+                    $row['pledge_uuid'],
+                    $row['donor_name'] ?? '',
+                    ($row['is_anonymous'] ?? false) ? '1' : '0',
+                    $row['donor_email'] ?? '',
+                    $row['donor_type']['label'] ?? '',
+                    $row['graduation_set']['name'] ?? '',
+                    $row['committed_amount'],
+                    $row['currency'],
+                    $row['committed_amount_ngn'] ?? '',
+                    $row['fulfilled_amount'] ?? '',
+                    $row['remaining_amount'] ?? '',
+                    $row['payment_plan_type'],
+                    $row['installment_count'] ?? '',
+                    $row['status'],
+                    $row['created_at']?->toIso8601String() ?? '',
+                ]);
+            }
+            fclose($out);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'X-Export-Truncated' => $truncated ? '1' : '0',
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $listing
+     */
+    private function respondCampaignPledgeListPdf(string $campaignId, array $listing)
+    {
+        [$collection, $truncated] = $this->campaignPledgeService->exportCollection($campaignId, $listing);
+        $campaign = $this->campaignService->findCampaign($campaignId);
+        $filename = 'campaign-pledges-'.$campaign->campaign_id.'-'.now()->format('Y-m-d-His').'.pdf';
+        $periodStart = ! empty($listing['start_date']) ? (string) $listing['start_date'] : 'All dates';
+        $periodEnd = ! empty($listing['end_date']) ? (string) $listing['end_date'] : 'All dates';
+
+        $headings = ['Pledge ID', 'Donor', 'Anonymous', 'Committed', 'Currency', 'Fulfilled', 'Remaining', 'Plan', 'Status', 'Created'];
+        $rows = $collection->map(function (Pledge $pledge): array {
+            $row = CampaignPledgeListResource::make($pledge)->resolve();
+
+            return [
+                $row['pledge_uuid'],
+                $row['donor_name'] ?? '',
+                ($row['is_anonymous'] ?? false) ? '1' : '0',
+                $row['committed_amount'],
+                $row['currency'],
+                $row['fulfilled_amount'] ?? '',
+                $row['remaining_amount'] ?? '',
+                $row['payment_plan_type'],
+                $row['status'],
+                $row['created_at']?->format('Y-m-d H:i') ?? '',
+            ];
+        });
+
+        return $this->pdfReportHelper->download(
+            rows: $rows,
+            headings: $headings,
+            title: 'Campaign pledges: '.$campaign->name,
+            filename: $filename,
+            orientation: 'landscape',
+            periodStart: $periodStart,
+            periodEnd: $periodEnd,
+            truncated: $truncated,
+            includedRows: $rows->count(),
+        );
     }
 
     /**

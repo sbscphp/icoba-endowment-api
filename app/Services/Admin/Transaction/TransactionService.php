@@ -126,9 +126,12 @@ class TransactionService
     {
         $query = Transaction::query()->with([
             'campaign:uuid,name,campaign_id',
-            'donor:uuid,firstname,lastname,middlename,graduation_set_uuid',
+            'donor:uuid,firstname,lastname,middlename,graduation_set_uuid,donor_type_uuid',
             'donor.graduationSet:uuid,name,set_number',
-            'pledge:uuid,committed_amount,currency,committed_amount_ngn,status',
+            'donor.donorType:uuid,slug,label',
+            'donorType:uuid,slug,label',
+            'pledge:uuid,committed_amount,currency,committed_amount_ngn,status,graduation_set_uuid',
+            'pledge.graduationSet:uuid,name,set_number',
         ]);
 
         $includeSuperseded = filter_var(data_get($validated, 'filters.include_superseded'), FILTER_VALIDATE_BOOLEAN);
@@ -195,7 +198,18 @@ class TransactionService
 
         $setUuid = data_get($validated, 'filters.graduation_set_uuid');
         if (is_string($setUuid) && $setUuid !== '') {
-            $query->whereHas('donor', fn (Builder $b) => $b->where('graduation_set_uuid', $setUuid));
+            $query->where(function (Builder $builder) use ($setUuid): void {
+                $builder->whereHas('donor', fn (Builder $donor) => $donor->where('graduation_set_uuid', $setUuid))
+                    ->orWhereHas('pledge', fn (Builder $pledge) => $pledge->where('graduation_set_uuid', $setUuid));
+            });
+        }
+
+        $donorTypeUuid = data_get($validated, 'filters.donor_type_uuid');
+        if (is_string($donorTypeUuid) && $donorTypeUuid !== '') {
+            $query->where(function (Builder $builder) use ($donorTypeUuid): void {
+                $builder->where('donor_type_uuid', $donorTypeUuid)
+                    ->orWhereHas('donor', fn (Builder $donor) => $donor->where('donor_type_uuid', $donorTypeUuid));
+            });
         }
 
         $anonymous = data_get($validated, 'filters.is_anonymous');

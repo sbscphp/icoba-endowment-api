@@ -9,15 +9,7 @@ class DateRangeStatsRequest extends ApiFormRequest
 {
     protected function prepareForValidation(): void
     {
-        $period = strtolower((string) $this->input('period', ''));
-        if ($period === '' || $period === 'custom') {
-            return;
-        }
-
-        $range = ListingFilterRules::dateRangeFromPeriod($period);
-        if ($range['start_date'] !== null && $range['end_date'] !== null) {
-            $this->merge($range);
-        }
+        ListingFilterRules::applyPeriodDateRangeToRequest($this);
     }
 
     public function rules(): array

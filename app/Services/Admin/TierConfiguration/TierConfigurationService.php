@@ -4,8 +4,8 @@ namespace App\Services\Admin\TierConfiguration;
 
 use App\Exceptions\ApiException;
 use App\Helpers\FileUploadHelper;
+use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\TierConfiguration;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -48,13 +48,13 @@ class TierConfigurationService
     public function stats(array $validated): array
     {
         $query = TierConfiguration::query();
-        $this->applyDateRange($query, $validated, 'created_at');
+        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
 
-        return [
+        return array_merge(ListingFilterRules::periodMeta($validated), [
             'total' => (clone $query)->count(),
             'active' => (clone $query)->where('is_active', true)->count(),
             'inactive' => (clone $query)->where('is_active', false)->count(),
-        ];
+        ]);
     }
 
     /**
@@ -69,7 +69,7 @@ class TierConfigurationService
         $query = TierConfiguration::query()
             ->withCount('certificateTemplates as templates_count');
 
-        $this->applyDateRange($query, $validated, 'created_at');
+        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
 
         $search = trim((string) ($validated['search'] ?? ''));
         if ($search !== '') {
@@ -213,23 +213,6 @@ class TierConfigurationService
         }
 
         return $tier;
-    }
-
-    /**
-     * @param  array<string, mixed>  $validated
-     */
-    private function applyDateRange(Builder $query, array $validated, string $column): void
-    {
-        $startDate = ! empty($validated['start_date']) ? Carbon::parse((string) $validated['start_date'])->startOfDay() : null;
-        $endDate = ! empty($validated['end_date']) ? Carbon::parse((string) $validated['end_date'])->endOfDay() : null;
-
-        if ($startDate !== null) {
-            $query->where($column, '>=', $startDate);
-        }
-
-        if ($endDate !== null) {
-            $query->where($column, '<=', $endDate);
-        }
     }
 
     private function uploadBadgeIfPresent(mixed $value): ?string
