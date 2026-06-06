@@ -52,7 +52,7 @@ class OtpService
 
     public function resendLoginOtp(string $challengeToken): array
     {
-        $payload = $this->challengeTokenService->decode($challengeToken, OtpPurposeEnum::LOGIN);
+        $payload = $this->challengeTokenService->decodeForResend($challengeToken, OtpPurposeEnum::LOGIN);
         $subject = $this->resolveSubjectFromPayload($payload);
 
         return $this->sendOtp($subject, OtpPurposeEnum::LOGIN, 'login', OtpChannelEnum::EMAIL);
@@ -117,7 +117,7 @@ class OtpService
 
     public function resendPasswordResetOtp(string $challengeToken, ?OtpChannelEnum $channel = null): array
     {
-        $payload = $this->challengeTokenService->decode($challengeToken, OtpPurposeEnum::PASSWORD_RESET);
+        $payload = $this->challengeTokenService->decodeForResend($challengeToken, OtpPurposeEnum::PASSWORD_RESET);
         $subject = $this->resolveSubjectFromPayload($payload);
 
         $channel ??= $this->channelFromPayload($payload);
