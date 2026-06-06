@@ -2,8 +2,10 @@
 
 namespace App\Services\Admin\UserManagement;
 
+use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
 use App\Models\Admin;
+use App\Models\AuditLog;
 use App\Models\Role;
 use App\Notifications\Auth\ResetPasswordMail;
 use App\Services\Auth\PasswordResetService;
@@ -149,6 +151,27 @@ class AdminUserService
         ])->save();
 
         return $admin->fresh() ?? $admin;
+    }
+
+    /**
+     * @return array{audit_logs_count:int}
+     */
+    public function delete(string $adminId): array
+    {
+        $admin = $this->resolveAdmin($adminId);
+        $auditLogsCount = AuditLog::query()
+            ->where('user_type', UserTypeEnum::ADMIN)
+            ->where('user_id', $admin->uuid)
+            ->count();
+
+        if ($auditLogsCount > 0) {
+            return ['audit_logs_count' => $auditLogsCount];
+        }
+
+        $admin->tokens()->delete();
+        $admin->delete();
+
+        return ['audit_logs_count' => 0];
     }
 
     private function resolveAdmin(string $adminId): Admin
