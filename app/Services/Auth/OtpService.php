@@ -79,11 +79,15 @@ class OtpService
 
     public function resendEmailVerificationOtp(string $challengeToken, ?OtpChannelEnum $channel = null): array
     {
-        $payload = $this->challengeTokenService->decode($challengeToken, OtpPurposeEnum::EMAIL_VERIFICATION);
+        $payload = $this->challengeTokenService->decodeForResend($challengeToken, OtpPurposeEnum::EMAIL_VERIFICATION);
         $subject = $this->resolveSubjectFromPayload($payload);
 
         if (! $subject instanceof User) {
             throw new ApiException('Invalid verification session.', 422);
+        }
+
+        if ($subject->email_verified_at !== null) {
+            throw new ApiException('This email address has already been verified.', 422);
         }
 
         $channel ??= $this->channelFromPayload($payload);
