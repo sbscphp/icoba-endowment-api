@@ -28,4 +28,16 @@ class UpdateBulkEmailRequest extends ApiFormRequest
             'recipient_audience.*' => ['string', Rule::in(BulkEmailAudience::values())],
         ];
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'campaign_uuid.exists' => 'Selected campaign does not exist.',
+            'title.max' => 'Email title may not be longer than 60 characters.',
+            'design_template.in' => 'Selected design template is invalid.',
+            'recipient_audience.array' => 'Recipient audience must be provided as a list.',
+            'recipient_audience.min' => 'Please select at least one recipient audience.',
+            'recipient_audience.*.in' => 'One or more selected recipient audiences are invalid.',
+        ]);
+    }
 }

@@ -62,6 +62,36 @@ class NotificationDispatchService
     }
 
     /**
+     * Notify a donor by resolving the recipient from either an explicit user uuid or by donor email.
+     *
+     * When $userUuid is provided it takes precedence; otherwise the active User whose lowercased,
+     * trimmed email matches $donorEmail is used. Returns 0 if no recipient could be resolved.
+     */
+    public function notifyDonor(?string $userUuid, ?string $donorEmail, Notification $notification, bool $queue = false): int
+    {
+        if ($userUuid !== null && $userUuid !== '') {
+            return $this->notifyUsersByUuids([$userUuid], $notification, $queue);
+        }
+
+        $email = strtolower(trim((string) $donorEmail));
+        if ($email === '') {
+            return 0;
+        }
+
+        $uuid = User::query()
+            ->whereRaw('LOWER(TRIM(email)) = ?', [$email])
+            ->where('is_active', true)
+            ->where('can_login', true)
+            ->value('uuid');
+
+        if ($uuid === null) {
+            return 0;
+        }
+
+        return $this->notifyUsersByUuids([(string) $uuid], $notification, $queue);
+    }
+
+    /**
      * @param  list<string>  $userUuids
      */
     public function notifyUsersByUuids(array $userUuids, Notification $notification, bool $queue = false): int

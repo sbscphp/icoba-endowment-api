@@ -38,12 +38,12 @@ class IssuedCertificateService
         $base = DonorRecognition::query();
         $this->applyIssuedAtRange($base, $dateWindow['start'], $dateWindow['end']);
 
-        return [
+        return array_merge(ListingFilterRules::periodMeta($validated), [
             'total_count' => (clone $base)->count(),
             'issued_count' => (clone $base)->where('status', IssuedCertificateStatus::AUTO_ISSUED)->count(),
             'reissued_count' => (clone $base)->where('status', IssuedCertificateStatus::REISSUED)->count(),
             'revoked_count' => (clone $base)->where('status', IssuedCertificateStatus::REVOKED)->count(),
-        ];
+        ]);
     }
 
     /**

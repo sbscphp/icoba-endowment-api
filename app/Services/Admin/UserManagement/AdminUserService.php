@@ -2,12 +2,14 @@
 
 namespace App\Services\Admin\UserManagement;
 
+use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
+use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\Admin;
+use App\Models\AuditLog;
 use App\Models\Role;
-use App\Notifications\Auth\ResetPasswordMail;
+use App\Notifications\Auth\AdminInviteSetPasswordMail;
 use App\Services\Auth\PasswordResetService;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -40,7 +42,11 @@ class AdminUserService
 
         $admin->syncRoles([$role->name]);
 
-        $this->dispatchInviteResetLink($admin);
+        $frontendUrl = isset($payload['frontend_url']) && is_string($payload['frontend_url'])
+            ? $payload['frontend_url']
+            : null;
+
+        $this->dispatchInviteResetLink($admin, $frontendUrl);
 
         return $admin->fresh() ?? $admin;
     }
@@ -65,13 +71,13 @@ class AdminUserService
     public function stats(array $validated): array
     {
         $query = Admin::query();
-        $this->applyDateRange($query, $validated, 'created_at');
+        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
 
-        return [
+        return array_merge(ListingFilterRules::periodMeta($validated), [
             'total' => (clone $query)->count(),
             'active' => (clone $query)->where('is_active', true)->count(),
             'inactive' => (clone $query)->where('is_active', false)->count(),
-        ];
+        ]);
     }
 
     /**
@@ -84,6 +90,7 @@ class AdminUserService
         $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
 
         $query = Admin::query()->with('roles:id,name');
+        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
 
         $search = trim((string) ($validated['search'] ?? ''));
         if ($search !== '') {
@@ -170,6 +177,27 @@ class AdminUserService
         return $admin->fresh() ?? $admin;
     }
 
+    /**
+     * @return array{audit_logs_count:int}
+     */
+    public function delete(string $adminId): array
+    {
+        $admin = $this->resolveAdmin($adminId);
+        $auditLogsCount = AuditLog::query()
+            ->where('user_type', UserTypeEnum::ADMIN)
+            ->where('user_id', $admin->uuid)
+            ->count();
+
+        if ($auditLogsCount > 0) {
+            return ['audit_logs_count' => $auditLogsCount];
+        }
+
+        $admin->tokens()->delete();
+        $admin->delete();
+
+        return ['audit_logs_count' => 0];
+    }
+
     private function resolveAdmin(string $adminId): Admin
     {
         return Admin::query()
@@ -178,29 +206,17 @@ class AdminUserService
             ->firstOrFail();
     }
 
-    /**
-     * @param  array<string, mixed>  $validated
-     */
-    private function applyDateRange(Builder $query, array $validated, string $column): void
+    private function adminSetPasswordUrl(string $resetToken, ?string $frontendUrl = null): string
     {
-        $startDate = ! empty($validated['start_date']) ? Carbon::parse((string) $validated['start_date'])->startOfDay() : null;
-        $endDate = ! empty($validated['end_date']) ? Carbon::parse((string) $validated['end_date'])->endOfDay() : null;
-
-        if ($startDate !== null) {
-            $query->where($column, '>=', $startDate);
-        }
-
-        if ($endDate !== null) {
-            $query->where($column, '<=', $endDate);
-        }
-    }
-
-    private function adminSetPasswordUrl(string $resetToken): string
-    {
-        $base = config('app.admin_frontend_set_password_url');
-        if (! is_string($base) || $base === '') {
-            $frontend = rtrim((string) config('app.frontend_url'), '/');
-            $base = $frontend !== '' ? $frontend.'/admin/set-password' : url('/');
+        $override = config('app.admin_frontend_set_password_url');
+        if (is_string($override) && $override !== '') {
+            $base = $override;
+        } else {
+            $adminFrontend = rtrim((string) ($frontendUrl ?? config('app.admin_frontend_url')), '/');
+            if ($adminFrontend === '') {
+                $adminFrontend = rtrim((string) config('app.frontend_url'), '/');
+            }
+            $base = $adminFrontend !== '' ? $adminFrontend.'/create-new-password' : url('/');
         }
 
         $sep = str_contains($base, '?') ? '&' : '?';
@@ -208,12 +224,12 @@ class AdminUserService
         return $base.$sep.'token='.urlencode($resetToken);
     }
 
-    private function dispatchInviteResetLink(Admin $admin): void
+    private function dispatchInviteResetLink(Admin $admin, ?string $frontendUrl = null): void
     {
         $resetToken = $this->passwordResetService->issueResetTokenFor($admin);
-        $admin->notify(new ResetPasswordMail(
+        $admin->notify(new AdminInviteSetPasswordMail(
             token: $resetToken,
-            resetUrl: $this->adminSetPasswordUrl($resetToken),
+            resetUrl: $this->adminSetPasswordUrl($resetToken, $frontendUrl),
         ));
     }
 }

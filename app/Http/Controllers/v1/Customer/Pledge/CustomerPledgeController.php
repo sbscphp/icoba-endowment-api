@@ -15,14 +15,13 @@ use App\Http\Requests\Customer\Pledge\UpdatePledgeScheduleRequest;
 use App\Http\Resources\Customer\CustomerOverduePledgeResource;
 use App\Http\Resources\PledgeDetailResource;
 use App\Http\Resources\PledgeListResource;
-use App\Models\Campaign;
 use App\Models\User;
-use App\Repositories\Contracts\User\UserRepositoryInterface;
 use App\Responser\JsonResponser;
 use App\Services\Admin\Pledge\PledgeService;
 use App\Services\Customer\CustomerOverduePledgeService;
 use App\Services\Donation\DonorNameRequirement;
 use App\Services\Donation\GuestDonorProfileSnapshotService;
+use App\Services\GivingIdentity\GivingIdentityResolver;
 use App\Services\Pledge\PledgeBalanceService;
 use App\Services\Pledge\PledgeCommittedNgnResolver;
 use App\Services\Pledge\PledgeScheduleInput;
@@ -37,8 +36,8 @@ class CustomerPledgeController extends Controller
         private readonly PledgeScheduleService $pledgeScheduleService,
         private readonly PledgeBalanceService $pledgeBalanceService,
         private readonly GuestDonorProfileSnapshotService $guestDonorProfileSnapshot,
+        private readonly GivingIdentityResolver $givingIdentityResolver,
         private readonly DonorNameRequirement $donorNameRequirement,
-        private readonly UserRepositoryInterface $userRepository,
         private readonly CustomerOverduePledgeService $customerOverduePledgeService,
     ) {}
 
@@ -117,7 +116,7 @@ class CustomerPledgeController extends Controller
             $user = $user instanceof User ? $user : null;
 
             $v = $request->validated();
-            $campaignUuid = $v['campaign_uuid'] ?? Campaign::defaultCampaign()->uuid;
+            $campaignUuid = (string) $v['campaign_uuid'];
 
             $userUuid = null;
             $donorTypeUuid = $v['donor_type_uuid'] ?? null;
@@ -126,6 +125,7 @@ class CustomerPledgeController extends Controller
             $donorEmail = isset($v['donor_email']) && is_string($v['donor_email']) ? trim($v['donor_email']) : null;
             $donorPhone = isset($v['donor_phone']) && is_string($v['donor_phone']) ? trim($v['donor_phone']) : null;
             $metadata = is_array($v['metadata'] ?? null) ? $v['metadata'] : [];
+            $identity = null;
 
             if ($user !== null) {
                 $userUuid = $user->uuid;
@@ -162,12 +162,22 @@ class CustomerPledgeController extends Controller
                         'guest_donor_profile' => $guestSnapshot['guest_donor_profile'],
                     ]);
                 }
+            }
 
-                if ($donorEmail !== '') {
-                    $existingUser = $this->userRepository->findByEmail($donorEmail);
-                    if ($existingUser !== null) {
-                        $userUuid = $existingUser->uuid;
-                    }
+            $identity = $this->givingIdentityResolver->resolveForPledgeData(
+                [
+                    'donor_email' => $donorEmail,
+                    'donor_type_uuid' => $donorTypeUuid,
+                    'graduation_set_uuid' => $graduationSetUuid,
+                    'metadata' => $metadata,
+                    'donor_name' => $donorName,
+                ],
+                $user,
+            );
+
+            if ($identity !== null) {
+                if ($userUuid === null && $identity->user_uuid !== null) {
+                    $userUuid = $identity->user_uuid;
                 }
             }
 
@@ -184,6 +194,7 @@ class CustomerPledgeController extends Controller
             $data = [
                 'campaign_uuid' => $campaignUuid,
                 'user_uuid' => $userUuid,
+                'giving_identity_uuid' => $identity?->uuid,
                 'donor_type_uuid' => $donorTypeUuid,
                 'graduation_set_uuid' => $graduationSetUuid,
                 'donor_name' => $donorName !== '' ? $donorName : null,

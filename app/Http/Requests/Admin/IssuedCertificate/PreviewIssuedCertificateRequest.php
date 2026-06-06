@@ -14,4 +14,11 @@ class PreviewIssuedCertificateRequest extends ApiFormRequest
             'format' => ['sometimes', 'nullable', 'string', Rule::in(CertificatePreviewFormat::values())],
         ];
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'format.in' => 'Preview format is invalid.',
+        ]);
+    }
 }

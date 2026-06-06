@@ -28,4 +28,12 @@ class CertificateTemplateListRequest extends ApiFormRequest
             ]
         );
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), ListingFilterRules::listingMessages(), [
+            'filters.status.in' => "Status filter must be either 'active' or 'inactive'.",
+            'filters.tier_id.exists' => 'Selected tier does not exist.',
+        ]);
+    }
 }

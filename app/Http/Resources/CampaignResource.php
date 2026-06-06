@@ -28,6 +28,13 @@ class CampaignResource extends JsonResource
         }
         $nairaRaised = $this->resource->successful_contributions_sum_naira ?? null;
         $filteredRaised = $this->resource->total_raised_filtered ?? null;
+        $totalRaised = $filteredRaised !== null ? (string) $filteredRaised : '0';
+        $raised = (float) $totalRaised;
+        $pledgeFiltered = $this->resource->pledges_committed_filtered ?? null;
+        $totalPledged = $pledgeFiltered !== null ? (string) $pledgeFiltered : '0';
+        $pledged = (float) $totalPledged;
+        $target = (float) $this->target_amount;
+        $hasTarget = $target > 0;
 
         return [
             'campaign_id' => $this->uuid,
@@ -49,11 +56,24 @@ class CampaignResource extends JsonResource
             'allow_public_donation' => (bool) $this->allow_public_donation,
             'applies_to_all_graduation_sets' => (bool) $this->applies_to_all_graduation_sets,
             'graduation_sets' => $this->graduationSetsPayload(),
-            'is_default' => (bool) $this->is_default,
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
-            'total_raised' => $filteredRaised !== null ? (string) $filteredRaised : '0',
+            'total_raised' => $totalRaised,
             'total_raised_currency' => $raisedCurrency,
             'total_raised_in_naira' => $nairaRaised !== null ? (string) $nairaRaised : '0',
+            'donation_progress' => [
+                'total_raised' => $totalRaised,
+                'remaining_amount' => $hasTarget ? (string) max(0, $target - $raised) : null,
+                'currency' => $raisedCurrency,
+                'donations_count' => (int) ($this->resource->successful_transactions_count ?? 0),
+                'completion_percentage' => $hasTarget ? round(min(100, ($raised / $target) * 100), 1) : null,
+            ],
+            'pledge_progress' => [
+                'total_raised' => $totalPledged,
+                'remaining_amount' => $hasTarget ? (string) max(0, $target - $pledged) : null,
+                'currency' => $raisedCurrency,
+                'pledges_count' => (int) ($this->resource->pledges_count ?? 0),
+                'completion_percentage' => $hasTarget ? round(min(100, ($pledged / $target) * 100), 1) : null,
+            ],
             'created_by' => $this->creator !== null ? [
                 'admin_id' => $this->creator->uuid,
                 'name' => $this->creator->name,

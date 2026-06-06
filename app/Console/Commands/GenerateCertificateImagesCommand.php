@@ -10,6 +10,15 @@ use Illuminate\Console\Command;
 
 class GenerateCertificateImagesCommand extends Command
 {
+    // # Generate certificate images for all recognitions
+    // php artisan recognitions:generate-certificate-images
+
+    // # Generate certificate images for a specific recognition
+    // php artisan recognitions:generate-certificate-images --recognition=<uuid>
+
+    // # Regenerate certificate images for a specific recognition
+    // php artisan recognitions:generate-certificate-images --recognition=<uuid> --force
+
     protected $signature = 'recognitions:generate-certificate-images
                             {--recognition= : Limit to a recognition UUID}
                             {--force : Regenerate even when certificate_image_url is set}

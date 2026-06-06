@@ -8,6 +8,7 @@ use App\Models\Permission;
 use App\Models\Role;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Str;
 use Spatie\Permission\PermissionRegistrar;
 
 class RolesAndPermissionsSeeder extends Seeder
@@ -54,10 +55,19 @@ class RolesAndPermissionsSeeder extends Seeder
     private function upsertAllowableRoles(): void
     {
         foreach (RoleEnum::cases() as $roleEnum) {
-            Role::firstOrCreate([
-                'name' => $roleEnum->value,
-                'guard_name' => self::GUARD,
-            ]);
+            $role = Role::firstOrCreate(
+                [
+                    'name' => $roleEnum->value,
+                    'guard_name' => self::GUARD,
+                ],
+                [
+                    'uuid' => (string) Str::uuid(),
+                ]
+            );
+
+            if ($role->uuid === null || $role->uuid === '') {
+                $role->forceFill(['uuid' => (string) Str::uuid()])->save();
+            }
         }
     }
 

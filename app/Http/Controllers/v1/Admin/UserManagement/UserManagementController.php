@@ -5,13 +5,13 @@ namespace App\Http\Controllers\v1\Admin\UserManagement;
 use App\Enums\eRole;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\AdminListRequest;
-use App\Http\Requests\Admin\CreateAdminRequest;
-use App\Http\Requests\Admin\CreateRoleRequest;
 use App\Http\Requests\Admin\DateRangeStatsRequest;
-use App\Http\Requests\Admin\RoleListRequest;
-use App\Http\Requests\Admin\UpdateAdminRequest;
-use App\Http\Requests\Admin\UpdateRoleRequest;
+use App\Http\Requests\Admin\UserManagement\AdminListRequest;
+use App\Http\Requests\Admin\UserManagement\CreateAdminRequest;
+use App\Http\Requests\Admin\UserManagement\CreateRoleRequest;
+use App\Http\Requests\Admin\UserManagement\RoleListRequest;
+use App\Http\Requests\Admin\UserManagement\UpdateAdminRequest;
+use App\Http\Requests\Admin\UserManagement\UpdateRoleRequest;
 use App\Http\Resources\AdminFullResource;
 use App\Http\Resources\AdminListResource;
 use App\Http\Resources\RoleListResource;
@@ -78,6 +78,30 @@ class UserManagementController extends Controller
             return JsonResponser::send(false, 'Admin users retrieved.', $this->paginatedPayload($paginator, AdminListResource::class));
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\UserManagement\UserManagementController@adminList');
+        }
+    }
+
+    public function rolesWithPermissions()
+    {
+        try {
+            $roles = $this->roleService->listWithPermissions();
+
+            return JsonResponser::send(
+                false,
+                'Roles with permissions retrieved.',
+                RoleResource::collection($roles)->resolve()
+            );
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\UserManagement\UserManagementController@rolesWithPermissions');
+        }
+    }
+
+    public function permissionList()
+    {
+        try {
+            return JsonResponser::send(false, 'Permissions retrieved.', $this->roleService->listAllPermissions());
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\UserManagement\UserManagementController@permissionList');
         }
     }
 
@@ -180,6 +204,23 @@ class UserManagementController extends Controller
             return JsonResponser::send(false, 'Password setup link resent successfully.', AdminFullResource::make($admin)->resolve());
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\UserManagement\UserManagementController@resendAdminInviteLink');
+        }
+    }
+
+    public function deleteAdmin(string $adminId)
+    {
+        try {
+            $result = $this->adminUserService->delete($adminId);
+            $auditLogsCount = $result['audit_logs_count'];
+            if ($auditLogsCount > 0) {
+                return JsonResponser::send(true, 'Admin cannot be deleted because of audit logs tied to them.', [
+                    'audit_logs_count' => $auditLogsCount,
+                ], 422);
+            }
+
+            return JsonResponser::send(false, 'Admin user deleted successfully.', null);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\UserManagement\UserManagementController@deleteAdmin');
         }
     }
 

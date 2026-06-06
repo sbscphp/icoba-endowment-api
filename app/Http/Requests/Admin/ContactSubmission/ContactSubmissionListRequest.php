@@ -25,4 +25,12 @@ class ContactSubmissionListRequest extends ApiFormRequest
             ]
         );
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), ListingFilterRules::listingMessages(), [
+            'filters.status.in' => 'Contact submission status filter is invalid.',
+            'filters.user_type.enum' => 'Contact submission user type filter is invalid.',
+        ]);
+    }
 }

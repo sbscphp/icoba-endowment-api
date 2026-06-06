@@ -2,6 +2,7 @@
 
 namespace App\Services\Notifications;
 
+use App\Http\Requests\Concerns\ListingFilterRules;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\DatabaseNotification;
@@ -10,12 +11,15 @@ class NotificationInboxService
 {
     /**
      * @param  Model&object{notifications(): mixed}  $recipient
+     * @param  array<string, mixed>  $validated
      */
-    public function paginate(Model $recipient, int $perPage = 15, int $page = 1): LengthAwarePaginator
+    public function paginate(Model $recipient, int $perPage = 15, int $page = 1, array $validated = []): LengthAwarePaginator
     {
-        return $recipient->notifications()
-            ->latest()
-            ->paginate(perPage: $perPage, page: $page, pageName: 'page');
+        $query = $recipient->notifications()->latest();
+
+        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
+
+        return $query->paginate(perPage: $perPage, page: $page, pageName: 'page');
     }
 
     /**

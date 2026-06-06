@@ -16,4 +16,11 @@ class ReconciliationQueueListRequest extends ApiFormRequest
             'filters.reconciliation_status' => ['sometimes', 'nullable', Rule::in(['awaiting_verification', 'unmatched', 'reconciled'])],
         ]);
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), ListingFilterRules::listingMessages(), [
+            'filters.reconciliation_status.in' => "Reconciliation status filter must be one of: 'awaiting_verification', 'unmatched', or 'reconciled'.",
+        ]);
+    }
 }

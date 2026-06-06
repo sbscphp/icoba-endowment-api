@@ -5,6 +5,8 @@ namespace App\Http\Requests\Concerns;
 use App\Enums\Currency;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Validation\Rule;
 
 final class ListingFilterRules
@@ -121,6 +123,84 @@ final class ListingFilterRules
             'start' => $start,
             'end' => $end,
             'period' => ($period !== null && $period !== '') ? $period : null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array{period: string|null, start_date: string|null, end_date: string|null}
+     */
+    public static function periodMeta(array $validated): array
+    {
+        $window = self::resolveDateWindow($validated);
+
+        return [
+            'period' => $window['period'],
+            'start_date' => $window['start']?->toDateString(),
+            'end_date' => $window['end']?->toDateString(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    public static function applyResolvedDateRange(Builder|Relation $query, array $validated, string $column = 'created_at'): void
+    {
+        $window = self::resolveDateWindow($validated);
+
+        if ($window['start'] !== null) {
+            $query->where($column, '>=', $window['start']);
+        }
+
+        if ($window['end'] !== null) {
+            $query->where($column, '<=', $window['end']);
+        }
+    }
+
+    /**
+     * Shared validation messages that pair with the rules in self::rules().
+     *
+     * Requests should array_merge this with their domain-specific messages.
+     *
+     * @return array<string, string>
+     */
+    public static function listingMessages(): array
+    {
+        return [
+            'search.string' => 'Search query must be text.',
+            'search.max' => 'Search query may not be longer than 255 characters.',
+            'period.in' => 'Period filter is invalid.',
+            'start_date.date' => 'Start date must be a valid date.',
+            'start_date.required_if' => 'Start date is required when period is set to "custom".',
+            'end_date.date' => 'End date must be a valid date.',
+            'end_date.required_if' => 'End date is required when period is set to "custom".',
+            'end_date.after_or_equal' => 'End date must be on or after the start date.',
+            'sort_by.in' => 'Sort field is invalid.',
+            'sort_direction.in' => 'Sort direction must be either "asc" or "desc".',
+            'page.integer' => 'Page must be a number.',
+            'page.min' => 'Page must be at least 1.',
+            'per_page.integer' => 'Per page must be a number.',
+            'per_page.min' => 'Per page must be at least 1.',
+            'per_page.max' => 'Per page may not be greater than the allowed maximum.',
+            'filters.array' => 'Filters must be a structured set of values.',
+        ];
+    }
+
+    /**
+     * Shared messages that pair with self::periodDateRules().
+     *
+     * @return array<string, string>
+     */
+    public static function periodDateMessages(): array
+    {
+        return [
+            'period.in' => 'Period filter is invalid.',
+            'start_date.date' => 'Start date must be a valid date.',
+            'start_date.required_if' => 'Start date is required when period is set to "custom".',
+            'end_date.date' => 'End date must be a valid date.',
+            'end_date.required_if' => 'End date is required when period is set to "custom".',
+            'end_date.after_or_equal' => 'End date must be on or after the start date.',
+            'currency.in' => 'Currency filter is invalid.',
         ];
     }
 

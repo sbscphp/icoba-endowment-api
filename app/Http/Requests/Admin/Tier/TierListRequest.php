@@ -18,8 +18,17 @@ class TierListRequest extends ApiFormRequest
         return array_merge(
             ListingFilterRules::rules(['name', 'min_amount', 'max_amount', 'sort_order', 'is_active', 'created_at', 'updated_at']),
             [
+                'export' => ['sometimes', 'nullable', Rule::in(['csv', 'pdf'])],
                 'filters.status' => ['sometimes', 'nullable', Rule::in(['active', 'inactive'])],
             ]
         );
+    }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), ListingFilterRules::listingMessages(), [
+            'export.in' => "Export format must be either 'csv' or 'pdf'.",
+            'filters.status.in' => "Status filter must be either 'active' or 'inactive'.",
+        ]);
     }
 }

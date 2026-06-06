@@ -5,8 +5,8 @@ namespace App\Services\Admin\UserManagement;
 use App\Enums\eRole;
 use App\Exceptions\ApiException;
 use App\Helpers\PermissionModuleMapper;
+use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\Role;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -43,13 +43,13 @@ class RoleService
         $query = Role::query()
             ->where('guard_name', 'api')
             ->where('name', '!=', eRole::CUSTOMER->value);
-        $this->applyDateRange($query, $validated, 'created_at');
+        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
 
-        return [
+        return array_merge(ListingFilterRules::periodMeta($validated), [
             'total' => (clone $query)->count(),
             'active' => (clone $query)->where('is_active', true)->count(),
             'inactive' => (clone $query)->where('is_active', false)->count(),
-        ];
+        ]);
     }
 
     /**
@@ -67,6 +67,7 @@ class RoleService
             ->withCount([
                 'admins as users_count' => fn (Builder $builder) => $builder->where('admins.is_active', true),
             ]);
+        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
 
         $search = trim((string) ($validated['search'] ?? ''));
         if ($search !== '') {
@@ -96,6 +97,42 @@ class RoleService
     public function findRole(string $roleId): Role
     {
         return $this->resolveRole($roleId);
+    }
+
+    /**
+     * @return Collection<int, Role>
+     */
+    public function listWithPermissions(): Collection
+    {
+        return Role::query()
+            ->where('guard_name', 'api')
+            ->where('name', '!=', eRole::CUSTOMER->value)
+            ->with('permissions:id,name')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * @return array{
+     *     permissions: list<string>,
+     *     permissions_by_module: list<array{key: string, label: string, permissions: list<array{name: string}>}>
+     * }
+     */
+    public function listAllPermissions(): array
+    {
+        $permissionsByModule = PermissionModuleMapper::groupedApiPermissions();
+        $permissions = [];
+
+        foreach ($permissionsByModule as $module) {
+            foreach ($module['permissions'] as $permission) {
+                $permissions[] = $permission['name'];
+            }
+        }
+
+        return [
+            'permissions' => $permissions,
+            'permissions_by_module' => $permissionsByModule,
+        ];
     }
 
     /**
@@ -218,20 +255,4 @@ class RoleService
         return $role;
     }
 
-    /**
-     * @param  array<string, mixed>  $validated
-     */
-    private function applyDateRange(Builder $query, array $validated, string $column): void
-    {
-        $startDate = ! empty($validated['start_date']) ? Carbon::parse((string) $validated['start_date'])->startOfDay() : null;
-        $endDate = ! empty($validated['end_date']) ? Carbon::parse((string) $validated['end_date'])->endOfDay() : null;
-
-        if ($startDate !== null) {
-            $query->where($column, '>=', $startDate);
-        }
-
-        if ($endDate !== null) {
-            $query->where($column, '<=', $endDate);
-        }
-    }
 }

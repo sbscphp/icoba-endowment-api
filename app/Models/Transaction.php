@@ -34,15 +34,6 @@ class Transaction extends Model
         ];
     }
 
-    protected static function booted(): void
-    {
-        static::creating(function (Transaction $transaction): void {
-            if ($transaction->campaign_uuid === null || $transaction->campaign_uuid === '') {
-                $transaction->campaign_uuid = Campaign::defaultCampaign()->uuid;
-            }
-        });
-    }
-
     public function campaign(): BelongsTo
     {
         return $this->belongsTo(Campaign::class, 'campaign_uuid', 'uuid');
@@ -51,6 +42,11 @@ class Transaction extends Model
     public function donor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_uuid', 'uuid');
+    }
+
+    public function givingIdentity(): BelongsTo
+    {
+        return $this->belongsTo(GivingIdentity::class, 'giving_identity_uuid', 'uuid');
     }
 
     public function pledge(): BelongsTo

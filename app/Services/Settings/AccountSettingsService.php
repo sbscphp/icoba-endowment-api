@@ -10,10 +10,14 @@ use App\Models\GraduationSet;
 use App\Models\User;
 use App\Support\CustomerProfileUpdateFields;
 use App\Support\PasswordRules;
+use App\Services\GivingIdentity\GivingIdentityLockService;
 use Illuminate\Support\Facades\Hash;
 
 class AccountSettingsService
 {
+    public function __construct(
+        private readonly GivingIdentityLockService $givingIdentityLock,
+    ) {}
     /**
      * @return array<string, mixed>
      */
@@ -70,6 +74,16 @@ class AccountSettingsService
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    public function updateAdminProfile(Admin $admin, string $name): array
+    {
+        $admin->forceFill(['name' => trim($name)])->save();
+
+        return $this->adminProfile($admin->fresh() ?? $admin);
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
@@ -78,6 +92,15 @@ class AccountSettingsService
         $user->loadMissing('donorType');
         $slug = $user->donorType?->slug;
         $data = CustomerProfileUpdateFields::filterForDonorType($slug, $data);
+
+        $blockedFields = $this->givingIdentityLock->lockedProfileFieldsBeingChanged($user, $data);
+        if ($blockedFields !== []) {
+            throw new ApiException(
+                'Your giving profile cannot be changed after a successful donation. Contact ICOBA support if you need assistance.',
+                422,
+            );
+        }
+
         $updates = [];
 
         foreach (['phone_number', 'country_code'] as $field) {
@@ -105,10 +128,26 @@ class AccountSettingsService
      */
     public function toggleCustomerTwoFactor(User $user, bool $enabled): array
     {
-        $user->forceFill(['2fa' => $enabled])->save();
+        return $this->toggleTwoFactor($user, $enabled);
+    }
+
+    /**
+     * @return array{2fa: bool}
+     */
+    public function toggleAdminTwoFactor(Admin $admin, bool $enabled): array
+    {
+        return $this->toggleTwoFactor($admin, $enabled);
+    }
+
+    /**
+     * @return array{2fa: bool}
+     */
+    private function toggleTwoFactor(User|Admin $authenticatable, bool $enabled): array
+    {
+        $authenticatable->forceFill(['2fa' => $enabled])->save();
 
         return [
-            '2fa' => (bool) $user->{'2fa'},
+            '2fa' => (bool) $authenticatable->{'2fa'},
         ];
     }
 

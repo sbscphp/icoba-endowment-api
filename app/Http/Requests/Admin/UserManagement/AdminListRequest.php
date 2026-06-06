@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Requests\Admin;
+namespace App\Http\Requests\Admin\UserManagement;
 
 use App\Http\Requests\ApiFormRequest;
 use App\Http\Requests\Concerns\ListingFilterRules;
@@ -21,5 +21,12 @@ class AdminListRequest extends ApiFormRequest
                 'filters.status' => ['sometimes', 'nullable', Rule::in(['active', 'inactive'])],
             ]
         );
+    }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), ListingFilterRules::listingMessages(), [
+            'filters.status.in' => "Status filter must be either 'active' or 'inactive'.",
+        ]);
     }
 }

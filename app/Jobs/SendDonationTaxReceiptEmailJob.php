@@ -2,8 +2,11 @@
 
 namespace App\Jobs;
 
+use App\Enums\ModuleEnums;
 use App\Mail\DonationTaxReceiptMail;
 use App\Models\Transaction;
+use App\Notifications\GenericDatabaseNotification;
+use App\Services\Notifications\NotificationDispatchService;
 use App\Services\Receipt\ReceiptPdfService;
 use App\Services\Receipt\ReceiptService;
 use App\Services\Theme\ThemeResolver;
@@ -35,6 +38,7 @@ class SendDonationTaxReceiptEmailJob implements ShouldBeUnique, ShouldQueue
         ReceiptService $receiptService,
         ReceiptPdfService $receiptPdfService,
         ThemeResolver $themeResolver,
+        NotificationDispatchService $notificationDispatch,
     ): void {
         $transaction = Transaction::query()
             ->where('uuid', $this->transactionUuid)
@@ -64,6 +68,29 @@ class SendDonationTaxReceiptEmailJob implements ShouldBeUnique, ShouldQueue
                 donationReceiptDownloadUrl: $receiptService->guestDonationReceiptDownloadUrl($transaction),
                 pdfBinary: $pdfBinary,
             ));
+
+            $notificationDispatch->notifyDonor(
+                $transaction->user_uuid,
+                $transaction->donor_email ?? $transaction->donor?->email,
+                new GenericDatabaseNotification(
+                    module: ModuleEnums::transactions->value,
+                    event: 'donation.tax_receipt_ready',
+                    title: 'Tax receipt available',
+                    message: 'Your tax-deductible donation receipt is ready to download.',
+                    meta: [
+                        'transaction_uuid' => $transaction->uuid,
+                        'transaction_id' => $transaction->transaction_id,
+                        'amount' => (string) $transaction->amount,
+                        'currency' => strtoupper((string) $transaction->currency),
+                        'paid_at' => optional($transaction->paid_at)->toIso8601String(),
+                    ],
+                    actionUrl: $receiptService->guestTaxReceiptDownloadUrl($transaction),
+                    icon: '/icons/tax-receipt.png',
+                    severity: 'info',
+                    tags: ['donation', 'tax_receipt'],
+                    sendMail: false,
+                ),
+            );
         } catch (\Throwable $e) {
             Log::warning('Donation tax receipt email failed: '.$e->getMessage(), [
                 'transaction_uuid' => $this->transactionUuid,

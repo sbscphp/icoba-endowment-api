@@ -10,9 +10,9 @@ use App\Http\Requests\Admin\Pledge\PledgeStatsRequest;
 use App\Http\Requests\Admin\Pledge\PledgeStoreRequest;
 use App\Http\Resources\PledgeDetailResource;
 use App\Http\Resources\PledgeListResource;
-use App\Models\Campaign;
 use App\Responser\JsonResponser;
 use App\Services\Admin\Pledge\PledgeService;
+use App\Services\GivingIdentity\GivingIdentityResolver;
 use App\Services\Pledge\PledgeCommittedNgnResolver;
 use App\Services\Pledge\PledgeScheduleInput;
 use App\Services\Pledge\PledgeScheduleService;
@@ -23,6 +23,7 @@ class PledgeController extends Controller
     public function __construct(
         private readonly PledgeService $pledgeService,
         private readonly PledgeScheduleService $pledgeScheduleService,
+        private readonly GivingIdentityResolver $givingIdentityResolver,
     ) {}
 
     public function stats(PledgeStatsRequest $request)
@@ -54,7 +55,7 @@ class PledgeController extends Controller
     {
         try {
             $v = $request->validated();
-            $campaignUuid = $v['campaign_uuid'] ?? Campaign::defaultCampaign()->uuid;
+            $campaignUuid = (string) $v['campaign_uuid'];
 
             $fx = PledgeCommittedNgnResolver::atCapture(
                 (float) $v['committed_amount'],
@@ -63,9 +64,23 @@ class PledgeController extends Controller
 
             $scheduleStorage = PledgeScheduleInput::resolveStorage($v);
 
+            $user = null;
+            if (! empty($v['user_uuid'])) {
+                $user = \App\Models\User::query()->where('uuid', $v['user_uuid'])->first();
+            }
+
+            $identity = $this->givingIdentityResolver->resolveForPledgeData([
+                'donor_email' => isset($v['donor_email']) ? strtolower(trim((string) $v['donor_email'])) : null,
+                'donor_type_uuid' => $v['donor_type_uuid'] ?? null,
+                'graduation_set_uuid' => $v['graduation_set_uuid'] ?? null,
+                'metadata' => $scheduleStorage['metadata'] ?? null,
+                'donor_name' => $v['donor_name'] ?? null,
+            ], $user, \App\Enums\GivingIdentitySource::ADMIN);
+
             $data = [
                 'campaign_uuid' => $campaignUuid,
                 'user_uuid' => $v['user_uuid'] ?? null,
+                'giving_identity_uuid' => $identity?->uuid,
                 'donor_type_uuid' => $v['donor_type_uuid'] ?? null,
                 'graduation_set_uuid' => $v['graduation_set_uuid'] ?? null,
                 'donor_name' => $v['donor_name'] ?? null,

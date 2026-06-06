@@ -24,4 +24,12 @@ class CampaignUpdateReportListRequest extends ApiFormRequest
             ]
         );
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), ListingFilterRules::listingMessages(), [
+            'export.in' => "Export format must be either 'csv' or 'pdf'.",
+            'filters.status.in' => 'Update report status filter is invalid.',
+        ]);
+    }
 }

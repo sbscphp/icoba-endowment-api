@@ -36,7 +36,6 @@ class PublicCampaignListResource extends JsonResource
             'start_date' => $this->start_date?->format('Y-m-d'),
             'end_date' => $this->end_date?->format('Y-m-d'),
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
-            'is_default' => (bool) $this->is_default,
             'allow_anonymous_donation' => (bool) $this->allow_anonymous_donation,
             'amount_realized_ngn' => (string) $amountRealizedNgn,
             'donation_pledge_ngn' => (string) $donationPledgeNgn,

@@ -4,8 +4,8 @@ namespace App\Services\Admin\TierConfiguration;
 
 use App\Exceptions\ApiException;
 use App\Helpers\FileUploadHelper;
+use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\TierConfiguration;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -16,6 +16,8 @@ use InvalidArgumentException;
 class TierConfigurationService
 {
     private const UPLOAD_FOLDER = 'tier-badges';
+
+    private const MAX_EXPORT_ROWS = 5000;
     /**
      * @param  array<string, mixed>  $payload
      */
@@ -48,13 +50,13 @@ class TierConfigurationService
     public function stats(array $validated): array
     {
         $query = TierConfiguration::query();
-        $this->applyDateRange($query, $validated, 'created_at');
+        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
 
-        return [
+        return array_merge(ListingFilterRules::periodMeta($validated), [
             'total' => (clone $query)->count(),
             'active' => (clone $query)->where('is_active', true)->count(),
             'inactive' => (clone $query)->where('is_active', false)->count(),
-        ];
+        ]);
     }
 
     /**
@@ -62,14 +64,38 @@ class TierConfigurationService
      */
     public function list(array $validated): LengthAwarePaginator
     {
+        $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
+
+        return $this->baseListQuery($validated)->paginate($perPage);
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array{0: Collection<int, TierConfiguration>, 1: bool}
+     */
+    public function exportCollection(array $validated): array
+    {
+        $query = $this->baseListQuery($validated);
+        $total = (clone $query)->count();
+        $truncated = $total > self::MAX_EXPORT_ROWS;
+        /** @var Collection<int, TierConfiguration> $rows */
+        $rows = $query->limit(self::MAX_EXPORT_ROWS)->get();
+
+        return [$rows, $truncated];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function baseListQuery(array $validated): Builder
+    {
         $sortBy = (string) ($validated['sort_by'] ?? 'sort_order');
         $sortDirection = strtolower((string) ($validated['sort_direction'] ?? 'asc')) === 'desc' ? 'desc' : 'asc';
-        $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
 
         $query = TierConfiguration::query()
             ->withCount('certificateTemplates as templates_count');
 
-        $this->applyDateRange($query, $validated, 'created_at');
+        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
 
         $search = trim((string) ($validated['search'] ?? ''));
         if ($search !== '') {
@@ -91,9 +117,7 @@ class TierConfigurationService
             $sortBy = 'sort_order';
         }
 
-        return $query
-            ->orderBy($sortBy, $sortDirection)
-            ->paginate($perPage);
+        return $query->orderBy($sortBy, $sortDirection);
     }
 
     public function findTier(string $tierId): TierConfiguration
@@ -213,23 +237,6 @@ class TierConfigurationService
         }
 
         return $tier;
-    }
-
-    /**
-     * @param  array<string, mixed>  $validated
-     */
-    private function applyDateRange(Builder $query, array $validated, string $column): void
-    {
-        $startDate = ! empty($validated['start_date']) ? Carbon::parse((string) $validated['start_date'])->startOfDay() : null;
-        $endDate = ! empty($validated['end_date']) ? Carbon::parse((string) $validated['end_date'])->endOfDay() : null;
-
-        if ($startDate !== null) {
-            $query->where($column, '>=', $startDate);
-        }
-
-        if ($endDate !== null) {
-            $query->where($column, '<=', $endDate);
-        }
     }
 
     private function uploadBadgeIfPresent(mixed $value): ?string

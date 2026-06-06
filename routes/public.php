@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\v1\Public\ContactSubmissionController;
 use App\Http\Controllers\v1\Public\LeaderboardController;
+use App\Http\Controllers\v1\Public\PublicEndowmentStatsController;
 use App\Http\Controllers\v1\Public\PublicCampaignController;
 use App\Http\Controllers\v1\Public\PublicCampaignUpdateReportController;
 use App\Http\Controllers\v1\Public\PublicBankAccountController;
@@ -12,6 +13,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
     Route::prefix('public')->middleware(['throttle:public-leaderboard'])->group(function () {
+        Route::get('project-stats', [PublicEndowmentStatsController::class, 'index']);
+
         Route::get('leaderboard', [LeaderboardController::class, 'leaderboard']);
         Route::get('leaderboard/sets', [LeaderboardController::class, 'sets']);
         Route::get('leaderboard/top-sets', [LeaderboardController::class, 'topSets']);

@@ -57,6 +57,9 @@ Route::prefix('v1/admin')->group(function () {
 
     Route::prefix('settings')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/profile', [SettingsController::class, 'profile']);
+        Route::patch('/profile', [SettingsController::class, 'updateProfile']);
+        Route::patch('/2fa', [SettingsController::class, 'toggleTwoFactor']);
+        Route::post('/2fa', [SettingsController::class, 'toggleTwoFactor']);
         Route::patch('/password', [SettingsController::class, 'changePassword']);
         Route::post('/password', [SettingsController::class, 'changePassword']);
         Route::patch('/notifications', [SettingsController::class, 'updateNotificationPreferences']);
@@ -66,9 +69,14 @@ Route::prefix('v1/admin')->group(function () {
     Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('uploads/image', [ImageUploadController::class, 'store']);
 
+        Route::get('permissions', [UserManagementController::class, 'permissionList'])
+            ->middleware(['permission:roles.read']);
+
         Route::prefix('roles')->group(function () {
             Route::get('/dropdown/{status?}', [UserManagementController::class, 'roleDropdown'])
                 ->where('status', 'active|inactive|all')
+                ->middleware(['permission:roles.read']);
+            Route::get('/with-permissions', [UserManagementController::class, 'rolesWithPermissions'])
                 ->middleware(['permission:roles.read']);
             Route::get('/stats', [UserManagementController::class, 'roleStats'])
                 ->middleware(['permission:roles.read']);
@@ -104,6 +112,8 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:admins.update']);
             Route::post('/{adminId}/resend-invite-link', [UserManagementController::class, 'resendAdminInviteLink'])
                 ->middleware(['permission:admins.update']);
+            Route::delete('/{adminId}', [UserManagementController::class, 'deleteAdmin'])
+                ->middleware(['permission:admins.delete']);
         });
 
         Route::prefix('tier-configurations')->group(function () {
@@ -183,6 +193,10 @@ Route::prefix('v1/admin')->group(function () {
             Route::post('/', [CampaignController::class, 'store'])
                 ->middleware(['permission:campaigns.create']);
             Route::get('/{campaignId}', [CampaignController::class, 'show'])
+                ->middleware(['permission:campaigns.read']);
+            Route::get('/{campaignId}/donors', [CampaignController::class, 'donors'])
+                ->middleware(['permission:campaigns.read']);
+            Route::get('/{campaignId}/pledges', [CampaignController::class, 'pledges'])
                 ->middleware(['permission:campaigns.read']);
             Route::patch('/{campaignId}', [CampaignController::class, 'update'])
                 ->middleware(['permission:campaigns.update']);

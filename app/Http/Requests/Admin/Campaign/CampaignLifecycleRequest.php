@@ -14,4 +14,13 @@ class CampaignLifecycleRequest extends ApiFormRequest
             'reason' => ['sometimes', 'nullable', 'string', 'max:500'],
         ];
     }
+
+    public function messages(): array
+    {
+        return array_merge(parent::messages(), [
+            'action.required' => 'Please select a lifecycle action to perform.',
+            'action.in' => 'Action must be one of: activate, pause, resume, or deactivate.',
+            'reason.max' => 'Reason may not be longer than 500 characters.',
+        ]);
+    }
 }

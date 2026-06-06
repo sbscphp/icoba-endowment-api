@@ -25,7 +25,12 @@ class DonationIntentRequest extends ApiFormRequest
                 'string',
                 Rule::in(Currency::values()),
             ],
-            'campaign_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:campaigns,uuid'],
+            'campaign_uuid' => [
+                Rule::requiredIf(fn () => ! $this->filled('pledge_uuid')),
+                'nullable',
+                'uuid',
+                'exists:campaigns,uuid',
+            ],
             'pledge_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:pledges,uuid'],
             'user_uuid' => [
                 Rule::prohibitedIf($this->user() instanceof User),

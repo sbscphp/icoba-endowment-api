@@ -5,12 +5,14 @@ namespace App\Services\Admin\Campaign;
 use App\Enums\AuditActionEnum;
 use App\Enums\CampaignStatus;
 use App\Enums\ModuleEnums;
+use App\Enums\PledgeStatus;
 use App\Enums\TransactionStatus;
 use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
 use App\Helpers\FileUploadHelper;
 use App\Helpers\GeneralHelper;
 use App\Helpers\PDFReportHelper;
+use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\Admin;
 use App\Models\Campaign;
 use App\Models\CampaignStatusLog;
@@ -43,8 +45,6 @@ class CampaignService
      */
     public function create(array $data, Admin $actor, Request $request): Campaign
     {
-        unset($data['is_default']);
-
         return DB::transaction(function () use ($data, $actor, $request): Campaign {
             $campaignId = $this->generateCampaignPublicId();
             $cover = $this->uploadCover($data['cover_image'] ?? null);
@@ -111,16 +111,9 @@ class CampaignService
      */
     public function update(string $campaignId, array $data, Admin $actor, Request $request): Campaign
     {
-        unset($data['is_default']);
-
         $campaign = $this->resolveCampaign($campaignId);
 
-        if ($campaign->is_default) {
-            // Default campaign: allow only descriptive / media updates
-            $data = $this->onlyKeys($data, [
-                'short_description', 'long_description', 'cover_image', 'gallery_images',
-            ]);
-        } elseif ($campaign->status !== CampaignStatus::DRAFT) {
+        if ($campaign->status !== CampaignStatus::DRAFT) {
             $data = $this->onlyKeys($data, [
                 'short_description', 'long_description', 'cover_image', 'gallery_images',
             ]);
@@ -311,10 +304,6 @@ class CampaignService
     {
         $campaign = $this->resolveCampaign($campaignId);
 
-        if ($campaign->is_default) {
-            throw new ApiException('Default campaign cannot be deactivated.', 422);
-        }
-
         if (! in_array($campaign->status, [CampaignStatus::ACTIVE, CampaignStatus::PAUSED], true)) {
             throw new ApiException('Campaign cannot be deactivated in its current state.', 422);
         }
@@ -357,10 +346,6 @@ class CampaignService
     public function complete(string $campaignId, ?Admin $actor, string $reason, Request $request): Campaign
     {
         $campaign = $this->resolveCampaign($campaignId);
-
-        if ($campaign->is_default) {
-            throw new ApiException('Default campaign cannot be auto-completed.', 422);
-        }
 
         if (! in_array($campaign->status, [CampaignStatus::ACTIVE, CampaignStatus::PAUSED], true)) {
             throw new ApiException('Campaign cannot be completed in its current state.', 422);
@@ -416,10 +401,6 @@ class CampaignService
     {
         $campaign = $this->resolveCampaign($campaignId);
 
-        if ($campaign->is_default) {
-            return ['blocked' => 1, 'transactions_count' => $campaign->transactions()->count()];
-        }
-
         if ($campaign->status !== CampaignStatus::DRAFT) {
             return ['blocked' => 1, 'transactions_count' => $campaign->transactions()->count()];
         }
@@ -437,28 +418,22 @@ class CampaignService
     }
 
     /**
+     * @param  array<string, mixed>  $validated
      * @return array<string, mixed>
      */
-    public function stats(?string $startDate, ?string $endDate): array
+    public function stats(array $validated): array
     {
-        $validated = array_filter([
-            'start_date' => $startDate,
-            'end_date' => $endDate,
-        ], fn ($v) => $v !== null && $v !== '');
-
         $query = Campaign::query();
         $this->applyDateRange($query, $validated, 'created_at');
 
-        return [
-            'start_date' => $startDate,
-            'end_date' => $endDate,
+        return array_merge(ListingFilterRules::periodMeta($validated), [
             'total_count' => (clone $query)->count(),
             'active_count' => (clone $query)->where('status', CampaignStatus::ACTIVE)->count(),
             'completed_count' => (clone $query)->where('status', CampaignStatus::COMPLETED)->count(),
             'paused_count' => (clone $query)->where('status', CampaignStatus::PAUSED)->count(),
             'deactivated_count' => (clone $query)->where('status', CampaignStatus::DEACTIVATED)->count(),
             'draft_count' => (clone $query)->where('status', CampaignStatus::DRAFT)->count(),
-        ];
+        ]);
     }
 
     public function findCampaign(string $campaignId): Campaign
@@ -476,6 +451,7 @@ class CampaignService
         $validated = ['filters' => $filters];
         $query = Campaign::query()->where('uuid', $campaign->uuid);
         $this->applyTransactionRaisedAggregates($query, $validated);
+        $this->applyPledgeCommittedAggregates($query, $validated);
         $row = $query->first();
 
         if ($row === null) {
@@ -484,6 +460,10 @@ class CampaignService
 
         $campaign->setAttribute('successful_contributions_sum_naira', $row->successful_contributions_sum_naira);
         $campaign->setAttribute('total_raised_filtered', $row->total_raised_filtered);
+        $campaign->setAttribute('successful_transactions_count', $row->successful_transactions_count);
+        $campaign->setAttribute('pledges_committed_sum_naira', $row->pledges_committed_sum_naira);
+        $campaign->setAttribute('pledges_committed_filtered', $row->pledges_committed_filtered);
+        $campaign->setAttribute('pledges_count', $row->pledges_count);
 
         return $campaign;
     }
@@ -546,7 +526,7 @@ class CampaignService
             $query->where('status', CampaignStatus::DEACTIVATED);
         }
 
-        return $query->get(['uuid', 'name', 'campaign_id', 'status', 'is_default']);
+        return $query->get(['uuid', 'name', 'campaign_id', 'status']);
     }
 
     /**
@@ -809,8 +789,8 @@ class CampaignService
         if ($search !== '') {
             $query->where(function (Builder $builder) use ($search): void {
                 $builder->where('name', 'like', '%'.$search.'%')
-                    ->orWhere('uuid', 'like', '%'.$search.'%')
-                    ->orWhere('campaign_id', 'like', '%'.$search.'%')
+                    // ->orWhere('uuid', 'like', '%'.$search.'%')
+                    // ->orWhere('campaign_id', 'like', '%'.$search.'%')
                     ->orWhere('short_description', 'like', '%'.$search.'%');
             });
         }
@@ -859,13 +839,77 @@ class CampaignService
      *
      * @param  array<string, mixed>  $validated
      */
+    /**
+     * Non-cancelled pledges: committed totals for campaign progress.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function applyPledgeCommittedAggregates(Builder $query, array $validated): void
+    {
+        $window = ListingFilterRules::resolveDateWindow($validated);
+
+        $activePledges = function (Builder $q) use ($window): void {
+            $q->where('status', '!=', PledgeStatus::CANCELLED);
+            $this->applyPledgeCreatedAtWindow($q, $window['start'], $window['end']);
+        };
+
+        $query->withSum([
+            'pledges as pledges_committed_sum_naira' => $activePledges,
+        ], 'committed_amount_ngn');
+
+        $query->withCount([
+            'pledges as pledges_count' => $activePledges,
+        ]);
+
+        $pledgeCurrency = strtoupper((string) data_get($validated, 'filters.raised_currency', 'NGN'));
+        if ($pledgeCurrency === '') {
+            $pledgeCurrency = 'NGN';
+        }
+
+        if ($pledgeCurrency === 'NGN') {
+            $query->withSum([
+                'pledges as pledges_committed_filtered' => $activePledges,
+            ], 'committed_amount_ngn');
+
+            return;
+        }
+
+        $query->withSum([
+            'pledges as pledges_committed_filtered' => function (Builder $q) use ($pledgeCurrency, $window): void {
+                $q->where('status', '!=', PledgeStatus::CANCELLED)
+                    ->where('currency', $pledgeCurrency);
+                $this->applyPledgeCreatedAtWindow($q, $window['start'], $window['end']);
+            },
+        ], 'committed_amount');
+    }
+
+    private function applyPledgeCreatedAtWindow(Builder $query, ?Carbon $start, ?Carbon $end): void
+    {
+        if ($start !== null) {
+            $query->where('created_at', '>=', $start);
+        }
+
+        if ($end !== null) {
+            $query->where('created_at', '<=', $end);
+        }
+    }
+
     private function applyTransactionRaisedAggregates(Builder $query, array $validated): void
     {
+        $window = ListingFilterRules::resolveDateWindow($validated);
+
+        $successfulTransactions = function (Builder $q) use ($window): void {
+            $q->where('status', TransactionStatus::SUCCESSFUL);
+            $this->applyTransactionCreatedAtWindow($q, $window['start'], $window['end']);
+        };
+
         $query->withSum([
-            'transactions as successful_contributions_sum_naira' => function (Builder $q): void {
-                $q->where('status', TransactionStatus::SUCCESSFUL);
-            },
+            'transactions as successful_contributions_sum_naira' => $successfulTransactions,
         ], 'amount_in_naira');
+
+        $query->withCount([
+            'transactions as successful_transactions_count' => $successfulTransactions,
+        ]);
 
         $raisedCurrency = strtoupper((string) data_get($validated, 'filters.raised_currency', 'NGN'));
         if ($raisedCurrency === '') {
@@ -874,8 +918,9 @@ class CampaignService
 
         if ($raisedCurrency === 'NGN') {
             $query->withSum([
-                'transactions as total_raised_filtered' => function (Builder $q): void {
+                'transactions as total_raised_filtered' => function (Builder $q) use ($window): void {
                     $q->where('status', TransactionStatus::SUCCESSFUL);
+                    $this->applyTransactionCreatedAtWindow($q, $window['start'], $window['end']);
                 },
             ], 'amount_in_naira');
 
@@ -883,9 +928,10 @@ class CampaignService
         }
 
         $query->withSum([
-            'transactions as total_raised_filtered' => function (Builder $q) use ($raisedCurrency): void {
+            'transactions as total_raised_filtered' => function (Builder $q) use ($raisedCurrency, $window): void {
                 $q->where('status', TransactionStatus::SUCCESSFUL)
                     ->where('currency', $raisedCurrency);
+                $this->applyTransactionCreatedAtWindow($q, $window['start'], $window['end']);
             },
         ], 'amount');
     }
@@ -911,19 +957,30 @@ class CampaignService
         }
 
         $statusValue = TransactionStatus::SUCCESSFUL->value;
+        $window = ListingFilterRules::resolveDateWindow($validated);
+        $dateSql = '';
+        $dateBindings = [];
+        if ($window['start'] !== null) {
+            $dateSql .= ' and transactions.created_at >= ?';
+            $dateBindings[] = $window['start'];
+        }
+        if ($window['end'] !== null) {
+            $dateSql .= ' and transactions.created_at <= ?';
+            $dateBindings[] = $window['end'];
+        }
 
         if ($raisedCurrency === 'NGN') {
             $query->whereRaw(
-                '(select coalesce(sum(amount_in_naira), 0) from transactions where transactions.campaign_uuid = campaigns.uuid and transactions.status = ? and transactions.deleted_at is null) >= ?',
-                [$statusValue, $minVal]
+                '(select coalesce(sum(amount_in_naira), 0) from transactions where transactions.campaign_uuid = campaigns.uuid and transactions.status = ? and transactions.deleted_at is null'.$dateSql.') >= ?',
+                array_merge([$statusValue], $dateBindings, [$minVal])
             );
 
             return;
         }
 
         $query->whereRaw(
-            '(select coalesce(sum(amount), 0) from transactions where transactions.campaign_uuid = campaigns.uuid and transactions.status = ? and transactions.currency = ? and transactions.deleted_at is null) >= ?',
-            [$statusValue, $raisedCurrency, $minVal]
+            '(select coalesce(sum(amount), 0) from transactions where transactions.campaign_uuid = campaigns.uuid and transactions.status = ? and transactions.currency = ? and transactions.deleted_at is null'.$dateSql.') >= ?',
+            array_merge([$statusValue, $raisedCurrency], $dateBindings, [$minVal])
         );
     }
 
@@ -932,15 +989,17 @@ class CampaignService
      */
     private function applyDateRange(Builder $query, array $validated, string $column): void
     {
-        $startDate = ! empty($validated['start_date']) ? Carbon::parse((string) $validated['start_date'])->startOfDay() : null;
-        $endDate = ! empty($validated['end_date']) ? Carbon::parse((string) $validated['end_date'])->endOfDay() : null;
+        ListingFilterRules::applyResolvedDateRange($query, $validated, $column);
+    }
 
-        if ($startDate !== null) {
-            $query->where($column, '>=', $startDate);
+    private function applyTransactionCreatedAtWindow(Builder $query, ?Carbon $start, ?Carbon $end): void
+    {
+        if ($start !== null) {
+            $query->where('created_at', '>=', $start);
         }
 
-        if ($endDate !== null) {
-            $query->where($column, '<=', $endDate);
+        if ($end !== null) {
+            $query->where('created_at', '<=', $end);
         }
     }
 }
