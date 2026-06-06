@@ -444,7 +444,10 @@ SQL;
         $scope = strtolower(trim((string) ($filters['scope'] ?? 'all')));
         $displayCurrency = $this->resolveDisplayCurrency($filters);
         $sort = $this->resolveSort($filters, 'amount', 'desc', ['amount', 'set']);
-        $query = $this->buildSetTotalsQuery($filters, $scope);
+        $includeFulfilledAmounts = $scope === 'pledges';
+        $query = $scope === 'pledges'
+            ? $this->buildPledgeSetTotalsQuery($filters)
+            : $this->buildSetTotalsQuery($filters, $scope);
 
         if ($sort['by'] === 'set') {
             $query->orderBy('sets.set_number', $sort['dir'])->orderBy('sets.name', $sort['dir']);
@@ -454,7 +457,12 @@ SQL;
 
         $paginator = $query->paginate($perPage);
         $rank = ($paginator->currentPage() - 1) * $paginator->perPage();
-        $paginator->setCollection(collect($this->mapSetLeaderboardRows($paginator->getCollection(), $displayCurrency, $rank)));
+        $paginator->setCollection(collect($this->mapSetLeaderboardRows(
+            $paginator->getCollection(),
+            $displayCurrency,
+            $rank,
+            $includeFulfilledAmounts,
+        )));
 
         return $paginator;
     }
@@ -786,6 +794,99 @@ SQL;
     }
 
     /**
+     * Alumni-set totals from pledge commitments (pledged + fulfilled), not paid transactions only.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    private function buildPledgeSetTotalsQuery(array $filters): \Illuminate\Database\Query\Builder
+    {
+        $campaignUuid = isset($filters['campaign_uuid']) ? (string) $filters['campaign_uuid'] : null;
+        $search = trim((string) ($filters['search'] ?? ''));
+        $useNgnDisplay = $this->resolveDisplayCurrency($filters) === Currency::NGN->value;
+        $setUuidSql = $this->resolvedPledgeGraduationSetUuidSql();
+        $donorKeySql = $this->pledgeDonorKeySql();
+        $effectiveNgnSql = $this->effectiveAmountNgnSql('transactions');
+
+        $fulfilledSub = DB::table('transactions')
+            ->select('pledge_uuid')
+            ->selectRaw('COALESCE(SUM(amount), 0) as fulfilled_amount')
+            ->selectRaw('COALESCE(SUM('.$effectiveNgnSql.'), 0) as fulfilled_amount_ngn')
+            ->where('status', TransactionStatus::SUCCESSFUL->value)
+            ->where(function ($query): void {
+                $query->whereNull('application_type')
+                    ->orWhere('application_type', '!=', TransactionApplicationType::PLEDGE_PLACEHOLDER->value);
+            })
+            ->whereNull('deleted_at')
+            ->groupBy('pledge_uuid');
+
+        $base = Pledge::query()
+            ->leftJoinSub($fulfilledSub, 'fulfilled_totals', 'fulfilled_totals.pledge_uuid', '=', 'pledges.uuid')
+            ->leftJoin('users', 'users.uuid', '=', 'pledges.user_uuid')
+            ->leftJoin('giving_identities', 'giving_identities.uuid', '=', 'pledges.giving_identity_uuid')
+            ->whereNot('pledges.status', PledgeStatus::CANCELLED)
+            ->whereRaw('('.$setUuidSql.') IS NOT NULL');
+
+        if ($campaignUuid !== null && $campaignUuid !== '') {
+            $base->where('pledges.campaign_uuid', $campaignUuid);
+        }
+
+        if ($search !== '') {
+            $like = '%'.$this->escapeLike($search).'%';
+            $base->whereExists(function ($q) use ($like, $setUuidSql): void {
+                $q->selectRaw('1')
+                    ->from('sets')
+                    ->whereRaw('sets.uuid = ('.$setUuidSql.')')
+                    ->where(function ($b) use ($like): void {
+                        $b->where('sets.name', 'like', $like)
+                            ->orWhere('sets.set_number', 'like', $like);
+                    });
+            });
+        }
+
+        $inner = $base->clone()
+            ->select([
+                'pledges.committed_amount',
+                'pledges.committed_amount_ngn',
+            ])
+            ->selectRaw('('.$setUuidSql.') as graduation_set_uuid')
+            ->selectRaw('COALESCE(fulfilled_totals.fulfilled_amount, 0) as pledge_fulfilled_amount')
+            ->selectRaw('COALESCE(fulfilled_totals.fulfilled_amount_ngn, 0) as pledge_fulfilled_amount_ngn')
+            ->selectRaw('('.$donorKeySql.') as donor_key');
+
+        $totalAmountSql = $useNgnDisplay
+            ? 'SUM(committed_amount_ngn)'
+            : 'SUM(committed_amount)';
+        $fulfilledAmountSql = $useNgnDisplay
+            ? 'SUM(pledge_fulfilled_amount_ngn)'
+            : 'SUM(pledge_fulfilled_amount)';
+
+        $aggregated = DB::query()
+            ->fromSub($inner, 'set_pledges')
+            ->selectRaw('graduation_set_uuid as set_uuid')
+            ->selectRaw($totalAmountSql.' as total_amount')
+            ->selectRaw('SUM(committed_amount_ngn) as total_amount_ngn')
+            ->selectRaw($fulfilledAmountSql.' as fulfilled_amount')
+            ->selectRaw('SUM(pledge_fulfilled_amount_ngn) as fulfilled_amount_ngn')
+            ->selectRaw('COUNT(DISTINCT donor_key) as contributing_donors')
+            ->groupBy('graduation_set_uuid');
+
+        return DB::query()
+            ->fromSub($aggregated, 'set_totals')
+            ->join('sets', 'sets.uuid', '=', 'set_totals.set_uuid')
+            ->select([
+                'set_totals.set_uuid',
+                'set_totals.total_amount',
+                'set_totals.total_amount_ngn',
+                'set_totals.fulfilled_amount',
+                'set_totals.fulfilled_amount_ngn',
+                'set_totals.contributing_donors',
+                'sets.name as set_name',
+                'sets.set_number',
+            ])
+            ->selectRaw('(SELECT COUNT(*) FROM users WHERE users.graduation_set_uuid = sets.uuid) as registered_members');
+    }
+
+    /**
      * @param  array<string, mixed>  $filters
      * @param  'all'|'donations'|'pledges'  $scope
      */
@@ -868,21 +969,29 @@ SQL;
      */
     private function topSetsForScope(array $filters, string $scope, int $limit, string $displayCurrency): array
     {
-        $rows = $this->buildSetTotalsQuery($filters, $scope)
+        $query = $scope === 'pledges'
+            ? $this->buildPledgeSetTotalsQuery($filters)
+            : $this->buildSetTotalsQuery($filters, $scope);
+
+        $rows = $query
             ->orderByDesc('set_totals.total_amount')
             ->orderBy('sets.set_number')
             ->limit($limit)
             ->get();
 
-        return $this->mapSetLeaderboardRows($rows, $displayCurrency);
+        return $this->mapSetLeaderboardRows($rows, $displayCurrency, 0, $scope === 'pledges');
     }
 
     /**
      * @param  Collection<int, object>|iterable<int, object>  $rows
      * @return list<array<string, mixed>>
      */
-    private function mapSetLeaderboardRows(iterable $rows, string $displayCurrency, int $rankStart = 0): array
-    {
+    private function mapSetLeaderboardRows(
+        iterable $rows,
+        string $displayCurrency,
+        int $rankStart = 0,
+        bool $includeFulfilledAmounts = false,
+    ): array {
         $rank = $rankStart;
         $mapped = [];
 
@@ -891,7 +1000,7 @@ SQL;
             $rank++;
             $contributingDonors = (int) ($row->contributing_donors ?? 0);
 
-            $mapped[] = [
+            $entry = [
                 'rank' => $rank,
                 'set' => [
                     'graduation_set_uuid' => (string) $row->set_uuid,
@@ -905,6 +1014,13 @@ SQL;
                 'amount_in_ngn' => $this->formatLeaderboardAmount($row->total_amount_ngn ?? null),
                 'currency' => $displayCurrency,
             ];
+
+            if ($includeFulfilledAmounts) {
+                $entry['fulfilled_amount'] = $this->formatLeaderboardAmount($row->fulfilled_amount ?? null);
+                $entry['fulfilled_amount_ngn'] = $this->formatLeaderboardAmount($row->fulfilled_amount_ngn ?? null);
+            }
+
+            $mapped[] = $entry;
         }
 
         return $mapped;
@@ -925,6 +1041,30 @@ COALESCE(
   users.graduation_set_uuid,
   NULLIF(JSON_UNQUOTE(JSON_EXTRACT(transactions.metadata, '$.guest_donor_profile.graduation_set_uuid')), '')
 )
+SQL;
+    }
+
+    private function resolvedPledgeGraduationSetUuidSql(): string
+    {
+        return <<<'SQL'
+COALESCE(
+  giving_identities.graduation_set_uuid,
+  pledges.graduation_set_uuid,
+  users.graduation_set_uuid,
+  NULLIF(JSON_UNQUOTE(JSON_EXTRACT(pledges.metadata, '$.guest_donor_profile.graduation_set_uuid')), '')
+)
+SQL;
+    }
+
+    private function pledgeDonorKeySql(): string
+    {
+        return <<<'SQL'
+CASE
+  WHEN pledges.giving_identity_uuid IS NOT NULL THEN pledges.giving_identity_uuid
+  WHEN pledges.user_uuid IS NOT NULL THEN pledges.user_uuid
+  WHEN pledges.donor_email IS NOT NULL AND pledges.donor_email != '' THEN LOWER(TRIM(pledges.donor_email))
+  ELSE pledges.uuid
+END
 SQL;
     }
 
