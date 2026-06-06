@@ -10,6 +10,9 @@ use Illuminate\Console\Command;
 
 class ReportGivingIdentityConflictsCommand extends Command
 {
+
+    //php artisan giving-identities:report-conflicts --resolve same asphp artisan giving-identities:reconcile --resolve-conflicts
+    
     protected $signature = 'giving-identities:report-conflicts
                             {--email= : Report a single donor email only}
                             {--status=conflict : Filter identities by status (conflict, all)}
