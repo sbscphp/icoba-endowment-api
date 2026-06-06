@@ -32,6 +32,7 @@ final class EmailVerificationResendTest extends TestCase
         config([
             'security.otp_minutes' => 5,
             'security.otp_send_cooldown_seconds' => 300,
+            'security.otp_resend_token_max_minutes' => 30,
         ]);
 
         $this->challengeTokenService = app(ChallengeTokenService::class);
@@ -60,6 +61,20 @@ final class EmailVerificationResendTest extends TestCase
 
         $this->assertSame(OtpPurposeEnum::EMAIL_VERIFICATION->value, $payload['purpose']);
         $this->assertArrayHasKey('subject_id', $payload);
+    }
+
+    public function test_decode_for_resend_rejects_token_past_max_reuse_window(): void
+    {
+        config(['security.otp_resend_token_max_minutes' => 10]);
+
+        $token = $this->issueTokenForUser(User::factory()->unverified()->create(), OtpPurposeEnum::EMAIL_VERIFICATION, ttlSeconds: 60);
+
+        $this->travel(601)->seconds();
+
+        $this->expectException(ApiException::class);
+        $this->expectExceptionMessage('Invalid or expired verification session.');
+
+        $this->challengeTokenService->decodeForResend($token, OtpPurposeEnum::EMAIL_VERIFICATION);
     }
 
     public function test_resend_after_countdown_expires_issues_fresh_otp_for_unverified_user(): void

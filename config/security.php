@@ -24,6 +24,12 @@ return [
     'otp_send_cooldown_seconds' => $otpMinutes * 60,
 
     /*
+    | Max age (from token issue time) for reusing an expired challenge_token on resend
+    | endpoints. After this window the client must restart the flow (login, forgot-password, etc.).
+    */
+    'otp_resend_token_max_minutes' => max(1, (int) env('OTP_RESEND_TOKEN_MAX_MINUTES', 30)),
+
+    /*
     | Max OTP send requests (initial + resend) per IP|challenge per otp_minutes window.
     */
     'otp_send_max_per_window' => max(1, (int) env('OTP_SEND_MAX_PER_WINDOW', 3)),
