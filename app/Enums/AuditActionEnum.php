@@ -13,6 +13,7 @@ enum AuditActionEnum: string
     case OTP_FAILED = 'OTP_FAILED';
     case PASSWORD_RESET_REQUESTED = 'PASSWORD_RESET_REQUESTED';
     case PASSWORD_RESET_COMPLETED = 'PASSWORD_RESET_COMPLETED';
+    case PROFILE_UPDATED = 'PROFILE_UPDATED';
 
     /**
      * @return list<string>

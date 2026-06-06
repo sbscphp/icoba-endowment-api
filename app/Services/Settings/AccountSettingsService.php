@@ -53,15 +53,27 @@ class AccountSettingsService
 
         if (Hash::check($newPassword, (string) $authenticatable->password)) {
             throw new ApiException('You cannot reuse your current password.', 422);
-        }        $updates = [
+        }
+
+        $updates = [
             'password' => $newPassword,
         ];
 
         if ($authenticatable instanceof Admin) {
             $updates['must_reset_password'] = false;
-    \}
+        }
 
         $authenticatable->forceFill($updates)->save();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function updateAdminProfile(Admin $admin, string $name): array
+    {
+        $admin->forceFill(['name' => trim($name)])->save();
+
+        return $this->adminProfile($admin->fresh() ?? $admin);
     }
 
     /**
