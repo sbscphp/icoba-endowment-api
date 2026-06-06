@@ -969,17 +969,14 @@ SQL;
      */
     private function topSetsForScope(array $filters, string $scope, int $limit, string $displayCurrency): array
     {
-        $query = $scope === 'pledges'
-            ? $this->buildPledgeSetTotalsQuery($filters)
-            : $this->buildSetTotalsQuery($filters, $scope);
-
-        $rows = $query
+        // Top sets ranks by money actually received: direct donations or fulfilled pledge payments.
+        $rows = $this->buildSetTotalsQuery($filters, $scope)
             ->orderByDesc('set_totals.total_amount')
             ->orderBy('sets.set_number')
             ->limit($limit)
             ->get();
 
-        return $this->mapSetLeaderboardRows($rows, $displayCurrency, 0, $scope === 'pledges');
+        return $this->mapSetLeaderboardRows($rows, $displayCurrency);
     }
 
     /**
