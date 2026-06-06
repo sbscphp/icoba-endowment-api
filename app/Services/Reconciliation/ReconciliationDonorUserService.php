@@ -10,6 +10,7 @@ use App\Models\DonorType;
 use App\Models\GraduationSet;
 use App\Models\User;
 use App\Repositories\Contracts\User\UserRepositoryInterface;
+use App\Services\GivingIdentity\GivingIdentityResolver;
 use App\Services\Phone\PhoneNumberService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -20,6 +21,7 @@ final class ReconciliationDonorUserService
     public function __construct(
         private readonly UserRepositoryInterface $userRepository,
         private readonly PhoneNumberService $phoneNumberService,
+        private readonly GivingIdentityResolver $givingIdentityResolver,
     ) {}
 
     /**
@@ -58,6 +60,8 @@ final class ReconciliationDonorUserService
             $this->mapProfileToUserPayload($data, $donorType, $email, $phoneNumber),
         );
         $user->assignRole(eRole::CUSTOMER->value);
+
+        $this->givingIdentityResolver->linkRegistrationToIdentity($user);
 
         LinkGuestDonorHistoryJob::dispatch($user->uuid);
 

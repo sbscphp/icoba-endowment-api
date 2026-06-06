@@ -44,6 +44,11 @@ class Transaction extends Model
         return $this->belongsTo(User::class, 'user_uuid', 'uuid');
     }
 
+    public function givingIdentity(): BelongsTo
+    {
+        return $this->belongsTo(GivingIdentity::class, 'giving_identity_uuid', 'uuid');
+    }
+
     public function pledge(): BelongsTo
     {
         return $this->belongsTo(Pledge::class, 'pledge_uuid', 'uuid');

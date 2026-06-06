@@ -10,8 +10,8 @@ use App\Helpers\GeneralHelper;
 use App\Models\Pledge;
 use App\Models\Transaction;
 use App\Models\User;
-use App\Repositories\Contracts\User\UserRepositoryInterface;
 use App\Services\Bank\BankAccountRegistry;
+use App\Services\GivingIdentity\GivingIdentityResolver;
 use App\Services\Pledge\PledgeBalanceService;
 use App\Services\Pledge\PledgeScheduleService;
 use App\Services\Transaction\TransactionNgnSnapshotService;
@@ -27,10 +27,10 @@ class DonationIntentService
         private readonly TransactionNgnSnapshotService $transactionNgnSnapshot,
         private readonly GuestDonorProfileSnapshotService $guestDonorProfileSnapshot,
         private readonly DonationCurrencyValidator $donationCurrencyValidator,
-        private readonly UserRepositoryInterface $userRepository,
         private readonly DonorNameRequirement $donorNameRequirement,
         private readonly BankTransferReferenceService $bankTransferReference,
         private readonly BankAccountRegistry $bankAccountRegistry,
+        private readonly GivingIdentityResolver $givingIdentityResolver,
     ) {}
 
     /**
@@ -53,12 +53,18 @@ class DonationIntentService
         }
 
         $data = $this->applyPledgeDonorDefaults($data);
-        $data = $this->linkGuestDonorToExistingUser($data);
-        $data = $this->applyLinkedUserDefaults($data);
 
         $guestSnapshot = $this->shouldBuildGuestDonorProfile($data)
             ? $this->guestDonorProfileSnapshot->build($data)
             : null;
+
+        $givingIdentityUuid = $this->resolveGivingIdentityUuid($data, $guestSnapshot);
+        if ($givingIdentityUuid !== null) {
+            $data['giving_identity_uuid'] = $givingIdentityUuid;
+        }
+
+        $data = $this->linkGuestDonorToExistingUser($data);
+        $data = $this->applyLinkedUserDefaults($data);
 
         $v = Validator::make($data, [
             'amount' => ['required', 'numeric', 'min:0.01'],
@@ -212,6 +218,7 @@ class DonationIntentService
             'campaign_uuid' => $campaignUuid,
             'pledge_uuid' => $pledgeUuid,
             'user_uuid' => $clean['user_uuid'] ?? null,
+            'giving_identity_uuid' => $data['giving_identity_uuid'] ?? null,
             'donor_type_uuid' => $guestSnapshot['donor_type_uuid'] ?? ($clean['donor_type_uuid'] ?? $linkedUser?->donor_type_uuid),
             'donor_name' => $donorName,
             'organization_name' => $organizationName,
@@ -395,6 +402,50 @@ class DonationIntentService
 
     /**
      * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>|null  $guestSnapshot
+     */
+    private function resolveGivingIdentityUuid(array $data, ?array $guestSnapshot): ?string
+    {
+        if (! empty($data['giving_identity_uuid'])) {
+            return (string) $data['giving_identity_uuid'];
+        }
+
+        $pledgeUuid = $data['pledge_uuid'] ?? null;
+        if (is_string($pledgeUuid) && $pledgeUuid !== '') {
+            $pledgeIdentityUuid = Pledge::query()
+                ->where('uuid', $pledgeUuid)
+                ->value('giving_identity_uuid');
+
+            if (is_string($pledgeIdentityUuid) && $pledgeIdentityUuid !== '') {
+                return $pledgeIdentityUuid;
+            }
+        }
+
+        if (! empty($data['user_uuid'])) {
+            $user = User::query()
+                ->where('uuid', $data['user_uuid'])
+                ->first();
+
+            if ($user === null) {
+                return null;
+            }
+
+            return $this->givingIdentityResolver->resolveForUser($user)->uuid;
+        }
+
+        if (! $this->shouldBuildGuestDonorProfile($data) && empty($data['donor_type_uuid'])) {
+            return null;
+        }
+
+        try {
+            return $this->givingIdentityResolver->resolveForGuest($data, $guestSnapshot)->uuid;
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
     private function linkGuestDonorToExistingUser(array $data): array
@@ -403,18 +454,17 @@ class DonationIntentService
             return $data;
         }
 
-        $email = isset($data['donor_email']) ? strtolower(trim((string) $data['donor_email'])) : '';
-        if ($email === '') {
+        if (empty($data['giving_identity_uuid'])) {
             return $data;
         }
 
-        $user = $this->userRepository->findByEmail($email);
-        if ($user === null) {
-            return $data;
-        }
+        $identity = \App\Models\GivingIdentity::query()
+            ->where('uuid', $data['giving_identity_uuid'])
+            ->first(['uuid', 'user_uuid']);
 
-        $data['user_uuid'] = $user->uuid;
-        $data['donor_email'] = $email;
+        if ($identity !== null && $identity->user_uuid !== null) {
+            $data['user_uuid'] = $identity->user_uuid;
+        }
 
         return $data;
     }

@@ -22,12 +22,14 @@ use App\Models\GraduationSet;
 use App\Models\User;
 use App\Notifications\GenericDatabaseNotification;
 use App\Repositories\Contracts\User\UserRepositoryInterface;
+use App\Services\GivingIdentity\GivingIdentityResolver;
 use App\Services\Notifications\NotificationDispatchService;
 use App\Services\Theme\ThemeResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\DB;
 
 class AuthService
 {
@@ -40,6 +42,7 @@ class AuthService
         private readonly UserRepositoryInterface $userRepository,
         private readonly OtpService $otpService,
         private readonly NotificationDispatchService $notificationDispatchService,
+        private readonly GivingIdentityResolver $givingIdentityResolver,
     ) {}
 
     public function register(array $data)
@@ -58,35 +61,40 @@ class AuthService
     public function registerCustomer(array $validated, Request $request): array
     {
         $donorType = DonorType::query()->where('slug', $validated['donor_type'])->firstOrFail();
-        $payload = $this->mapDonorRegistrationToUserPayload($validated, $donorType);
-        $user = $this->userRepository->create($payload);
-        $user->assignRole(eRole::CUSTOMER->value);
-        $user->load(['roles', 'donorType', 'corporateCategory', 'graduationSet']);
 
-        LinkGuestDonorHistoryJob::dispatch($user->uuid);
+        return DB::transaction(function () use ($validated, $request, $donorType): array {
+            $payload = $this->mapDonorRegistrationToUserPayload($validated, $donorType);
+            $user = $this->userRepository->create($payload);
+            $user->assignRole(eRole::CUSTOMER->value);
+            $user->load(['roles', 'donorType', 'corporateCategory', 'graduationSet']);
 
-        GeneralHelper::storeAuditLog(
-            UserTypeEnum::CUSTOMER,
-            AuditActionEnum::REGISTERED,
-            $request,
-            $user->uuid,
-            ['donor_type' => $donorType->slug],
-            $this->displayName($user).' registered.',
-            User::class,
-            $user->uuid,
-            ModuleEnums::authentication,
-            201,
-        );
+            $this->givingIdentityResolver->linkRegistrationToIdentity($user);
 
-        $channel = OtpChannelEnum::tryFromRequest($validated['otp_channel'] ?? null);
-        $otpPayload = $this->otpService->sendEmailVerificationOtp($user, $channel);
-        GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, $user->uuid, [
-            'purpose' => 'EMAIL_VERIFICATION',
-            'otp_channel' => $channel->value,
-            'reuse_active_challenge' => (bool) ($otpPayload['cooldown_active'] ?? false),
-        ], $this->displayName($user).' was sent a verification code.', User::class, $user->uuid, ModuleEnums::authentication, 200);
+            LinkGuestDonorHistoryJob::dispatch($user->uuid);
 
-        return $this->withRegistrationStep($otpPayload, CustomerRegistrationStepEnum::AWAITING_OTP);
+            GeneralHelper::storeAuditLog(
+                UserTypeEnum::CUSTOMER,
+                AuditActionEnum::REGISTERED,
+                $request,
+                $user->uuid,
+                ['donor_type' => $donorType->slug],
+                $this->displayName($user).' registered.',
+                User::class,
+                $user->uuid,
+                ModuleEnums::authentication,
+                201,
+            );
+
+            $channel = OtpChannelEnum::tryFromRequest($validated['otp_channel'] ?? null);
+            $otpPayload = $this->otpService->sendEmailVerificationOtp($user, $channel);
+            GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, $user->uuid, [
+                'purpose' => 'EMAIL_VERIFICATION',
+                'otp_channel' => $channel->value,
+                'reuse_active_challenge' => (bool) ($otpPayload['cooldown_active'] ?? false),
+            ], $this->displayName($user).' was sent a verification code.', User::class, $user->uuid, ModuleEnums::authentication, 200);
+
+            return $this->withRegistrationStep($otpPayload, CustomerRegistrationStepEnum::AWAITING_OTP);
+        });
     }
 
     /**
