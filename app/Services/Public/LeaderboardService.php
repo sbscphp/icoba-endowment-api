@@ -12,6 +12,7 @@ use App\Models\DonorType;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\Donation\DonorCumulativeTotalService;
 use App\Services\Tier\TierResolutionService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -538,6 +539,7 @@ SQL;
         $amountColumn = $this->resolveAmountColumn($filters);
         $effectiveNgnSql = $this->effectiveAmountNgnSql('transactions');
         $setUuidSql = $this->resolvedGraduationSetUuidSql();
+        $donorKeySql = DonorCumulativeTotalService::DONOR_KEY_SQL;
 
         $base = Transaction::query()->countableTowardRevenue()
             ->leftJoin('users', 'users.uuid', '=', 'transactions.user_uuid')
@@ -574,7 +576,8 @@ SQL;
                 'transactions.amount_in_naira',
             ])
             ->selectRaw('(' . $setUuidSql . ') as graduation_set_uuid')
-            ->selectRaw('(' . $effectiveNgnSql . ') as effective_amount_ngn');
+            ->selectRaw('(' . $effectiveNgnSql . ') as effective_amount_ngn')
+            ->selectRaw('(' . $donorKeySql . ') as donor_key');
 
         $totalAmountSql = $amountColumn === 'amount_in_naira'
             ? 'SUM(effective_amount_ngn)'
@@ -585,6 +588,7 @@ SQL;
             ->selectRaw('graduation_set_uuid as set_uuid')
             ->selectRaw($totalAmountSql . ' as total_amount')
             ->selectRaw('SUM(effective_amount_ngn) as total_amount_ngn')
+            ->selectRaw('COUNT(DISTINCT donor_key) as contributing_donors')
             ->groupBy('graduation_set_uuid');
 
         return DB::query()
@@ -594,10 +598,11 @@ SQL;
                 'set_totals.set_uuid',
                 'set_totals.total_amount',
                 'set_totals.total_amount_ngn',
+                'set_totals.contributing_donors',
                 'sets.name as set_name',
                 'sets.set_number',
             ])
-            ->selectRaw('(SELECT COUNT(*) FROM users WHERE users.graduation_set_uuid = sets.uuid) as total_members');
+            ->selectRaw('(SELECT COUNT(*) FROM users WHERE users.graduation_set_uuid = sets.uuid) as registered_members');
     }
 
     /**
@@ -627,13 +632,17 @@ SQL;
         foreach ($rows as $row) {
             /** @var object $row */
             $rank++;
+            $contributingDonors = (int) ($row->contributing_donors ?? 0);
+
             $mapped[] = [
                 'rank' => $rank,
                 'set' => [
                     'graduation_set_uuid' => (string) $row->set_uuid,
                     'set_name' => $row->set_name,
                     'set_number' => $row->set_number,
-                    'total_members' => (int) ($row->total_members ?? 0),
+                    'total_members' => $contributingDonors,
+                    'contributing_donors' => $contributingDonors,
+                    'registered_members' => (int) ($row->registered_members ?? 0),
                 ],
                 'total_amount' => $this->formatLeaderboardAmount($row->total_amount ?? null),
                 'amount_in_ngn' => $this->formatLeaderboardAmount($row->total_amount_ngn ?? null),
