@@ -128,10 +128,26 @@ class AccountSettingsService
      */
     public function toggleCustomerTwoFactor(User $user, bool $enabled): array
     {
-        $user->forceFill(['2fa' => $enabled])->save();
+        return $this->toggleTwoFactor($user, $enabled);
+    }
+
+    /**
+     * @return array{2fa: bool}
+     */
+    public function toggleAdminTwoFactor(Admin $admin, bool $enabled): array
+    {
+        return $this->toggleTwoFactor($admin, $enabled);
+    }
+
+    /**
+     * @return array{2fa: bool}
+     */
+    private function toggleTwoFactor(User|Admin $authenticatable, bool $enabled): array
+    {
+        $authenticatable->forceFill(['2fa' => $enabled])->save();
 
         return [
-            '2fa' => (bool) $user->{'2fa'},
+            '2fa' => (bool) $authenticatable->{'2fa'},
         ];
     }
 

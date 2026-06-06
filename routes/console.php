@@ -20,6 +20,10 @@ Schedule::command('pledges:send-payment-reminders')
     ->dailyAt('08:00')
     ->withoutOverlapping();
 
+Schedule::command('sms:check-balance --scheduled')
+    ->dailyAt('09:00')
+    ->withoutOverlapping();
+
 $exchangeRateFetchHours = max(1, min(12, (int) config('endowment.exchange_rate.fetch_interval_hours', 4)));
 
 Schedule::command('exchange:fetch-rates')

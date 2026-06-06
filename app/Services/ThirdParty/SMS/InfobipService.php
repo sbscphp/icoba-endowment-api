@@ -8,6 +8,46 @@ use Illuminate\Support\Facades\Log;
 class InfobipService implements SmsProviderInterface
 {
     /**
+     * @return array<string, mixed>|null
+     */
+    public function fetchBalance(): ?array
+    {
+        $baseUrl = rtrim((string) config('services.sms.infobip.base_url'), '/');
+        $apiKey = (string) config('services.sms.infobip.api_key');
+
+        if ($baseUrl === '' || $apiKey === '') {
+            return null;
+        }
+
+        $url = $baseUrl.'/account/1/balance';
+
+        $headers = [
+            'Authorization: '.$apiKey,
+            'Accept: application/json',
+        ];
+
+        try {
+            $response = CurlService::getRequest($url, $headers);
+
+            if (! is_array($response) || ! isset($response['balance'])) {
+                Log::warning('Infobip balance check returned unexpected response', ['response' => $response]);
+
+                return null;
+            }
+
+            return [
+                'balance' => (float) $response['balance'],
+                'currency' => (string) ($response['currency'] ?? config('sms-usage.infobip.currency', 'USD')),
+                'response' => $response,
+            ];
+        } catch (\Throwable $e) {
+            Log::error('Infobip balance check failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function send(string $to, string $message): array

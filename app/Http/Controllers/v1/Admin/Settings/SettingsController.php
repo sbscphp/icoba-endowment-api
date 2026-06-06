@@ -7,6 +7,7 @@ use App\Enums\ModuleEnums;
 use App\Enums\UserTypeEnum;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\Settings\ToggleTwoFactorRequest;
 use App\Http\Requests\Settings\ChangeSettingsPasswordRequest;
 use App\Http\Requests\Settings\UpdateAdminProfileRequest;
 use App\Http\Requests\Settings\UpdateNotificationPreferencesRequest;
@@ -60,6 +61,18 @@ class SettingsController extends Controller
             return JsonResponser::send(false, 'Profile updated.', $profile, 200);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\Settings\SettingsController@updateProfile');
+        }
+    }
+
+    public function toggleTwoFactor(ToggleTwoFactorRequest $request)
+    {
+        try {
+            $admin = $this->requireAdmin($request);
+            $result = $this->settingsService->toggleAdminTwoFactor($admin, ! (bool) $admin->{'2fa'});
+
+            return JsonResponser::send(false, 'Two-factor authentication updated.', $result, 200);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\Settings\SettingsController@toggleTwoFactor');
         }
     }
 
