@@ -81,6 +81,30 @@ class UserManagementController extends Controller
         }
     }
 
+    public function rolesWithPermissions()
+    {
+        try {
+            $roles = $this->roleService->listWithPermissions();
+
+            return JsonResponser::send(
+                false,
+                'Roles with permissions retrieved.',
+                RoleResource::collection($roles)->resolve()
+            );
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\UserManagement\UserManagementController@rolesWithPermissions');
+        }
+    }
+
+    public function permissionList()
+    {
+        try {
+            return JsonResponser::send(false, 'Permissions retrieved.', $this->roleService->listAllPermissions());
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\UserManagement\UserManagementController@permissionList');
+        }
+    }
+
     public function roleDropdown(?string $status = null)
     {
         try {
