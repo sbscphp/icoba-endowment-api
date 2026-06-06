@@ -66,9 +66,14 @@ Route::prefix('v1/admin')->group(function () {
     Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('uploads/image', [ImageUploadController::class, 'store']);
 
+        Route::get('permissions', [UserManagementController::class, 'permissionList'])
+            ->middleware(['permission:roles.read']);
+
         Route::prefix('roles')->group(function () {
             Route::get('/dropdown/{status?}', [UserManagementController::class, 'roleDropdown'])
                 ->where('status', 'active|inactive|all')
+                ->middleware(['permission:roles.read']);
+            Route::get('/with-permissions', [UserManagementController::class, 'rolesWithPermissions'])
                 ->middleware(['permission:roles.read']);
             Route::get('/stats', [UserManagementController::class, 'roleStats'])
                 ->middleware(['permission:roles.read']);

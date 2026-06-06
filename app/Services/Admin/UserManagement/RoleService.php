@@ -102,6 +102,42 @@ class RoleService
     /**
      * @return Collection<int, Role>
      */
+    public function listWithPermissions(): Collection
+    {
+        return Role::query()
+            ->where('guard_name', 'api')
+            ->where('name', '!=', eRole::CUSTOMER->value)
+            ->with('permissions:id,name')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * @return array{
+     *     permissions: list<string>,
+     *     permissions_by_module: list<array{key: string, label: string, permissions: list<array{name: string}>}>
+     * }
+     */
+    public function listAllPermissions(): array
+    {
+        $permissionsByModule = PermissionModuleMapper::groupedApiPermissions();
+        $permissions = [];
+
+        foreach ($permissionsByModule as $module) {
+            foreach ($module['permissions'] as $permission) {
+                $permissions[] = $permission['name'];
+            }
+        }
+
+        return [
+            'permissions' => $permissions,
+            'permissions_by_module' => $permissionsByModule,
+        ];
+    }
+
+    /**
+     * @return Collection<int, Role>
+     */
     public function dropdown(string $status = 'active'): Collection
     {
         $query = Role::query()
