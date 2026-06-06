@@ -207,6 +207,23 @@ class UserManagementController extends Controller
         }
     }
 
+    public function deleteAdmin(string $adminId)
+    {
+        try {
+            $result = $this->adminUserService->delete($adminId);
+            $auditLogsCount = $result['audit_logs_count'];
+            if ($auditLogsCount > 0) {
+                return JsonResponser::send(true, 'Admin cannot be deleted because of audit logs tied to them.', [
+                    'audit_logs_count' => $auditLogsCount,
+                ], 422);
+            }
+
+            return JsonResponser::send(false, 'Admin user deleted successfully.', null);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\UserManagement\UserManagementController@deleteAdmin');
+        }
+    }
+
     public function viewRole(string $roleId)
     {
         try {

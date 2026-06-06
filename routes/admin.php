@@ -109,6 +109,8 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:admins.update']);
             Route::post('/{adminId}/resend-invite-link', [UserManagementController::class, 'resendAdminInviteLink'])
                 ->middleware(['permission:admins.update']);
+            Route::delete('/{adminId}', [UserManagementController::class, 'deleteAdmin'])
+                ->middleware(['permission:admins.delete']);
         });
 
         Route::prefix('tier-configurations')->group(function () {
