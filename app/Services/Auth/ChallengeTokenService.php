@@ -30,6 +30,54 @@ class ChallengeTokenService
      */
     public function decode(string $token, OtpPurposeEnum $expectedPurpose): array
     {
+        [$payload, $requestContext] = $this->parsePayload($token, $expectedPurpose);
+
+        $exp = (int) ($payload['exp'] ?? 0);
+        $nowTs = now()->timestamp;
+        if ($nowTs > $exp) {
+            $this->logDecodeFailure('token_expired', array_merge($requestContext, [
+                'exp' => $exp,
+                'now' => $nowTs,
+                'skew_seconds' => $nowTs - $exp,
+            ]));
+
+            throw new ApiException('Invalid or expired verification session.', 422);
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Decode a challenge token for OTP resend flows where the embedded expiry may have passed.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws ApiException
+     */
+    public function decodeForResend(string $token, OtpPurposeEnum $expectedPurpose): array
+    {
+        [$payload, $requestContext] = $this->parsePayload($token, $expectedPurpose);
+
+        $exp = (int) ($payload['exp'] ?? 0);
+        $nowTs = now()->timestamp;
+        if ($nowTs > $exp) {
+            Log::info('Challenge token expired but accepted for resend.', array_merge($requestContext, [
+                'exp' => $exp,
+                'now' => $nowTs,
+                'skew_seconds' => $nowTs - $exp,
+            ]));
+        }
+
+        return $payload;
+    }
+
+    /**
+     * @return array{0: array<string, mixed>, 1: array<string, mixed>}
+     *
+     * @throws ApiException
+     */
+    private function parsePayload(string $token, OtpPurposeEnum $expectedPurpose): array
+    {
         $raw = $token;
         // Laravel encrypt() output is base64-based; form-urlencoded posts often turn '+' into
         // spaces, which breaks decrypt(). JSON bodies are unaffected.
@@ -73,18 +121,6 @@ class ChallengeTokenService
             throw new ApiException('Invalid or expired verification session.', 422);
         }
 
-        $exp = (int) ($payload['exp'] ?? 0);
-        $nowTs = now()->timestamp;
-        if ($nowTs > $exp) {
-            $this->logDecodeFailure('token_expired', array_merge($requestContext, [
-                'exp' => $exp,
-                'now' => $nowTs,
-                'skew_seconds' => $nowTs - $exp,
-            ]));
-
-            throw new ApiException('Invalid or expired verification session.', 422);
-        }
-
         $missing = [];
         foreach (['challenge_uuid', 'subject_type', 'subject_id'] as $key) {
             $normalized = $this->coerceTokenClaim($payload[$key] ?? null);
@@ -104,7 +140,7 @@ class ChallengeTokenService
             throw new ApiException('Invalid or expired verification session.', 422);
         }
 
-        return $payload;
+        return [$payload, $requestContext];
     }
 
     /**
