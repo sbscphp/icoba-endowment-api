@@ -2,17 +2,49 @@
 
 namespace App\Services\ThirdParty\SMS;
 
-use App\Mail\TermiiBalanceLowEmail;
 use App\Services\Curl\CurlService;
-use App\Services\Theme\ThemeResolver;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class TermiiService implements SmsProviderInterface
 {
-    /** Last budget usage % (same formula as termii:check-balance) for crossing detection. */
-    private const CACHE_LAST_BUDGET_PERCENTAGE_USED = 'termii_sms:last_budget_percentage_used';
+    public function __construct(
+        private readonly SmsBalanceAlertService $balanceAlertService,
+    ) {}
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function fetchBalance(): ?array
+    {
+        $baseUrl = rtrim((string) config('services.sms.termii.base_url'), '/');
+        $apiKey = (string) config('services.sms.termii.api_key');
+
+        if ($baseUrl === '' || $apiKey === '') {
+            return null;
+        }
+
+        $url = $baseUrl.'/api/get-balance?api_key='.rawurlencode($apiKey);
+
+        try {
+            $response = CurlService::getRequest($url);
+
+            if (! is_array($response) || ! isset($response['balance'])) {
+                Log::warning('Termii balance check returned unexpected response', ['response' => $response]);
+
+                return null;
+            }
+
+            return [
+                'balance' => (float) $response['balance'],
+                'currency' => (string) ($response['currency'] ?? 'NGN'),
+                'response' => $response,
+            ];
+        } catch (\Throwable $e) {
+            Log::error('Termii balance check failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
 
     /**
      * @return array<string, mixed>
@@ -64,7 +96,11 @@ class TermiiService implements SmsProviderInterface
 
                 if ($code == 'ok') {
                     if (isset($response['balance'])) {
-                        $this->notifyIfBudgetThresholdCrossed((float) $response['balance'], $response);
+                        $this->balanceAlertService->notifyIfBudgetThresholdCrossed(
+                            'termii',
+                            (float) $response['balance'],
+                            $response
+                        );
                     }
 
                     return [
@@ -103,64 +139,6 @@ class TermiiService implements SmsProviderInterface
                 'error' => $e->getMessage(),
             ];
         }
-    }
-
-    /**
-     * Email when budget usage (see config termii-usage) first crosses a warn_at threshold — not on every SMS.
-     * Matches CheckTermiiBalanceCommand: percentageUsed = (monthly_budget_ngn - balance) / monthly_budget_ngn * 100.
-     *
-     * @param  array<string, mixed>  $response
-     */
-    private function notifyIfBudgetThresholdCrossed(float $balance, array $response): void
-    {
-        $config = config('termii-usage');
-        $monthlyBudget = (float) ($config['monthly_budget_ngn'] ?? 0);
-
-        if ($monthlyBudget <= 0) {
-            return;
-        }
-
-        $percentageUsed = (($monthlyBudget - $balance) / $monthlyBudget) * 100;
-
-        $thresholds = $config['warn_at'] ?? [];
-        if (! is_array($thresholds) || $thresholds === []) {
-            Cache::forever(self::CACHE_LAST_BUDGET_PERCENTAGE_USED, $percentageUsed);
-
-            return;
-        }
-
-        $thresholds = array_map('floatval', $thresholds);
-        sort($thresholds, SORT_NUMERIC);
-
-        $previous = Cache::get(self::CACHE_LAST_BUDGET_PERCENTAGE_USED);
-        $previousPct = $previous !== null ? (float) $previous : null;
-
-        $newlyCrossed = [];
-        foreach ($thresholds as $threshold) {
-            if ($percentageUsed >= $threshold && ($previousPct === null || $previousPct < $threshold)) {
-                $newlyCrossed[] = $threshold;
-            }
-        }
-
-        if ($newlyCrossed !== []) {
-            $highestCrossed = max($newlyCrossed);
-            $addresses = $config['notify']['addresses'] ?? [];
-            if ($addresses !== []) {
-                $payload = array_merge($response, [
-                    'percentage_used' => round($percentageUsed, 2),
-                    'threshold_percent' => $highestCrossed,
-                    'monthly_budget_ngn' => $monthlyBudget,
-                ]);
-                try {
-                    $theme = app(ThemeResolver::class)->resolveForMail();
-                    Mail::to($addresses)->send(new TermiiBalanceLowEmail($payload, $theme));
-                } catch (\Throwable $e) {
-                    Log::error('Termii budget threshold alert email failed', ['error' => $e->getMessage()]);
-                }
-            }
-        }
-
-        Cache::forever(self::CACHE_LAST_BUDGET_PERCENTAGE_USED, $percentageUsed);
     }
 
     /**

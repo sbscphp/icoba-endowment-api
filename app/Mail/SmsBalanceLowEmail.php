@@ -8,8 +8,9 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Str;
 
-class TermiiBalanceLowEmail extends Mailable
+class SmsBalanceLowEmail extends Mailable
 {
     use Queueable, SerializesModels;
 
@@ -20,15 +21,17 @@ class TermiiBalanceLowEmail extends Mailable
 
     public function envelope(): Envelope
     {
+        $provider = Str::title((string) ($this->data['provider'] ?? 'SMS'));
+
         return new Envelope(
-            subject: 'Termii Balance Low Alert',
+            subject: "{$provider} Balance Low Alert",
         );
     }
 
     public function content(): Content
     {
         return new Content(
-            view: 'emails.termii-balance-low',
+            view: 'emails.sms-balance-low',
             with: [
                 'data' => $this->data,
                 'theme' => $this->mailTheme,

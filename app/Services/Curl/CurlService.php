@@ -10,9 +10,8 @@ class CurlService
     public static function getRequest($url, $headerParams = null)
     {
         $curl = curl_init();
-        // Header parameter
         $baseHeader = [
-            'Content-Type: application/json',
+            'Accept: application/json',
         ];
 
         if (is_null($headerParams)) {
@@ -21,22 +20,39 @@ class CurlService
             $headers = array_merge($baseHeader, $headerParams);
         }
 
-        curl_setopt_array($curl, array(
-        CURLOPT_URL => $url,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_ENCODING => "",
-        CURLOPT_MAXREDIRS => 10,
-        CURLOPT_TIMEOUT => 0,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-        CURLOPT_CUSTOMREQUEST => "GET",
-        CURLOPT_HTTPHEADER => $headers,
-        ));
+        curl_setopt_array($curl, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => 'GET',
+            CURLOPT_HTTPHEADER => $headers,
+        ]);
 
         $response = curl_exec($curl);
-        return json_decode($response, true);
+        $error = curl_error($curl);
         curl_close($curl);
 
+        if ($response === false) {
+            Log::warning('Curl GET request failed', ['url' => $url, 'error' => $error]);
+
+            return null;
+        }
+
+        $decoded = json_decode($response, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            Log::warning('Curl GET response was not valid JSON', [
+                'url' => $url,
+                'error' => json_last_error_msg(),
+            ]);
+
+            return null;
+        }
+
+        return $decoded;
     }
 
     public static function postRequest($url, $postdata, $headerParams = null)
