@@ -8,8 +8,8 @@ use App\Enums\TransactionStatus;
 use App\Models\GivingIdentity;
 use App\Models\Pledge;
 use App\Models\Transaction;
-use App\Models\User;
-use App\Services\GivingIdentity\GivingIdentityNormalizer;
+use App\Services\GivingIdentity\GivingIdentityConflictAnalyzer;
+use App\Services\GivingIdentity\GivingIdentityConflictResolver;
 use App\Services\GivingIdentity\GivingIdentityProfile;
 use App\Services\GivingIdentity\GivingIdentityProfileBuilder;
 use Illuminate\Console\Command;
@@ -19,16 +19,31 @@ class ReconcileGivingIdentitiesCommand extends Command
 {
     protected $signature = 'giving-identities:reconcile
                             {--dry-run : Analyse and report without writing changes}
-                            {--limit=0 : Maximum number of email groups to process (0 = all)}';
+                            {--limit=0 : Maximum number of email groups to process (0 = all)}
+                            {--email= : Process a single donor email only}
+                            {--resolve-conflicts : Align all records for conflicting emails to the tied giving identity profile}';
 
     protected $description = 'Backfill giving identities from historical transactions and pledges.';
+
+    public function __construct(
+        private readonly GivingIdentityConflictAnalyzer $analyzer,
+        private readonly GivingIdentityConflictResolver $conflictResolver,
+    ) {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
         $dryRun = (bool) $this->option('dry-run');
+        $resolveConflicts = (bool) $this->option('resolve-conflicts');
         $limit = max(0, (int) $this->option('limit'));
+        $emailFilter = is_string($this->option('email')) ? trim($this->option('email')) : null;
 
-        $emails = $this->collectDistinctEmails();
+        if ($resolveConflicts && $dryRun) {
+            $this->warn('--resolve-conflicts with --dry-run will only report how many records would be updated.');
+        }
+
+        $emails = $this->analyzer->collectDistinctEmails($emailFilter !== '' ? $emailFilter : null);
         if ($limit > 0) {
             $emails = $emails->take($limit);
         }
@@ -42,68 +57,75 @@ class ReconcileGivingIdentitiesCommand extends Command
         $created = 0;
         $stamped = 0;
         $conflicts = 0;
+        $resolved = 0;
+        $recordsAligned = 0;
 
         foreach ($emails as $email) {
             $result = $this->reconcileEmailGroup($email, $dryRun);
             $created += $result['created'];
             $stamped += $result['stamped'];
             $conflicts += $result['conflicts'];
+
+            if ($resolveConflicts && ($result['conflicts'] > 0 || $result['identity_status'] === GivingIdentityStatus::CONFLICT->value)) {
+                $identity = $this->analyzer->identityForEmail($email);
+                if ($identity !== null) {
+                    $resolveResult = $this->conflictResolver->resolveForIdentity($identity, $dryRun);
+                    $resolved++;
+                    $recordsAligned += $resolveResult['transactions'] + $resolveResult['pledges'];
+
+                    if (! $dryRun) {
+                        $this->line("  Resolved {$email}: {$resolveResult['transactions']} transaction(s), {$resolveResult['pledges']} pledge(s).");
+                    }
+                }
+            }
         }
 
         $this->newLine();
-        $this->table(
-            ['Metric', 'Count'],
-            [
-                ['Identities created', (string) $created],
-                ['Records stamped', (string) $stamped],
-                ['Conflict groups', (string) $conflicts],
-            ],
-        );
+        $rows = [
+            ['Identities created', (string) $created],
+            ['Records stamped', (string) $stamped],
+            ['Conflict groups', (string) $conflicts],
+        ];
+
+        if ($resolveConflicts) {
+            $rows[] = ['Conflict groups processed', (string) $resolved];
+            $rows[] = ['Records aligned to identity', (string) $recordsAligned];
+        }
+
+        $this->table(['Metric', 'Count'], $rows);
 
         if ($dryRun) {
             $this->warn('Dry run complete. Re-run without --dry-run to apply changes.');
+        }
+
+        if ($conflicts > 0 && ! $resolveConflicts) {
+            $this->warn('Conflict groups detected. Run with --resolve-conflicts to align records to the tied giving identity.');
+            $this->line('Or inspect first: php artisan giving-identities:report-conflicts');
         }
 
         return self::SUCCESS;
     }
 
     /**
-     * @return Collection<int, string>
-     */
-    private function collectDistinctEmails(): Collection
-    {
-        $fromTransactions = Transaction::query()
-            ->whereNotNull('donor_email')
-            ->where('donor_email', '!=', '')
-            ->selectRaw('LOWER(TRIM(donor_email)) as email_lower')
-            ->distinct()
-            ->pluck('email_lower');
-
-        $fromPledges = Pledge::query()
-            ->whereNotNull('donor_email')
-            ->where('donor_email', '!=', '')
-            ->selectRaw('LOWER(TRIM(donor_email)) as email_lower')
-            ->distinct()
-            ->pluck('email_lower');
-
-        return $fromTransactions->merge($fromPledges)->filter()->unique()->sort()->values();
-    }
-
-    /**
-     * @return array{created: int, stamped: int, conflicts: int}
+     * @return array{created: int, stamped: int, conflicts: int, identity_status: ?string}
      */
     private function reconcileEmailGroup(string $emailLower, bool $dryRun): array
     {
-        $profiles = $this->profilesForEmail($emailLower);
-        if ($profiles->isEmpty()) {
-            return ['created' => 0, 'stamped' => 0, 'conflicts' => 0];
+        $analysis = $this->analyzer->analyzeEmail($emailLower);
+        $observedProfiles = $analysis['observed_profiles'];
+
+        if ($observedProfiles->isEmpty() && $analysis['identity_uuid'] === null) {
+            return ['created' => 0, 'stamped' => 0, 'conflicts' => 0, 'identity_status' => null];
         }
 
-        $user = User::query()->whereRaw('LOWER(TRIM(email)) = ?', [$emailLower])->first();
-        $canonical = $this->chooseCanonicalProfile($profiles, $user);
+        $user = $this->analyzer->userForEmail($emailLower);
+        $canonical = $analysis['canonical'] ?? $this->chooseCanonicalProfile($observedProfiles, $user);
+        if ($canonical === null) {
+            return ['created' => 0, 'stamped' => 0, 'conflicts' => 0, 'identity_status' => null];
+        }
 
-        $existingIdentity = GivingIdentity::query()->where('email_lower', $emailLower)->first();
-        $hasConflict = $profiles->contains(fn (GivingIdentityProfile $profile): bool => ! $canonical->hardFieldsMatch($profile));
+        $existingIdentity = $this->analyzer->identityForEmail($emailLower);
+        $hasConflict = $analysis['has_conflict'];
 
         if ($hasConflict) {
             $this->warn("Conflict for {$emailLower} (".($user?->uuid ?? 'guest').')');
@@ -118,6 +140,7 @@ class ReconcileGivingIdentitiesCommand extends Command
                     'created' => 1,
                     'stamped' => 0,
                     'conflicts' => $hasConflict ? 1 : 0,
+                    'identity_status' => $hasConflict ? GivingIdentityStatus::CONFLICT->value : null,
                 ];
             }
 
@@ -143,7 +166,12 @@ class ReconcileGivingIdentitiesCommand extends Command
         }
 
         if ($dryRun) {
-            return ['created' => $created, 'stamped' => 0, 'conflicts' => $hasConflict ? 1 : 0];
+            return [
+                'created' => $created,
+                'stamped' => 0,
+                'conflicts' => $hasConflict ? 1 : 0,
+                'identity_status' => $existingIdentity?->status?->value,
+            ];
         }
 
         $stamped += Transaction::query()
@@ -160,79 +188,20 @@ class ReconcileGivingIdentitiesCommand extends Command
             'created' => $created,
             'stamped' => $stamped,
             'conflicts' => $hasConflict ? 1 : 0,
+            'identity_status' => $existingIdentity->status?->value,
         ];
-    }
-
-    /**
-     * @return Collection<int, GivingIdentityProfile>
-     */
-    private function profilesForEmail(string $emailLower): Collection
-    {
-        $profiles = collect();
-
-        Transaction::query()
-            ->whereRaw('LOWER(TRIM(donor_email)) = ?', [$emailLower])
-            ->orderBy('id')
-            ->chunkById(200, function ($transactions) use (&$profiles): void {
-                foreach ($transactions as $transaction) {
-                    $profile = $this->profileFromTransaction($transaction);
-                    if ($profile !== null) {
-                        $profiles->push($profile);
-                    }
-                }
-            });
-
-        Pledge::query()
-            ->whereRaw('LOWER(TRIM(donor_email)) = ?', [$emailLower])
-            ->orderBy('id')
-            ->chunkById(200, function ($pledges) use (&$profiles): void {
-                foreach ($pledges as $pledge) {
-                    $profiles->push(GivingIdentityProfileBuilder::fromPledge($pledge));
-                }
-            });
-
-        return $profiles
-            ->unique(fn (GivingIdentityProfile $profile): string => json_encode([
-                $profile->donorTypeUuid,
-                $profile->graduationSetUuid,
-                $profile->corporateCategoryUuid,
-                GivingIdentityNormalizer::text($profile->organizationName),
-                GivingIdentityNormalizer::text($profile->firstname),
-                GivingIdentityNormalizer::text($profile->lastname),
-            ]))
-            ->values();
     }
 
     /**
      * @param  Collection<int, GivingIdentityProfile>  $profiles
      */
-    private function chooseCanonicalProfile(Collection $profiles, ?User $user): GivingIdentityProfile
+    private function chooseCanonicalProfile(Collection $profiles, ?\App\Models\User $user): ?GivingIdentityProfile
     {
         if ($user !== null) {
             return GivingIdentityProfileBuilder::fromUser($user);
         }
 
         return $profiles->first();
-    }
-
-    private function profileFromTransaction(Transaction $transaction): ?GivingIdentityProfile
-    {
-        $metadata = is_array($transaction->metadata) ? $transaction->metadata : [];
-        $guestProfile = is_array($metadata['guest_donor_profile'] ?? null) ? $metadata['guest_donor_profile'] : [];
-
-        if ($guestProfile === [] && $transaction->donor_type_uuid === null) {
-            return null;
-        }
-
-        return GivingIdentityProfileBuilder::fromGuestPayload([
-            'donor_type_uuid' => $transaction->donor_type_uuid,
-            'organization_name' => $transaction->organization_name,
-            'rc_number' => $transaction->rc_number,
-            'tin' => $transaction->tin,
-        ], [
-            'donor_type_uuid' => $transaction->donor_type_uuid,
-            'guest_donor_profile' => $guestProfile,
-        ]);
     }
 
     private function emailHasSuccessfulPayment(string $emailLower): bool

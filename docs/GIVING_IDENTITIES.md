@@ -134,11 +134,46 @@ Apply changes:
 php artisan giving-identities:reconcile
 ```
 
-Optional limit:
+Optional limit or single email:
 
 ```bash
 php artisan giving-identities:reconcile --limit=100
+php artisan giving-identities:reconcile --email=donor@example.com
 ```
+
+### Report conflicts
+
+Inspect conflicting emails side-by-side:
+
+```bash
+php artisan giving-identities:report-conflicts
+php artisan giving-identities:report-conflicts --email=donor@example.com
+php artisan giving-identities:report-conflicts --json
+```
+
+### Resolve conflicts (align records to tied identity)
+
+When the backfill flagged `status=conflict`, align all transactions and pledges for that email to the **existing giving identity profile** (the canonical tied identity), then set status back to `active`:
+
+```bash
+# Preview
+php artisan giving-identities:report-conflicts --resolve --dry-run
+
+# Resolve all conflict identities
+php artisan giving-identities:report-conflicts --resolve
+
+# Resolve one email
+php artisan giving-identities:report-conflicts --email=donor@example.com --resolve
+```
+
+Or during reconcile:
+
+```bash
+php artisan giving-identities:reconcile --resolve-conflicts
+php artisan giving-identities:reconcile --email=donor@example.com --resolve-conflicts --dry-run
+```
+
+Resolution updates `donor_type_uuid`, set/org/name fields, `guest_donor_profile` metadata, and `giving_identity_uuid` on all matching transactions and pledges. It does not change the giving identity row itself — that row remains the source of truth.
 
 The command:
 
