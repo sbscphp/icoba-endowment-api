@@ -74,6 +74,16 @@ class AccountSettingsService
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    public function updateAdminProfile(Admin $admin, string $name): array
+    {
+        $admin->forceFill(['name' => trim($name)])->save();
+
+        return $this->adminProfile($admin->fresh() ?? $admin);
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
