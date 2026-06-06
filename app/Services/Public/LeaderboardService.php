@@ -5,10 +5,12 @@ namespace App\Services\Public;
 use App\Enums\CampaignStatus;
 use App\Enums\Currency;
 use App\Enums\DonorTypeSlug;
+use App\Enums\PledgeStatus;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
 use App\Models\Campaign;
 use App\Models\DonorType;
+use App\Models\Pledge;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
 use App\Models\User;
@@ -30,6 +32,12 @@ class LeaderboardService
      */
     public function donorsLeaderboard(array $filters): LengthAwarePaginator
     {
+        $scope = strtolower(trim((string) ($filters['scope'] ?? 'all')));
+
+        if ($scope === 'pledges') {
+            return $this->pledgesLeaderboard($filters);
+        }
+
         $perPage = max(1, min((int) ($filters['per_page'] ?? 20), 100));
         $mode = (string) ($filters['mode'] ?? 'all');
         $campaignUuid = isset($filters['campaign_uuid']) ? (string) $filters['campaign_uuid'] : null;
@@ -37,7 +45,6 @@ class LeaderboardService
         $setUuid = isset($filters['graduation_set_uuid']) ? (string) $filters['graduation_set_uuid'] : null;
         $tierUuid = isset($filters['tier_uuid']) ? (string) $filters['tier_uuid'] : null;
         $search = trim((string) ($filters['search'] ?? ''));
-        $scope = strtolower(trim((string) ($filters['scope'] ?? 'all')));
         $displayCurrency = $this->resolveDisplayCurrency($filters);
         $amountColumn = $this->resolveAmountColumn($filters);
         $effectiveNgnSql = $this->effectiveAmountNgnSql('transactions');
@@ -59,8 +66,6 @@ SQL;
 
         if ($scope === 'donations') {
             $base->whereNull('transactions.pledge_uuid');
-        } elseif ($scope === 'pledges') {
-            $base->whereNotNull('transactions.pledge_uuid');
         }
 
         if ($mode === 'donor_type' && $donorTypeUuid !== null && $donorTypeUuid !== '') {
@@ -176,6 +181,258 @@ SQL;
         });
 
         return $paginator;
+    }
+
+    /**
+     * Public pledges leaderboard: one row per pledge commitment (not paid transactions only).
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    private function pledgesLeaderboard(array $filters): LengthAwarePaginator
+    {
+        $perPage = max(1, min((int) ($filters['per_page'] ?? 20), 100));
+        $mode = (string) ($filters['mode'] ?? 'all');
+        $campaignUuid = isset($filters['campaign_uuid']) ? (string) $filters['campaign_uuid'] : null;
+        $donorTypeUuid = isset($filters['donor_type_uuid']) ? (string) $filters['donor_type_uuid'] : null;
+        $setUuid = isset($filters['graduation_set_uuid']) ? (string) $filters['graduation_set_uuid'] : null;
+        $tierUuid = isset($filters['tier_uuid']) ? (string) $filters['tier_uuid'] : null;
+        $search = trim((string) ($filters['search'] ?? ''));
+        $displayCurrency = $this->resolveDisplayCurrency($filters);
+        $useNgnDisplay = $displayCurrency === Currency::NGN->value;
+        $sort = $this->resolveSort($filters, 'amount', 'desc');
+
+        $effectiveNgnSql = $this->effectiveAmountNgnSql('transactions');
+
+        $fulfilledSub = DB::table('transactions')
+            ->select('pledge_uuid')
+            ->selectRaw('COALESCE(SUM(amount), 0) as fulfilled_amount')
+            ->selectRaw('COALESCE(SUM('.$effectiveNgnSql.'), 0) as fulfilled_amount_ngn')
+            ->where('status', TransactionStatus::SUCCESSFUL->value)
+            ->where(function ($query): void {
+                $query->whereNull('application_type')
+                    ->orWhere('application_type', '!=', TransactionApplicationType::PLEDGE_PLACEHOLDER->value);
+            })
+            ->whereNull('deleted_at')
+            ->groupBy('pledge_uuid');
+
+        $query = Pledge::query()
+            ->select('pledges.*')
+            ->selectRaw('COALESCE(fulfilled_totals.fulfilled_amount, 0) as calc_fulfilled_amount')
+            ->selectRaw('COALESCE(fulfilled_totals.fulfilled_amount_ngn, 0) as calc_fulfilled_amount_ngn')
+            ->leftJoinSub($fulfilledSub, 'fulfilled_totals', 'fulfilled_totals.pledge_uuid', '=', 'pledges.uuid')
+            ->leftJoin('users', 'users.uuid', '=', 'pledges.user_uuid')
+            ->with([
+                'donorType:uuid,slug,label',
+                'graduationSet:uuid,name,set_number',
+                'givingIdentity:uuid,donor_type_uuid,graduation_set_uuid,organization_name',
+                'givingIdentity.graduationSet:uuid,set_number',
+                'givingIdentity.corporateCategory:uuid,name',
+            ])
+            ->whereNot('pledges.status', PledgeStatus::CANCELLED);
+
+        if ($campaignUuid !== null && $campaignUuid !== '') {
+            $query->where('pledges.campaign_uuid', $campaignUuid);
+        }
+
+        if ($mode === 'donor_type' && $donorTypeUuid !== null && $donorTypeUuid !== '') {
+            $query->where(function (Builder $builder) use ($donorTypeUuid): void {
+                $builder->where('pledges.donor_type_uuid', $donorTypeUuid)
+                    ->orWhereHas('donor', fn (Builder $donor) => $donor->where('donor_type_uuid', $donorTypeUuid))
+                    ->orWhereHas('givingIdentity', fn (Builder $identity) => $identity->where('donor_type_uuid', $donorTypeUuid));
+            });
+        }
+
+        if ($mode === 'set' && $setUuid !== null && $setUuid !== '') {
+            $query->where(function (Builder $builder) use ($setUuid): void {
+                $builder->where('pledges.graduation_set_uuid', $setUuid)
+                    ->orWhereHas('donor', fn (Builder $donor) => $donor->where('graduation_set_uuid', $setUuid))
+                    ->orWhereHas('givingIdentity', fn (Builder $identity) => $identity->where('graduation_set_uuid', $setUuid));
+            });
+        }
+
+        $this->applyPledgeTierFilter($query, $tierUuid);
+
+        if ($search !== '') {
+            $like = '%'.$this->escapeLike($search).'%';
+            $query->where(function (Builder $builder) use ($like): void {
+                $builder->where('pledges.donor_name', 'like', $like)
+                    ->orWhere('pledges.donor_email', 'like', $like)
+                    ->orWhereHas('donor', function (Builder $donor) use ($like): void {
+                        $donor->where('firstname', 'like', $like)
+                            ->orWhere('lastname', 'like', $like)
+                            ->orWhere('email', 'like', $like);
+                    });
+            });
+        }
+
+        if ($sort['by'] === 'name') {
+            $query->orderByRaw(
+                "CASE WHEN pledges.is_anonymous = 1 THEN 'Anonymous' ELSE COALESCE(NULLIF(TRIM(pledges.donor_name), ''), NULLIF(TRIM(CONCAT(COALESCE(users.firstname, ''), ' ', COALESCE(users.lastname, ''))), ''), NULLIF(TRIM(pledges.donor_email), ''), 'Donor') END ".$sort['dir']
+            );
+        } else {
+            $amountColumn = $useNgnDisplay ? 'pledges.committed_amount_ngn' : 'pledges.committed_amount';
+            $query->orderBy($amountColumn, $sort['dir']);
+        }
+
+        $query->orderByDesc('pledges.created_at');
+
+        $paginator = $query->paginate($perPage);
+
+        $userUuids = $paginator->getCollection()->pluck('user_uuid')->filter()->unique()->all();
+        $users = User::query()
+            ->with([
+                'graduationSet:uuid,name,set_number',
+                'donorType:uuid,label,slug',
+                'corporateCategory:uuid,name',
+            ])
+            ->whereIn('uuid', $userUuids)
+            ->get()
+            ->keyBy('uuid');
+
+        $guestDonorTypeUuids = $paginator->getCollection()
+            ->flatMap(fn (Pledge $pledge): array => array_filter([
+                $pledge->donor_type_uuid,
+                $pledge->givingIdentity?->donor_type_uuid,
+            ]))
+            ->unique()
+            ->all();
+
+        $guestDonorTypes = DonorType::query()
+            ->whereIn('uuid', $guestDonorTypeUuids)
+            ->get(['uuid', 'slug', 'label'])
+            ->keyBy('uuid');
+
+        $donorTypesBySlug = DonorType::query()
+            ->get(['uuid', 'slug', 'label'])
+            ->keyBy('slug');
+
+        $rank = ($paginator->currentPage() - 1) * $paginator->perPage();
+        $paginator->getCollection()->transform(function ($row) use (
+            $users,
+            $guestDonorTypes,
+            $donorTypesBySlug,
+            &$rank,
+            $displayCurrency,
+            $useNgnDisplay,
+        ) {
+            /** @var Pledge $row */
+            $rank++;
+
+            return $this->mapPledgeLeaderboardRow(
+                $row,
+                $users,
+                $guestDonorTypes,
+                $donorTypesBySlug,
+                $rank,
+                $displayCurrency,
+                $useNgnDisplay,
+            );
+        });
+
+        return $paginator;
+    }
+
+    /**
+     * @param  Collection<string, User>  $users
+     * @param  Collection<string, DonorType>  $guestDonorTypes
+     * @param  Collection<string, DonorType>  $donorTypesBySlug
+     * @return array<string, mixed>
+     */
+    private function mapPledgeLeaderboardRow(
+        Pledge $pledge,
+        Collection $users,
+        Collection $guestDonorTypes,
+        Collection $donorTypesBySlug,
+        int $rank,
+        string $displayCurrency,
+        bool $useNgnDisplay,
+    ): array {
+        $pledgedNgn = (float) ($pledge->committed_amount_ngn ?? $pledge->committed_amount ?? 0);
+        $pledgedAmount = $useNgnDisplay
+            ? $pledgedNgn
+            : (float) ($pledge->committed_amount ?? 0);
+        $fulfilledAmount = $useNgnDisplay
+            ? (float) ($pledge->calc_fulfilled_amount_ngn ?? 0)
+            : (float) ($pledge->calc_fulfilled_amount ?? 0);
+        $fulfilledNgn = (float) ($pledge->calc_fulfilled_amount_ngn ?? 0);
+
+        $payload = [
+            'rank' => $rank,
+            'total_amount' => $this->formatLeaderboardAmount($pledgedAmount),
+            'fulfilled_amount' => $this->formatLeaderboardAmount($fulfilledAmount),
+            'amount_in_ngn' => $this->formatLeaderboardAmount($pledgedNgn),
+            'fulfilled_amount_ngn' => $this->formatLeaderboardAmount($fulfilledNgn),
+            'currency' => $displayCurrency,
+            'tier' => $this->tierResolution->resolvePublicTierForCumulativeAmount($pledgedNgn),
+            'last_donation_at' => $pledge->created_at,
+        ];
+
+        if ((bool) $pledge->is_anonymous) {
+            $payload['display_name'] = 'Anonymous';
+
+            return $payload;
+        }
+
+        $user = ! empty($pledge->user_uuid) ? ($users[(string) $pledge->user_uuid] ?? null) : null;
+
+        if ($user !== null) {
+            $payload['display_name'] = trim(implode(' ', array_filter([(string) $user->firstname, (string) $user->lastname])));
+        } else {
+            $payload['display_name'] = (string) ($pledge->donor_name ?: 'Donor');
+        }
+
+        $metaRow = $this->buildPledgeMetaRow($pledge);
+        $donorMeta = $this->resolveLeaderboardDonorMeta($user, $metaRow, $guestDonorTypes, $donorTypesBySlug);
+        $payload['donor_type'] = $donorMeta['donor_type'];
+        $payload['info'] = $donorMeta['info'];
+
+        return $payload;
+    }
+
+    private function buildPledgeMetaRow(Pledge $pledge): object
+    {
+        $metadata = is_array($pledge->metadata) ? $pledge->metadata : [];
+        $guest = is_array($metadata['guest_donor_profile'] ?? null) ? $metadata['guest_donor_profile'] : [];
+        $identity = $pledge->givingIdentity;
+
+        return (object) [
+            'user_uuid' => $pledge->user_uuid,
+            'donor_name' => $pledge->donor_name,
+            'donor_email' => $pledge->donor_email,
+            'donor_type_uuid' => $pledge->donor_type_uuid,
+            'identity_donor_type_uuid' => $identity?->donor_type_uuid,
+            'identity_set_number' => $identity?->graduationSet?->set_number ?? $pledge->graduationSet?->set_number,
+            'identity_organization_name' => $identity?->organization_name,
+            'identity_corporate_category_name' => $identity?->corporateCategory?->name,
+            'guest_set_number' => $guest['set_number'] ?? null,
+            'guest_corporate_category_name' => $guest['corporate_category_name'] ?? null,
+            'organization_name' => $guest['organization_name'] ?? null,
+        ];
+    }
+
+    /**
+     * @param  Builder<Pledge>  $query
+     */
+    private function applyPledgeTierFilter(Builder $query, ?string $tierUuid): void
+    {
+        if ($tierUuid === null || $tierUuid === '') {
+            return;
+        }
+
+        $tier = TierConfiguration::query()
+            ->where('uuid', $tierUuid)
+            ->where('is_active', true)
+            ->first(['min_amount', 'max_amount']);
+
+        if ($tier === null) {
+            return;
+        }
+
+        $query->where('pledges.committed_amount_ngn', '>=', (float) $tier->min_amount);
+
+        if ($tier->max_amount !== null) {
+            $query->where('pledges.committed_amount_ngn', '<=', (float) $tier->max_amount);
+        }
     }
 
     /**
