@@ -40,7 +40,7 @@ final class EmailVerificationResendTest extends TestCase
 
     public function test_decode_rejects_expired_challenge_token(): void
     {
-        $token = $this->issueTokenForUser(User::factory()->unverified()->create(), ttlSeconds: 60);
+        $token = $this->issueTokenForUser(User::factory()->unverified()->create(), OtpPurposeEnum::EMAIL_VERIFICATION, ttlSeconds: 60);
 
         $this->travel(61)->seconds();
 
@@ -52,7 +52,7 @@ final class EmailVerificationResendTest extends TestCase
 
     public function test_decode_for_resend_accepts_expired_challenge_token(): void
     {
-        $token = $this->issueTokenForUser(User::factory()->unverified()->create(), ttlSeconds: 60);
+        $token = $this->issueTokenForUser(User::factory()->unverified()->create(), OtpPurposeEnum::EMAIL_VERIFICATION, ttlSeconds: 60);
 
         $this->travel(61)->seconds();
 
@@ -67,7 +67,7 @@ final class EmailVerificationResendTest extends TestCase
         Mail::fake();
 
         $user = User::factory()->unverified()->create();
-        $token = $this->issueTokenForUser($user, ttlSeconds: 300);
+        $token = $this->issueTokenForUser($user, OtpPurposeEnum::EMAIL_VERIFICATION, ttlSeconds: 300);
 
         $this->travel(315)->seconds();
 
@@ -92,7 +92,7 @@ final class EmailVerificationResendTest extends TestCase
     public function test_resend_with_expired_token_rejects_already_verified_user(): void
     {
         $user = User::factory()->create();
-        $token = $this->issueTokenForUser($user, ttlSeconds: 60);
+        $token = $this->issueTokenForUser($user, OtpPurposeEnum::EMAIL_VERIFICATION, ttlSeconds: 60);
 
         $this->travel(61)->seconds();
 
@@ -102,13 +102,49 @@ final class EmailVerificationResendTest extends TestCase
         $this->otpService->resendEmailVerificationOtp($token);
     }
 
-    private function issueTokenForUser(User $user, int $ttlSeconds): string
+    public function test_password_reset_resend_after_countdown_expires_issues_fresh_otp(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->create();
+        $token = $this->issueTokenForUser($user, OtpPurposeEnum::PASSWORD_RESET, ttlSeconds: 300);
+
+        $this->travel(315)->seconds();
+
+        $result = $this->otpService->resendPasswordResetOtp($token);
+
+        $this->assertFalse($result['cooldown_active']);
+        $this->assertSame(OtpPurposeEnum::PASSWORD_RESET->value, $result['otp_purpose']);
+        $this->assertNotSame($token, $result['challenge_token']);
+
+        Mail::assertSent(OTPMail::class);
+    }
+
+    public function test_login_resend_after_countdown_expires_issues_fresh_otp(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->create();
+        $token = $this->issueTokenForUser($user, OtpPurposeEnum::LOGIN, ttlSeconds: 300);
+
+        $this->travel(315)->seconds();
+
+        $result = $this->otpService->resendLoginOtp($token);
+
+        $this->assertFalse($result['cooldown_active']);
+        $this->assertSame(OtpPurposeEnum::LOGIN->value, $result['otp_purpose']);
+        $this->assertNotSame($token, $result['challenge_token']);
+
+        Mail::assertSent(OTPMail::class);
+    }
+
+    private function issueTokenForUser(User $user, OtpPurposeEnum $purpose, int $ttlSeconds): string
     {
         $challenge = AuthChallenge::create([
             'uuid' => (string) Str::uuid(),
             'subject_type' => UserTypeEnum::CUSTOMER->value,
             'subject_id' => (string) $user->uuid,
-            'purpose' => OtpPurposeEnum::EMAIL_VERIFICATION,
+            'purpose' => $purpose,
             'channel' => OtpChannelEnum::EMAIL->value,
             'code_hash' => Hash::make('123456'),
             'expires_at' => now()->addSeconds($ttlSeconds),

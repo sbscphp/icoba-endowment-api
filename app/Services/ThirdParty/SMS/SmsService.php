@@ -11,6 +11,7 @@ class SmsService
     public function __construct(
         private readonly InfobipService $infobipService,
         private readonly TermiiService $termiiService,
+        private readonly TwilioService $twilioService,
         private readonly PhoneNumberService $phoneNumberService,
     ) {}
 
@@ -39,6 +40,7 @@ class SmsService
             match ($driver) {
                 'infobip' => $this->infobipService->send($phoneNumber, $message),
                 'termii' => $this->termiiService->send($phoneNumber, $message),
+                'twilio' => $this->twilioService->send($phoneNumber, $message),
                 'log' => Log::info('OTP SMS prepared', ['to' => $phoneNumber, 'purpose' => $purposeLabel]),
                 default => null,
             };

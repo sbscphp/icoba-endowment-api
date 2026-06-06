@@ -36,7 +36,7 @@ return [
 
     /*
     | When false (default), SMS-channel OTPs use otp_sms_stub_code and no provider is called.
-    | Set OTP_SMS_DISPATCH_ENABLED=true when ready to bill SMS providers (infobip/termii via SMS_PROVIDER).
+    | Set OTP_SMS_DISPATCH_ENABLED=true when ready to bill SMS providers (infobip/termii/twilio via SMS_PROVIDER).
     */
     'otp_sms_dispatch_enabled' => filter_var(env('OTP_SMS_DISPATCH_ENABLED', false), FILTER_VALIDATE_BOOL),
 

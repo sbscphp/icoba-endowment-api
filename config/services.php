@@ -62,6 +62,12 @@ return [
             'api_key' => env('TERMII_API_KEY'),
             'sender' => env('TERMII_SENDER', env('APP_NAME', 'Laravel')),
         ],
+        'twilio' => [
+            'account_sid' => env('TWILIO_ACCOUNT_SID'),
+            'auth_token' => env('TWILIO_AUTH_TOKEN'),
+            'from' => env('TWILIO_FROM'),
+            'timeout' => env('TWILIO_TIMEOUT', 120),
+        ],
     ],
 
 ];
