@@ -231,3 +231,16 @@ $json = json_encode(['amount' => 5000], JSON_THROW_ON_ERROR);
 $cipher = CryptoService::encryptAes($json, $base64Key, $base64Iv);
 $body = ['payload' => $cipher];
 ```
+
+---
+
+## Giving Identities
+
+Guest and registered donors are tracked through a canonical **giving identity** (one profile per email) so leaderboards, set totals, and tier recognition stay consistent when the same email is reused across donations.
+
+See **[docs/GIVING_IDENTITIES.md](docs/GIVING_IDENTITIES.md)** for:
+
+- Identity rules and lock behaviour
+- Backfill command (`php artisan giving-identities:reconcile`)
+- API error responses on profile conflict
+- Business decision questions for stakeholders

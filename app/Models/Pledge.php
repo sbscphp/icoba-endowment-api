@@ -41,6 +41,11 @@ class Pledge extends Model
         return $this->belongsTo(User::class, 'user_uuid', 'uuid');
     }
 
+    public function givingIdentity(): BelongsTo
+    {
+        return $this->belongsTo(GivingIdentity::class, 'giving_identity_uuid', 'uuid');
+    }
+
     public function donorType(): BelongsTo
     {
         return $this->belongsTo(DonorType::class, 'donor_type_uuid', 'uuid');

@@ -10,10 +10,14 @@ use App\Models\GraduationSet;
 use App\Models\User;
 use App\Support\CustomerProfileUpdateFields;
 use App\Support\PasswordRules;
+use App\Services\GivingIdentity\GivingIdentityLockService;
 use Illuminate\Support\Facades\Hash;
 
 class AccountSettingsService
 {
+    public function __construct(
+        private readonly GivingIdentityLockService $givingIdentityLock,
+    ) {}
     /**
      * @return array<string, mixed>
      */
@@ -78,6 +82,15 @@ class AccountSettingsService
         $user->loadMissing('donorType');
         $slug = $user->donorType?->slug;
         $data = CustomerProfileUpdateFields::filterForDonorType($slug, $data);
+
+        $blockedFields = $this->givingIdentityLock->lockedProfileFieldsBeingChanged($user, $data);
+        if ($blockedFields !== []) {
+            throw new ApiException(
+                'Your giving profile cannot be changed after a successful donation. Contact ICOBA support if you need assistance.',
+                422,
+            );
+        }
+
         $updates = [];
 
         foreach (['phone_number', 'country_code'] as $field) {

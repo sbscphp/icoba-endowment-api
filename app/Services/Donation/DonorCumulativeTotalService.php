@@ -11,6 +11,7 @@ final class DonorCumulativeTotalService
 {
     public const DONOR_KEY_SQL = <<<'SQL'
 CASE
+  WHEN transactions.giving_identity_uuid IS NOT NULL THEN transactions.giving_identity_uuid
   WHEN transactions.user_uuid IS NOT NULL THEN transactions.user_uuid
   WHEN transactions.donor_email IS NOT NULL AND transactions.donor_email != '' THEN LOWER(TRIM(transactions.donor_email))
   ELSE transactions.uuid
@@ -52,6 +53,10 @@ SQL;
 
     public function resolveDonorKeyFromTransaction(Transaction $transaction): string
     {
+        if ($transaction->giving_identity_uuid !== null && $transaction->giving_identity_uuid !== '') {
+            return (string) $transaction->giving_identity_uuid;
+        }
+
         if ($transaction->user_uuid !== null && $transaction->user_uuid !== '') {
             return (string) $transaction->user_uuid;
         }

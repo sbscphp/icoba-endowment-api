@@ -7,6 +7,7 @@ use App\Jobs\EvaluateDonorTierRecognitionJob;
 use App\Jobs\SendDonationConfirmationEmailJob;
 use App\Jobs\SendDonationTaxReceiptEmailJob;
 use App\Models\Transaction;
+use App\Services\GivingIdentity\GivingIdentityLockService;
 use App\Services\Pledge\PledgeBalanceService;
 use App\Services\Public\PublicEndowmentStatsService;
 use App\Services\Receipt\ReceiptService;
@@ -24,6 +25,7 @@ final class TransactionFinalizationService
         private readonly PledgeBalanceService $pledgeBalance,
         private readonly ReceiptService $receiptService,
         private readonly TransactionNgnSnapshotService $transactionNgnSnapshot,
+        private readonly GivingIdentityLockService $givingIdentityLock,
     ) {}
 
     /**
@@ -127,6 +129,8 @@ final class TransactionFinalizationService
             }
 
             $locked->forceFill(array_merge($update, $ngnFields))->save();
+
+            $this->givingIdentityLock->lockFromSuccessfulTransaction($locked);
 
             $locked->loadMissing('pledge');
             if ($locked->pledge !== null) {

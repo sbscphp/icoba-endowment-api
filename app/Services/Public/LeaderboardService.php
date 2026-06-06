@@ -43,6 +43,7 @@ class LeaderboardService
 
         $keySql = <<<'SQL'
 CASE
+  WHEN transactions.giving_identity_uuid IS NOT NULL THEN transactions.giving_identity_uuid
   WHEN transactions.user_uuid IS NOT NULL THEN transactions.user_uuid
   WHEN transactions.donor_email IS NOT NULL AND transactions.donor_email != '' THEN LOWER(TRIM(transactions.donor_email))
   ELSE transactions.uuid
@@ -74,8 +75,12 @@ SQL;
 
         $inner = $base->clone()
             ->leftJoin('users', 'users.uuid', '=', 'transactions.user_uuid')
+            ->leftJoin('giving_identities', 'giving_identities.uuid', '=', 'transactions.giving_identity_uuid')
+            ->leftJoin('sets as identity_sets', 'identity_sets.uuid', '=', 'giving_identities.graduation_set_uuid')
+            ->leftJoin('corporate_categories as identity_categories', 'identity_categories.uuid', '=', 'giving_identities.corporate_category_uuid')
             ->select([
                 'transactions.user_uuid',
+                'transactions.giving_identity_uuid',
                 'transactions.donor_name',
                 'transactions.donor_email',
                 'transactions.is_anonymous',
@@ -89,7 +94,11 @@ SQL;
             ])
             ->selectRaw('(' . $keySql . ') as donor_key')
             ->selectRaw('(' . $effectiveNgnSql . ') as effective_amount_ngn')
-            ->selectRaw("COALESCE(NULLIF(TRIM(transactions.donor_name), ''), NULLIF(TRIM(CONCAT(COALESCE(users.firstname, ''), ' ', COALESCE(users.lastname, ''))), ''), NULLIF(TRIM(transactions.donor_email), ''), 'Donor') as sort_name");
+            ->selectRaw("COALESCE(NULLIF(TRIM(transactions.donor_name), ''), NULLIF(TRIM(CONCAT(COALESCE(users.firstname, ''), ' ', COALESCE(users.lastname, ''))), ''), NULLIF(TRIM(transactions.donor_email), ''), 'Donor') as sort_name")
+            ->selectRaw('giving_identities.donor_type_uuid as identity_donor_type_uuid')
+            ->selectRaw('giving_identities.organization_name as identity_organization_name')
+            ->selectRaw('identity_sets.set_number as identity_set_number')
+            ->selectRaw('identity_categories.name as identity_corporate_category_name');
 
         $totalAmountSql = $amountColumn === 'amount_in_naira'
             ? 'SUM(effective_amount_ngn)'
@@ -108,7 +117,11 @@ SQL;
             ->selectRaw('SUM(effective_amount_ngn) as total_amount_ngn')
             ->selectRaw('MAX(paid_at) as last_paid_at')
             ->selectRaw('MAX(donor_type_uuid) as donor_type_uuid')
+            ->selectRaw('MAX(identity_donor_type_uuid) as identity_donor_type_uuid')
             ->selectRaw('MAX(organization_name) as organization_name')
+            ->selectRaw('MAX(identity_organization_name) as identity_organization_name')
+            ->selectRaw('MAX(identity_set_number) as identity_set_number')
+            ->selectRaw('MAX(identity_corporate_category_name) as identity_corporate_category_name')
             ->selectRaw("MAX(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.guest_donor_profile.set_number'))) as guest_set_number")
             ->selectRaw("MAX(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.guest_donor_profile.corporate_category_name'))) as guest_corporate_category_name")
             ->selectRaw("CASE WHEN MIN(is_anonymous) = 1 THEN 'Anonymous' ELSE MAX(sort_name) END as display_sort_name")
@@ -137,8 +150,10 @@ SQL;
             ->keyBy('uuid');
 
         $guestDonorTypeUuids = $paginator->getCollection()
-            ->filter(fn (object $row): bool => empty($row->user_uuid) && ! empty($row->donor_type_uuid))
-            ->pluck('donor_type_uuid')
+            ->flatMap(fn (object $row): array => array_filter([
+                $row->donor_type_uuid ?? null,
+                $row->identity_donor_type_uuid ?? null,
+            ]))
             ->unique()
             ->all();
 
@@ -369,6 +384,11 @@ SQL;
         if ($slug === DonorTypeSlug::ICOBA_ALUMNI->value) {
             $setNumber = $user?->graduationSet?->set_number;
             if ($setNumber === null || (string) $setNumber === '') {
+                $setNumber = is_string($row->identity_set_number ?? null) && trim((string) $row->identity_set_number) !== ''
+                    ? trim((string) $row->identity_set_number)
+                    : null;
+            }
+            if ($setNumber === null || (string) $setNumber === '') {
                 $setNumber = is_string($row->guest_set_number ?? null) && trim((string) $row->guest_set_number) !== ''
                     ? trim((string) $row->guest_set_number)
                     : null;
@@ -378,10 +398,14 @@ SQL;
             $categoryName = $user?->corporateCategory?->name;
             if (is_string($categoryName) && trim($categoryName) !== '') {
                 $info = trim($categoryName);
+            } elseif (is_string($row->identity_corporate_category_name ?? null) && trim((string) $row->identity_corporate_category_name) !== '') {
+                $info = trim((string) $row->identity_corporate_category_name);
             } elseif (is_string($row->guest_corporate_category_name ?? null) && trim((string) $row->guest_corporate_category_name) !== '') {
                 $info = trim((string) $row->guest_corporate_category_name);
             } elseif (is_string($user?->organization_name) && trim($user->organization_name) !== '') {
                 $info = trim($user->organization_name);
+            } elseif (is_string($row->identity_organization_name ?? null) && trim((string) $row->identity_organization_name) !== '') {
+                $info = trim((string) $row->identity_organization_name);
             } elseif (is_string($row->organization_name ?? null) && trim((string) $row->organization_name) !== '') {
                 $info = trim((string) $row->organization_name);
             }
@@ -410,14 +434,16 @@ SQL;
             return $user->donorType;
         }
 
-        $donorTypeUuid = $row->donor_type_uuid ?? null;
+        $donorTypeUuid = $row->identity_donor_type_uuid ?? $row->donor_type_uuid ?? null;
         if (is_string($donorTypeUuid) && $donorTypeUuid !== '' && $guestDonorTypes->has($donorTypeUuid)) {
             return $guestDonorTypes->get($donorTypeUuid);
         }
 
         $organizationName = is_string($user?->organization_name)
             ? trim($user->organization_name)
-            : (is_string($row->organization_name ?? null) ? trim((string) $row->organization_name) : '');
+            : (is_string($row->identity_organization_name ?? null)
+                ? trim((string) $row->identity_organization_name)
+                : (is_string($row->organization_name ?? null) ? trim((string) $row->organization_name) : ''));
 
         if ($organizationName !== '') {
             return $this->donorTypeFromSlug($donorTypesBySlug, DonorTypeSlug::CORPORATE_DONOR);
@@ -515,6 +541,7 @@ SQL;
 
         $base = Transaction::query()->countableTowardRevenue()
             ->leftJoin('users', 'users.uuid', '=', 'transactions.user_uuid')
+            ->leftJoin('giving_identities', 'giving_identities.uuid', '=', 'transactions.giving_identity_uuid')
             ->whereRaw('(' . $setUuidSql . ') IS NOT NULL');
 
         if ($campaignUuid !== null && $campaignUuid !== '') {
@@ -628,6 +655,7 @@ SQL;
     {
         return <<<'SQL'
 COALESCE(
+  giving_identities.graduation_set_uuid,
   users.graduation_set_uuid,
   NULLIF(JSON_UNQUOTE(JSON_EXTRACT(transactions.metadata, '$.guest_donor_profile.graduation_set_uuid')), '')
 )

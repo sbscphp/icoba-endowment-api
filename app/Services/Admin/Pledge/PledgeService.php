@@ -263,6 +263,7 @@ class PledgeService
             'campaign_uuid' => $pledge->campaign_uuid,
             'pledge_uuid' => $pledge->uuid,
             'user_uuid' => $pledge->user_uuid,
+            'giving_identity_uuid' => $pledge->giving_identity_uuid,
             'donor_type_uuid' => $pledge->donor_type_uuid,
             'donor_name' => $pledge->donor_name,
             'donor_email' => $pledge->donor_email,
