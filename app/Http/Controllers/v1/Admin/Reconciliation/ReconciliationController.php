@@ -6,12 +6,14 @@ use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\DateRangeStatsRequest;
 use App\Http\Requests\Admin\Reconciliation\CompleteReconciliationRequest;
+use App\Http\Requests\Admin\Reconciliation\CreateReconciliationQueueRequest;
 use App\Http\Requests\Admin\Reconciliation\LinkDonationToPledgeRequest;
 use App\Http\Requests\Admin\Reconciliation\ReconciliationQueueListRequest;
 use App\Http\Requests\Admin\Reconciliation\UpdateReconciliationBankRequest;
 use App\Http\Resources\ReconciliationQueueResource;
 use App\Http\Resources\TransactionResource;
 use App\Http\Requests\Concerns\ListingFilterRules;
+use App\Enums\TransactionStatus;
 use App\Models\Admin;
 use App\Models\Transaction;
 use App\Responser\JsonResponser;
@@ -54,6 +56,28 @@ class ReconciliationController extends Controller
             return JsonResponser::send(false, 'Reconciliation queue.', $payload);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\Reconciliation\ReconciliationController@queue');
+        }
+    }
+
+    public function store(CreateReconciliationQueueRequest $request)
+    {
+        try {
+            $admin = $request->user();
+            if (! $admin instanceof Admin) {
+                return JsonResponser::send(true, 'Admin authentication required.', null, 401);
+            }
+
+            $transaction = $this->donationReconciliation->createManual($request->validated(), $admin->uuid);
+
+            $message = $transaction->status === TransactionStatus::SUCCESSFUL
+                ? 'Reconciliation transaction created and completed.'
+                : 'Reconciliation transaction created.';
+
+            return JsonResponser::send(false, $message, [
+                'transaction' => TransactionResource::make($transaction)->resolve(),
+            ], 201);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\Reconciliation\ReconciliationController@store');
         }
     }
 

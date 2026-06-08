@@ -4,9 +4,12 @@ namespace App\Http\Requests\Admin\Reconciliation;
 
 use App\Http\Requests\ApiFormRequest;
 use App\Http\Requests\Concerns\ValidatesGuestDonorProfileFields;
+use App\Services\Bank\BankAccountRegistry;
 use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Support\Facades\App;
+use Illuminate\Validation\Rule;
 
-class CompleteReconciliationRequest extends ApiFormRequest
+class CreateReconciliationQueueRequest extends ApiFormRequest
 {
     use ValidatesGuestDonorProfileFields;
 
@@ -19,6 +22,19 @@ class CompleteReconciliationRequest extends ApiFormRequest
 
     public function rules(): array
     {
+        $registry = App::make(BankAccountRegistry::class);
+        $accountKeys = $registry->accountKeys();
+
+        $bankFields = [
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'reference_id' => ['required', 'string', 'max:128'],
+            'bank_key' => array_merge(
+                ['required', 'string', 'max:64'],
+                $accountKeys !== [] ? [Rule::in($accountKeys)] : [],
+            ),
+            'narration' => ['required', 'string', 'max:1000'],
+        ];
+
         $shared = [
             'user_uuid' => ['nullable', 'uuid', 'exists:users,uuid'],
             'campaign_uuid' => ['nullable', 'uuid', 'exists:campaigns,uuid'],
@@ -28,17 +44,18 @@ class CompleteReconciliationRequest extends ApiFormRequest
         ];
 
         if ($this->filled('user_uuid')) {
-            return array_merge($shared, $this->prohibitedDonorProfileRules());
+            return array_merge($bankFields, $shared, $this->prohibitedDonorProfileRules());
         }
 
         if ($this->filled('donor_type') || $this->filled('donor_type_uuid')) {
             return array_merge(
+                $bankFields,
                 $shared,
                 $this->guestDonorProfileRulesForSlug($this->resolvedGuestDonorTypeSlug()),
             );
         }
 
-        return array_merge($shared, [
+        return array_merge($bankFields, $shared, [
             'donor_type' => ['sometimes', 'nullable', 'string'],
             'donor_type_uuid' => ['sometimes', 'nullable', 'uuid'],
             'donor_email' => ['sometimes', 'nullable', 'email', 'max:190'],
@@ -49,6 +66,19 @@ class CompleteReconciliationRequest extends ApiFormRequest
     public function messages(): array
     {
         return array_merge(parent::messages(), [
+            'amount.required' => 'Please enter the transfer amount.',
+            'amount.numeric' => 'Amount must be a number.',
+            'amount.min' => 'Amount must be at least 0.01.',
+            'reference_id.required' => 'Please provide the bank statement reference.',
+            'reference_id.string' => 'Reference must be a text value.',
+            'reference_id.max' => 'Reference may not be longer than 128 characters.',
+            'bank_key.required' => 'Please select the ICOBA bank account that received the transfer.',
+            'bank_key.string' => 'Bank account must be a text value.',
+            'bank_key.max' => 'Bank account may not be longer than 64 characters.',
+            'bank_key.in' => 'Selected bank account is not configured. Use an account key from GET reconciliation/bank-accounts.',
+            'narration.required' => 'Please provide the bank narration.',
+            'narration.string' => 'Narration must be a text value.',
+            'narration.max' => 'Narration may not be longer than 1000 characters.',
             'donor_phone.regex' => 'Please enter a valid phone number for the selected country.',
             'set_number.exists' => 'I couldn\'t find that set. Please double-check the graduation year.',
             'donor_type.prohibited' => 'Provide either user_uuid or donor profile fields, not both.',
@@ -61,16 +91,6 @@ class CompleteReconciliationRequest extends ApiFormRequest
         $validator->after(function (Validator $validator): void {
             if ($validator->errors()->isNotEmpty()) {
                 return;
-            }
-
-            $hasCampaign = $this->filled('campaign_uuid');
-            $hasPledge = $this->filled('pledge_uuid');
-
-            if (! $hasCampaign && ! $hasPledge) {
-                $validator->errors()->add(
-                    'campaign_uuid',
-                    'Provide either a campaign or a pledge for reconciliation.',
-                );
             }
 
             if ($this->filled('user_uuid') && $this->hasDonorProfileInput()) {

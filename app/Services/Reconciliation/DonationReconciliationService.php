@@ -7,10 +7,12 @@ use App\Enums\PaymentGateway;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
 use App\Exceptions\ApiException;
+use App\Helpers\GeneralHelper;
 use App\Models\Pledge;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Bank\BankAccountRegistry;
+use App\Services\Donation\BankTransferReferenceService;
 use App\Services\Donation\DonorCumulativeTotalService;
 use App\Services\Tier\TierResolutionService;
 use App\Services\Transaction\TransactionFinalizationService;
@@ -26,6 +28,7 @@ class DonationReconciliationService
 {
     public function __construct(
         private readonly BankAccountRegistry $bankAccountRegistry,
+        private readonly BankTransferReferenceService $bankTransferReference,
         private readonly TransactionNgnSnapshotService $transactionNgnSnapshot,
         private readonly TransactionFinalizationService $finalizationService,
         private readonly TierResolutionService $tierResolution,
@@ -107,8 +110,19 @@ class DonationReconciliationService
         } elseif ($status === 'awaiting_verification') {
             $query->where('status', TransactionStatus::PENDING)
                 ->whereNotNull('awaiting_bank_verification_at');
+        } elseif ($status === 'awaiting_payment') {
+            $query->where('status', TransactionStatus::PENDING)
+                ->whereNull('awaiting_bank_verification_at')
+                ->whereNot(function (Builder $b): void {
+                    $b->whereNull('bank_transfer_reference')
+                        ->where(function (Builder $inner): void {
+                            $inner->whereJsonContains('metadata->source', 'fcmb_import')
+                                ->orWhereJsonContains('metadata->source', 'fcmb_webhook');
+                        });
+                });
         } elseif ($status === 'unmatched') {
             $query->where('status', TransactionStatus::PENDING)
+                ->whereNull('bank_transfer_reference')
                 ->where(function (Builder $b): void {
                     $b->whereJsonContains('metadata->source', 'fcmb_import')
                         ->orWhereJsonContains('metadata->source', 'fcmb_webhook');
@@ -158,6 +172,131 @@ class DonationReconciliationService
         }
 
         return $tx;
+    }
+
+    /**
+     * Manually record a received bank transfer for admin reconciliation.
+     *
+     * When campaign_uuid or pledge_uuid is supplied, the transaction is finalized in the same request.
+     *
+     * @param  array{
+     *     amount: float|string,
+     *     reference_id: string,
+     *     bank_key: string,
+     *     narration: string,
+     *     user_uuid?: ?string,
+     *     donor_type?: ?string,
+     *     donor_type_uuid?: ?string,
+     *     donor_email?: ?string,
+     *     donor_phone?: ?string,
+     *     firstname?: ?string,
+     *     lastname?: ?string,
+     *     set_number?: ?string,
+     *     alumni_identifier?: ?string,
+     *     organization_name?: ?string,
+     *     corporate_category_uuid?: ?string,
+     *     rc_number?: ?string,
+     *     tin?: ?string,
+     *     campaign_uuid?: ?string,
+     *     pledge_uuid?: ?string,
+     *     reconciliation_note?: ?string,
+     *     is_anonymous?: bool,
+     * }  $payload
+     */
+    public function createManual(array $payload, string $adminUuid): Transaction
+    {
+        $amount = (float) $payload['amount'];
+        $referenceId = trim((string) $payload['reference_id']);
+        $narration = trim((string) $payload['narration']);
+        $accountKey = trim((string) $payload['bank_key']);
+
+        $account = $this->bankAccountRegistry->resolveByAccountKey($accountKey);
+        if ($account === null) {
+            throw ValidationException::withMessages([
+                'bank_key' => ['Selected bank account is not configured.'],
+            ]);
+        }
+
+        if (Transaction::query()->where('fcmb_statement_reference', $referenceId)->exists()) {
+            throw ValidationException::withMessages([
+                'reference_id' => ['A transaction with this bank reference already exists.'],
+            ]);
+        }
+
+        $bankTransferReference = $this->bankTransferReference->extractFromNarration($narration)
+            ?? $this->bankTransferReference->extractFromNarration($referenceId);
+
+        if ($bankTransferReference !== null
+            && Transaction::query()->where('bank_transfer_reference', $bankTransferReference)->exists()) {
+            throw ValidationException::withMessages([
+                'narration' => ['A transaction with this bank transfer reference already exists.'],
+            ]);
+        }
+
+        $paidAt = now();
+        $snapshot = $this->transactionNgnSnapshot->resolveAtDate($amount, $account['currency'], $paidAt);
+
+        $transactionId = GeneralHelper::getModelUniqueRandomId([
+            'modelNamespace' => Transaction::class,
+            'modelField' => 'transaction_id',
+            'prefix' => 'TRN-',
+            'idLength' => 12,
+            'idType' => 'numalpha',
+        ]);
+        if (is_array($transactionId)) {
+            $transactionId = 'TRN-'.strtoupper(bin2hex(random_bytes(4)));
+        }
+
+        $metadata = [
+            'source' => 'admin_manual',
+            'narration' => $narration,
+            'bank_transaction_date' => $paidAt->toIso8601String(),
+            'paid_into_account_number' => $account['account_number'],
+            'paid_into_account_key' => $account['account_key'],
+        ];
+
+        $transaction = Transaction::query()->create([
+            'transaction_id' => $transactionId,
+            'amount' => $amount,
+            'currency' => $account['currency'],
+            'exchange_rate_to_naira' => $snapshot['exchange_rate_to_naira'],
+            'amount_in_naira' => $snapshot['amount_in_naira'],
+            'status' => TransactionStatus::PENDING,
+            'gateway' => PaymentGateway::Fcmb->value,
+            'application_type' => TransactionApplicationType::BANK_TRANSFER,
+            'paid_into_account_number' => $account['account_number'],
+            'fcmb_statement_reference' => $referenceId,
+            'bank_transfer_reference' => $bankTransferReference,
+            'awaiting_bank_verification_at' => $paidAt,
+            'is_anonymous' => array_key_exists('is_anonymous', $payload) ? (bool) $payload['is_anonymous'] : false,
+            'metadata' => $metadata,
+        ]);
+
+        if ($this->hasReconciliationLinkageInput($payload)) {
+            $linkage = $this->resolveReconciliationLinkage($payload, $transaction);
+            $this->persistReconciliationLinkage(
+                $transaction,
+                $linkage['user'],
+                $linkage['campaign_uuid'],
+                $linkage['pledge'],
+                $linkage['note'],
+                $linkage['is_anonymous'],
+            );
+            $transaction = $transaction->refresh();
+
+            if ($linkage['campaign_uuid'] !== null || $linkage['pledge'] !== null) {
+                $this->finalizationService->finalizeSuccessful($transaction, [
+                    'reconciled_by_admin_uuid' => $adminUuid,
+                    'reconciliation_note' => $linkage['note'],
+                    'metadata' => [
+                        'reconciliation_completed_at' => now()->toIso8601String(),
+                    ],
+                    'tax_receipt_email_meta_key' => 'bank_transfer_tax_receipt_email_queued',
+                ]);
+            }
+        }
+
+        return $this->findQueueItem($transaction->uuid);
     }
 
     /**
@@ -291,6 +430,7 @@ class DonationReconciliationService
      *     campaign_uuid?: ?string,
      *     pledge_uuid?: ?string,
      *     reconciliation_note?: ?string,
+     *     is_anonymous?: bool,
      * }  $payload
      */
     public function completeManual(Transaction $transaction, array $payload, string $adminUuid): Transaction
@@ -299,72 +439,21 @@ class DonationReconciliationService
             throw new ApiException('Only pending bank transfers can be completed.', 422);
         }
 
-        $userUuid = isset($payload['user_uuid']) && $payload['user_uuid'] !== '' ? (string) $payload['user_uuid'] : null;
-        $campaignUuid = isset($payload['campaign_uuid']) && $payload['campaign_uuid'] !== '' ? (string) $payload['campaign_uuid'] : null;
-        $pledgeUuid = isset($payload['pledge_uuid']) && $payload['pledge_uuid'] !== '' ? (string) $payload['pledge_uuid'] : null;
-        $note = isset($payload['reconciliation_note']) && $payload['reconciliation_note'] !== '' ? (string) $payload['reconciliation_note'] : null;
-
-        $user = null;
-        if ($userUuid !== null) {
-            $user = User::query()->where('uuid', $userUuid)->first();
-            if ($user === null) {
-                throw ValidationException::withMessages(['user_uuid' => ['Donor not found.']]);
-            }
-        } elseif ($this->shouldCreateDonorFromProfile($payload)) {
-            $user = $this->reconciliationDonorUser->createFromProfile($payload);
-        }
-
-        $pledge = null;
-        if ($pledgeUuid !== null) {
-            $pledge = Pledge::query()->where('uuid', $pledgeUuid)->first();
-            if ($pledge === null) {
-                throw ValidationException::withMessages(['pledge_uuid' => ['Pledge not found.']]);
-            }
-            if (strtoupper((string) $pledge->currency) !== strtoupper((string) $transaction->currency)) {
-                throw ValidationException::withMessages([
-                    'pledge_uuid' => ['Pledge currency does not match transaction currency.'],
-                ]);
-            }
-        }
-
-        DB::transaction(function () use ($transaction, $user, $campaignUuid, $pledge): void {
-            /** @var Transaction|null $locked */
-            $locked = Transaction::query()
-                ->whereKey($transaction->getKey())
-                ->lockForUpdate()
-                ->first();
-
-            if ($locked === null || $locked->status !== TransactionStatus::PENDING) {
-                throw new ApiException('Only pending bank transfers can be completed.', 422);
-            }
-
-            if ($user !== null) {
-                $locked->user_uuid = $user->uuid;
-                if (blank($locked->donor_email) && filled($user->email)) {
-                    $locked->donor_email = $user->email;
-                }
-                if (blank($locked->donor_name) && (filled($user->firstname) || filled($user->lastname))) {
-                    $locked->donor_name = trim(($user->firstname ?? '').' '.($user->lastname ?? ''));
-                }
-            }
-
-            if ($campaignUuid !== null) {
-                $locked->campaign_uuid = $campaignUuid;
-            }
-
-            if ($pledge !== null) {
-                $locked->pledge_uuid = $pledge->uuid;
-                $locked->campaign_uuid = $locked->campaign_uuid ?? $pledge->campaign_uuid;
-            }
-
-            $locked->save();
-        });
+        $linkage = $this->resolveReconciliationLinkage($payload, $transaction);
+        $this->persistReconciliationLinkage(
+            $transaction,
+            $linkage['user'],
+            $linkage['campaign_uuid'],
+            $linkage['pledge'],
+            $linkage['note'],
+            $linkage['is_anonymous'],
+        );
 
         $transaction = $transaction->refresh();
 
         $this->finalizationService->finalizeSuccessful($transaction, [
             'reconciled_by_admin_uuid' => $adminUuid,
-            'reconciliation_note' => $note,
+            'reconciliation_note' => $linkage['note'],
             'metadata' => [
                 'reconciliation_completed_at' => now()->toIso8601String(),
             ],
@@ -425,6 +514,136 @@ class DonationReconciliationService
     {
         return (isset($payload['donor_type']) && trim((string) $payload['donor_type']) !== '')
             || (isset($payload['donor_type_uuid']) && trim((string) $payload['donor_type_uuid']) !== '');
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function hasReconciliationLinkageInput(array $payload): bool
+    {
+        foreach ([
+            'user_uuid',
+            'donor_type',
+            'donor_type_uuid',
+            'donor_email',
+            'donor_phone',
+            'firstname',
+            'lastname',
+            'set_number',
+            'alumni_identifier',
+            'organization_name',
+            'corporate_category_uuid',
+            'rc_number',
+            'tin',
+            'campaign_uuid',
+            'pledge_uuid',
+            'reconciliation_note',
+        ] as $field) {
+            if (isset($payload[$field]) && trim((string) $payload[$field]) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array{
+     *     user: ?User,
+     *     campaign_uuid: ?string,
+     *     pledge: ?Pledge,
+     *     note: ?string,
+     *     is_anonymous: ?bool,
+     * }
+     */
+    private function resolveReconciliationLinkage(array $payload, Transaction $transaction): array
+    {
+        $userUuid = isset($payload['user_uuid']) && $payload['user_uuid'] !== '' ? (string) $payload['user_uuid'] : null;
+        $campaignUuid = isset($payload['campaign_uuid']) && $payload['campaign_uuid'] !== '' ? (string) $payload['campaign_uuid'] : null;
+        $pledgeUuid = isset($payload['pledge_uuid']) && $payload['pledge_uuid'] !== '' ? (string) $payload['pledge_uuid'] : null;
+        $note = isset($payload['reconciliation_note']) && $payload['reconciliation_note'] !== '' ? (string) $payload['reconciliation_note'] : null;
+
+        $user = null;
+        if ($userUuid !== null) {
+            $user = User::query()->where('uuid', $userUuid)->first();
+            if ($user === null) {
+                throw ValidationException::withMessages(['user_uuid' => ['Donor not found.']]);
+            }
+        } elseif ($this->shouldCreateDonorFromProfile($payload)) {
+            $user = $this->reconciliationDonorUser->createFromProfile($payload);
+        }
+
+        $pledge = null;
+        if ($pledgeUuid !== null) {
+            $pledge = Pledge::query()->where('uuid', $pledgeUuid)->first();
+            if ($pledge === null) {
+                throw ValidationException::withMessages(['pledge_uuid' => ['Pledge not found.']]);
+            }
+            if (strtoupper((string) $pledge->currency) !== strtoupper((string) $transaction->currency)) {
+                throw ValidationException::withMessages([
+                    'pledge_uuid' => ['Pledge currency does not match transaction currency.'],
+                ]);
+            }
+        }
+
+        return [
+            'user' => $user,
+            'campaign_uuid' => $campaignUuid,
+            'pledge' => $pledge,
+            'note' => $note,
+            'is_anonymous' => array_key_exists('is_anonymous', $payload) ? (bool) $payload['is_anonymous'] : null,
+        ];
+    }
+
+    private function persistReconciliationLinkage(
+        Transaction $transaction,
+        ?User $user,
+        ?string $campaignUuid,
+        ?Pledge $pledge,
+        ?string $note = null,
+        ?bool $isAnonymous = null,
+    ): void {
+        DB::transaction(function () use ($transaction, $user, $campaignUuid, $pledge, $note, $isAnonymous): void {
+            /** @var Transaction|null $locked */
+            $locked = Transaction::query()
+                ->whereKey($transaction->getKey())
+                ->lockForUpdate()
+                ->first();
+
+            if ($locked === null || $locked->status !== TransactionStatus::PENDING) {
+                throw new ApiException('Only pending bank transfers can be updated.', 422);
+            }
+
+            if ($user !== null) {
+                $locked->user_uuid = $user->uuid;
+                if (blank($locked->donor_email) && filled($user->email)) {
+                    $locked->donor_email = $user->email;
+                }
+                if (blank($locked->donor_name) && (filled($user->firstname) || filled($user->lastname))) {
+                    $locked->donor_name = trim(($user->firstname ?? '').' '.($user->lastname ?? ''));
+                }
+            }
+
+            if ($campaignUuid !== null) {
+                $locked->campaign_uuid = $campaignUuid;
+            }
+
+            if ($pledge !== null) {
+                $locked->pledge_uuid = $pledge->uuid;
+                $locked->campaign_uuid = $locked->campaign_uuid ?? $pledge->campaign_uuid;
+            }
+
+            if ($note !== null) {
+                $locked->reconciliation_note = $note;
+            }
+
+            if ($isAnonymous !== null) {
+                $locked->is_anonymous = $isAnonymous;
+            }
+
+            $locked->save();
+        });
     }
 
     private function paidAtFromMetadata(Transaction $transaction): ?Carbon
