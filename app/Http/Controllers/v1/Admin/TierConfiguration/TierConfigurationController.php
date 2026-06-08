@@ -63,10 +63,10 @@ class TierConfigurationController extends Controller
         }
     }
 
-    public function show(string $tierId)
+    public function show(TierListRequest $request, string $tierId)
     {
         try {
-            $tier = $this->tierConfigurationService->findTier($tierId);
+            $tier = $this->tierConfigurationService->findTier($tierId, $request->validated());
             $tier->loadCount('certificateTemplates as templates_count');
 
             return JsonResponser::send(false, 'Tier configuration retrieved.', TierConfigurationResource::make($tier)->resolve());

@@ -25,8 +25,12 @@ class TierConfigurationResource extends JsonResource
             'base_color' => $this->base_color,
             'min_amount' => $this->min_amount !== null ? (float) $this->min_amount : null,
             'max_amount' => $this->max_amount !== null ? (float) $this->max_amount : null,
-            'members_count' => 0,
-            'contribution_by_tier' => 0,
+            'members_count' => (int) ($this->members_count ?? 0),
+            'registered_users_count' => (int) ($this->registered_users_count ?? 0),
+            'guest_count' => (int) ($this->guest_count ?? 0),
+            'contribution_by_tier' => $this->contribution_by_tier !== null
+                ? (string) round((float) $this->contribution_by_tier, 2)
+                : '0.00',
             'benefits' => $this->benefits ?? [],
             'sort_order' => (int) $this->sort_order,
             'status' => $this->is_active ? 'active' : 'inactive',

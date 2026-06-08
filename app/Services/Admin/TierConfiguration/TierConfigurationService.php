@@ -18,6 +18,10 @@ class TierConfigurationService
     private const UPLOAD_FOLDER = 'tier-badges';
 
     private const MAX_EXPORT_ROWS = 5000;
+
+    public function __construct(
+        private readonly TierConfigurationMemberStatsService $memberStats,
+    ) {}
     /**
      * @param  array<string, mixed>  $payload
      */
@@ -66,7 +70,10 @@ class TierConfigurationService
     {
         $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
 
-        return $this->baseListQuery($validated)->paginate($perPage);
+        $paginator = $this->baseListQuery($validated)->paginate($perPage);
+        $this->attachMemberStats($paginator->getCollection(), $validated);
+
+        return $paginator;
     }
 
     /**
@@ -120,9 +127,12 @@ class TierConfigurationService
         return $query->orderBy($sortBy, $sortDirection);
     }
 
-    public function findTier(string $tierId): TierConfiguration
+    public function findTier(string $tierId, array $validated = []): TierConfiguration
     {
-        return $this->resolveTier($tierId);
+        $tier = $this->resolveTier($tierId);
+        $this->attachMemberStats(collect([$tier]), $validated);
+
+        return $tier;
     }
 
     /**
@@ -300,5 +310,18 @@ class TierConfigurationService
         }
 
         return Str::slug((string) $payload['name']);
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function attachMemberStats(\Illuminate\Support\Collection $tiers, array $validated): void
+    {
+        if ($tiers->isEmpty()) {
+            return;
+        }
+
+        $window = ListingFilterRules::resolveDateWindow($validated);
+        $this->memberStats->attachToTiers($tiers, $window['start'], $window['end']);
     }
 }
