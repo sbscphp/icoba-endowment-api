@@ -58,8 +58,22 @@ class ChallengeTokenService
     {
         [$payload, $requestContext] = $this->parsePayload($token, $expectedPurpose);
 
-        $exp = (int) ($payload['exp'] ?? 0);
         $nowTs = now()->timestamp;
+        $iat = (int) ($payload['iat'] ?? 0);
+        $maxReuseSeconds = $this->resendTokenMaxAgeSeconds();
+
+        if ($iat <= 0 || ($nowTs - $iat) > $maxReuseSeconds) {
+            $this->logDecodeFailure('resend_token_max_age_exceeded', array_merge($requestContext, [
+                'iat' => $iat,
+                'now' => $nowTs,
+                'max_reuse_seconds' => $maxReuseSeconds,
+                'age_seconds' => $iat > 0 ? $nowTs - $iat : null,
+            ]));
+
+            throw new ApiException('Invalid or expired verification session.', 422);
+        }
+
+        $exp = (int) ($payload['exp'] ?? 0);
         if ($nowTs > $exp) {
             Log::info('Challenge token expired but accepted for resend.', array_merge($requestContext, [
                 'exp' => $exp,
@@ -69,6 +83,11 @@ class ChallengeTokenService
         }
 
         return $payload;
+    }
+
+    private function resendTokenMaxAgeSeconds(): int
+    {
+        return max(1, (int) config('security.otp_resend_token_max_minutes', 30)) * 60;
     }
 
     /**

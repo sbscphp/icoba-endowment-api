@@ -3,6 +3,7 @@
 use App\Http\Controllers\v1\Public\ContactSubmissionController;
 use App\Http\Controllers\v1\Public\LeaderboardController;
 use App\Http\Controllers\v1\Public\PublicEndowmentStatsController;
+use App\Http\Controllers\v1\Public\PublicHeroSlideController;
 use App\Http\Controllers\v1\Public\PublicCampaignController;
 use App\Http\Controllers\v1\Public\PublicCampaignUpdateReportController;
 use App\Http\Controllers\v1\Public\PublicBankAccountController;
@@ -24,6 +25,7 @@ Route::prefix('v1')->group(function () {
         Route::get('campaigns/dropdown', [PublicCampaignController::class, 'dropdown']);
 
         Route::get('tiers', [PublicTierController::class, 'index']);
+        Route::get('hero-slides', [PublicHeroSlideController::class, 'index']);
         Route::get('bank-accounts', [PublicBankAccountController::class, 'index']);
         Route::get('campaigns/fund-progress', [LeaderboardController::class, 'fundProgressList']);
         Route::get('campaigns/{campaignUuid}/fund-progress', [LeaderboardController::class, 'fundProgress']);

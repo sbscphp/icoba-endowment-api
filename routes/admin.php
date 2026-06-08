@@ -5,6 +5,8 @@ use App\Http\Controllers\v1\Admin\Auth\AdminLoginController;
 use App\Http\Controllers\v1\Admin\Auth\PasswordController as AdminPasswordController;
 use App\Http\Controllers\v1\Admin\Campaign\CampaignController;
 use App\Http\Controllers\v1\Admin\Campaign\CampaignUpdateReportController;
+use App\Http\Controllers\v1\Admin\ContentManagement\ContentPageController;
+use App\Http\Controllers\v1\Admin\ContentManagement\HeroSlideController;
 use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateController;
 use App\Http\Controllers\v1\Admin\ContactSubmission\ContactSubmissionController;
 use App\Http\Controllers\v1\Admin\Dashboard\DashboardController;
@@ -292,6 +294,26 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:dashboard.read']);
             Route::get('/campaigns/active', [DashboardController::class, 'activeCampaigns'])
                 ->middleware(['permission:dashboard.read']);
+        });
+
+        Route::prefix('content-management')->group(function () {
+            Route::get('/pages', [ContentPageController::class, 'index'])
+                ->middleware(['permission:content_management.read']);
+
+            Route::prefix('hero-slides')->group(function () {
+                Route::get('/', [HeroSlideController::class, 'index'])
+                    ->middleware(['permission:content_management.read']);
+                Route::post('/', [HeroSlideController::class, 'store'])
+                    ->middleware(['permission:content_management.create']);
+                Route::get('/{slideId}', [HeroSlideController::class, 'show'])
+                    ->middleware(['permission:content_management.read']);
+                Route::patch('/{slideId}', [HeroSlideController::class, 'update'])
+                    ->middleware(['permission:content_management.update']);
+                Route::patch('/{slideId}/toggle-status', [HeroSlideController::class, 'toggleStatus'])
+                    ->middleware(['permission:content_management.update']);
+                Route::delete('/{slideId}', [HeroSlideController::class, 'destroy'])
+                    ->middleware(['permission:content_management.delete']);
+            });
         });
 
         Route::prefix('contact-submissions')->group(function () {
