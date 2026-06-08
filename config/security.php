@@ -108,11 +108,11 @@ return [
     | Login Payload Disclosure
     |--------------------------------------------------------------------------
     |
-    | Keep permissions out of login responses unless a frontend explicitly
-    | needs them. Tokens remain the authorization boundary.
+    | Include admin roles, permissions, and permissions_by_module on login responses.
+    | Set LOGIN_REVEAL_PERMISSIONS=false to omit them.
     |
     */
-    'login_reveal_permissions' => filter_var(env('LOGIN_REVEAL_PERMISSIONS', false), FILTER_VALIDATE_BOOL),
+    'login_reveal_permissions' => filter_var(env('LOGIN_REVEAL_PERMISSIONS', true), FILTER_VALIDATE_BOOL),
 
     /*
     |--------------------------------------------------------------------------

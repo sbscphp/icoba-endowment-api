@@ -4,6 +4,7 @@ namespace App\Http\Resources\Auth;
 
 use App\Enums\CustomerRegistrationStepEnum;
 use App\Enums\UserTypeEnum;
+use App\Helpers\PermissionModuleMapper;
 use App\Http\Resources\UserResource;
 use App\Models\Admin;
 use Illuminate\Http\Request;
@@ -49,15 +50,17 @@ class AuthResource extends JsonResource
             'updated_at' => $admin->updated_at,
         ];
 
-        if (! config('security.login_reveal_permissions', false)) {
+        if (! config('security.login_reveal_permissions', true)) {
             return $payload;
         }
 
         $admin->loadMissing(['roles', 'permissions']);
+        $permissionNames = $admin->getAllPermissions()->pluck('name')->values()->all();
 
         return array_merge($payload, [
             'roles' => $admin->roles->pluck('name')->values(),
-            'permissions' => $admin->getAllPermissions()->pluck('name')->values(),
+            'permissions' => $permissionNames,
+            'permissions_by_module' => PermissionModuleMapper::groupedApiPermissionsForNames($permissionNames),
         ]);
     }
 }
