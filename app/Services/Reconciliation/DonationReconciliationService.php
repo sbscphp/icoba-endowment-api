@@ -476,6 +476,7 @@ class DonationReconciliationService
         $like = '%'.$query.'%';
 
         return User::query()
+            ->with('donorType:uuid,slug')
             ->where(function (Builder $b) use ($like): void {
                 $b->where('firstname', 'like', $like)
                     ->orWhere('lastname', 'like', $like)
@@ -485,7 +486,7 @@ class DonationReconciliationService
                     ->orWhere('organization_name', 'like', $like);
             })
             ->limit(15)
-            ->get(['uuid', 'firstname', 'lastname', 'email', 'phone_number', 'alumni_identifier', 'organization_name'])
+            ->get(['uuid', 'firstname', 'lastname', 'email', 'phone_number', 'alumni_identifier', 'organization_name', 'donor_type_uuid'])
             ->map(fn (User $user): array => [
                 'uuid' => $user->uuid,
                 'firstname' => $user->firstname,
@@ -494,6 +495,7 @@ class DonationReconciliationService
                 'email' => $user->email,
                 'phone_number' => $user->phone_number,
                 'alumni_identifier' => $user->alumni_identifier,
+                'donor_type' => $user->donorType?->slug,
             ]);
     }
 
