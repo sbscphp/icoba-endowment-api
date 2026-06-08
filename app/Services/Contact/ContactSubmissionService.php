@@ -4,6 +4,7 @@ namespace App\Services\Contact;
 
 use App\Enums\ContactSubmissionStatus;
 use App\Enums\ContactSubmissionUserType;
+use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Jobs\SendContactSubmissionAcknowledgementEmailJob;
 use App\Models\ContactSubmission;
 use Carbon\Carbon;
@@ -29,6 +30,24 @@ class ContactSubmissionService
         SendContactSubmissionAcknowledgementEmailJob::dispatch($submission->uuid);
 
         return $submission;
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    public function stats(array $validated): array
+    {
+        $query = ContactSubmission::query();
+        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
+
+        return [
+            'total_count' => (clone $query)->count(),
+            'pending_count' => (clone $query)->where('status', ContactSubmissionStatus::PENDING)->count(),
+            'in_progress_count' => (clone $query)->where('status', ContactSubmissionStatus::IN_PROGRESS)->count(),
+            'resolved_count' => (clone $query)->where('status', ContactSubmissionStatus::RESOLVED)->count(),
+            'closed_count' => (clone $query)->where('status', ContactSubmissionStatus::CLOSED)->count(),
+        ];
     }
 
     /**

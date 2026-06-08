@@ -52,6 +52,12 @@ return [
     'otp_sms_stub_code' => (string) env('OTP_SMS_STUB_CODE', '123456'),
 
     /*
+    | Plain OTP flow logging to storage/logs/laravel.log (token fingerprints only, no secrets).
+    | Set OTP_FLOW_DEBUG=true locally while debugging resend/verify issues.
+    */
+    'otp_flow_debug' => filter_var(env('OTP_FLOW_DEBUG', false), FILTER_VALIDATE_BOOL),
+
+    /*
     |--------------------------------------------------------------------------
     | Global Auth Error Opacity Override
     |--------------------------------------------------------------------------

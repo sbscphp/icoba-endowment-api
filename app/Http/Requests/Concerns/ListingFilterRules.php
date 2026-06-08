@@ -7,6 +7,8 @@ use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 final class ListingFilterRules
@@ -204,8 +206,10 @@ final class ListingFilterRules
         ];
     }
 
-    public static function applyPeriodDateRangeToRequest($request): void
+    public static function applyPeriodDateRangeToRequest(Request|FormRequest $request): void
     {
+        self::prepareListingRequest($request);
+
         $period = strtolower((string) $request->input('period', ''));
         if ($period === '' || $period === 'custom') {
             return;
@@ -215,5 +219,85 @@ final class ListingFilterRules
         if ($range['start_date'] !== null && $range['end_date'] !== null) {
             $request->merge($range);
         }
+    }
+
+    /**
+     * Normalise list query params sent as empty strings, literal "null", or duplicated in a GET body.
+     *
+     * Laravel only reads the query string for GET requests, so clients that send filters in a
+     * multipart/form body need those values merged when the query placeholder is blank.
+     */
+    public static function prepareListingRequest(Request|FormRequest $request): void
+    {
+        $merge = [];
+
+        foreach (['search', 'start_date', 'end_date', 'export', 'period', 'sort_by', 'sort_direction', 'per_page'] as $key) {
+            if (! $request->query->has($key)) {
+                continue;
+            }
+
+            $normalized = self::normalizeScalar($request->query($key));
+            if ($normalized === null) {
+                $merge[$key] = null;
+            } elseif ($normalized !== $request->query($key)) {
+                $merge[$key] = $normalized;
+            }
+        }
+
+        $queryFilters = $request->query('filters');
+        $bodyFilters = $request->request->get('filters');
+
+        $queryFilters = is_array($queryFilters) ? $queryFilters : [];
+        $bodyFilters = is_array($bodyFilters) ? $bodyFilters : [];
+
+        $mergedFilters = $queryFilters;
+
+        foreach ($bodyFilters as $key => $value) {
+            $queryValue = $mergedFilters[$key] ?? null;
+            if (self::isBlankValue($queryValue) && ! self::isBlankValue($value)) {
+                $mergedFilters[$key] = $value;
+            }
+        }
+
+        foreach ($mergedFilters as $key => $value) {
+            $normalized = self::normalizeScalar($value);
+            if ($normalized === null) {
+                unset($mergedFilters[$key]);
+            } else {
+                $mergedFilters[$key] = $normalized;
+            }
+        }
+
+        if ($mergedFilters !== [] || $request->query->has('filters')) {
+            $merge['filters'] = $mergedFilters;
+        }
+
+        if ($merge !== []) {
+            $request->merge($merge);
+        }
+    }
+
+    private static function isBlankValue(mixed $value): bool
+    {
+        return self::normalizeScalar($value) === null;
+    }
+
+    private static function normalizeScalar(mixed $value): mixed
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (is_string($value)) {
+            $normalized = trim($value, " \t\n\r\0\x0B\"'");
+
+            if ($normalized === '' || strtolower($normalized) === 'null') {
+                return null;
+            }
+
+            return $normalized;
+        }
+
+        return $value;
     }
 }

@@ -30,6 +30,7 @@ class UserResource extends JsonResource
             '2fa' => $this->{'2fa'},
             'email_notifications_enabled' => (bool) $this->email_notifications_enabled,
             'push_notifications_enabled' => (bool) $this->push_notifications_enabled,
+            'biometrics_enabled' => (bool) $this->biometrics_enabled,
             'is_active' => $this->is_active,
             'can_login' => $this->can_login,
             'last_login_at' => $this->last_login_at,

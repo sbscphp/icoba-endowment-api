@@ -50,6 +50,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/profile', [SettingsController::class, 'updateProfile']);
         Route::patch('/2fa', [SettingsController::class, 'toggleTwoFactor']);
         Route::post('/2fa', [SettingsController::class, 'toggleTwoFactor']);
+        Route::patch('/biometrics', [SettingsController::class, 'toggleBiometrics']);
+        Route::post('/biometrics', [SettingsController::class, 'toggleBiometrics']);
         Route::patch('/password', [SettingsController::class, 'changePassword']);
         Route::post('/password', [SettingsController::class, 'changePassword']);
         Route::patch('/notifications', [SettingsController::class, 'updateNotificationPreferences']);

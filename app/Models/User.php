@@ -55,6 +55,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'email_notifications_enabled' => 'boolean',
             'push_notifications_enabled' => 'boolean',
+            'biometrics_enabled' => 'boolean',
             'two_factor_confirmed_at' => 'datetime',
             'last_login_at' => 'datetime',
             'login_attempts' => 'integer',

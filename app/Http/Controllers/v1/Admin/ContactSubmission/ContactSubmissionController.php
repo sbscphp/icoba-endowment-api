@@ -6,6 +6,7 @@ use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ContactSubmission\ContactSubmissionListRequest;
 use App\Http\Requests\Admin\ContactSubmission\UpdateContactSubmissionStatusRequest;
+use App\Http\Requests\Admin\DateRangeStatsRequest;
 use App\Http\Resources\ContactSubmissionListResource;
 use App\Http\Resources\ContactSubmissionResource;
 use App\Models\Admin;
@@ -21,6 +22,19 @@ class ContactSubmissionController extends Controller
     public function __construct(
         private readonly ContactSubmissionService $contactSubmissionService,
     ) {}
+
+    public function stats(DateRangeStatsRequest $request)
+    {
+        try {
+            return JsonResponser::send(
+                false,
+                'Contact submission stats retrieved.',
+                $this->contactSubmissionService->stats($request->validated()),
+            );
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\ContactSubmission\ContactSubmissionController@stats');
+        }
+    }
 
     public function index(ContactSubmissionListRequest $request)
     {
