@@ -4,6 +4,7 @@ namespace App\Services\Admin\CertificateTemplate;
 
 use App\Exceptions\ApiException;
 use App\Helpers\FileUploadHelper;
+use App\Support\CertificateDesignDefaults;
 use App\Jobs\BackfillDonorRecognitionForTierJob;
 use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\CertificateTemplate;
@@ -216,7 +217,9 @@ class CertificateTemplateService
      */
     private function normalizeDesign(array $design): array
     {
-        return $this->normalizeImageFieldsRecursively($design);
+        $design = $this->normalizeImageFieldsRecursively($design);
+
+        return CertificateDesignDefaults::sanitizeForStorage($design);
     }
 
     /**

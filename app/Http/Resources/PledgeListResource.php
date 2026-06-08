@@ -35,6 +35,7 @@ class PledgeListResource extends JsonResource
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
             'is_paused' => $scheduleService->isPledgePaused($this->resource),
             'paused_at' => $scheduleService->pledgePausedAt($this->resource),
+            'resume_date' => $scheduleService->pledgeResumeDate($this->resource),
             'fulfilled_amount' => $this->resource->getAttribute('fulfilled_amount'),
             'remaining_amount' => $this->resource->getAttribute('remaining_amount'),
             'schedule' => is_array($schedule) ? $schedule : null,
