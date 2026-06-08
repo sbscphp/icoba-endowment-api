@@ -5,6 +5,7 @@ namespace App\Http\Controllers\v1\Customer\Settings;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\Settings\CustomerProfileUpdateRequest;
+use App\Http\Requests\Customer\Settings\ToggleBiometricsRequest;
 use App\Http\Requests\Customer\Settings\ToggleTwoFactorRequest;
 use App\Http\Requests\Settings\ChangeSettingsPasswordRequest;
 use App\Http\Requests\Settings\UpdateNotificationPreferencesRequest;
@@ -50,6 +51,21 @@ class SettingsController extends Controller
             return JsonResponser::send(false, 'Two-factor authentication updated.', $result, 200);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Customer\Settings\SettingsController@toggleTwoFactor');
+        }
+    }
+
+    public function toggleBiometrics(ToggleBiometricsRequest $request)
+    {
+        try {
+            $user = $this->requireCustomer($request);
+            $enabled = $request->has('biometrics_enabled')
+                ? (bool) $request->boolean('biometrics_enabled')
+                : ! (bool) $user->biometrics_enabled;
+            $result = $this->settingsService->toggleCustomerBiometrics($user, $enabled);
+
+            return JsonResponser::send(false, 'Biometrics preference updated.', $result, 200);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Settings\SettingsController@toggleBiometrics');
         }
     }
 

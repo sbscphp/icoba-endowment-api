@@ -124,6 +124,18 @@ class AccountSettingsService
     }
 
     /**
+     * @return array{biometrics_enabled: bool}
+     */
+    public function toggleCustomerBiometrics(User $user, bool $enabled): array
+    {
+        $user->forceFill(['biometrics_enabled' => $enabled])->save();
+
+        return [
+            'biometrics_enabled' => (bool) $user->biometrics_enabled,
+        ];
+    }
+
+    /**
      * @return array{2fa: bool}
      */
     public function toggleCustomerTwoFactor(User $user, bool $enabled): array

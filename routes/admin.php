@@ -322,6 +322,8 @@ Route::prefix('v1/admin')->group(function () {
         });
 
         Route::prefix('contact-submissions')->group(function () {
+            Route::get('/stats', [ContactSubmissionController::class, 'stats'])
+                ->middleware(['permission:contact_submissions.read']);
             Route::get('/', [ContactSubmissionController::class, 'index'])
                 ->middleware(['permission:contact_submissions.read']);
             Route::get('/{submissionUuid}', [ContactSubmissionController::class, 'show'])

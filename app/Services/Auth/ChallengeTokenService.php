@@ -5,7 +5,6 @@ namespace App\Services\Auth;
 use App\Enums\OtpPurposeEnum;
 use App\Exceptions\ApiException;
 use App\Models\AuthChallenge;
-use App\Support\DebugSessionLogger;
 use Illuminate\Support\Facades\Log;
 
 class ChallengeTokenService
@@ -42,27 +41,8 @@ class ChallengeTokenService
                 'skew_seconds' => $nowTs - $exp,
             ]));
 
-            // #region agent log
-            DebugSessionLogger::log('H3', 'ChallengeTokenService::decode', 'verify decode rejected: token_expired', [
-                'challenge_uuid' => $payload['challenge_uuid'] ?? null,
-                'token_fingerprint' => $requestContext['token_fingerprint_sha256_12'] ?? null,
-                'exp' => $exp,
-                'now' => $nowTs,
-                'skew_seconds' => $nowTs - $exp,
-            ]);
-            // #endregion
-
             throw new ApiException('Invalid or expired verification session.', 422);
         }
-
-        // #region agent log
-        DebugSessionLogger::log('H3', 'ChallengeTokenService::decode', 'verify decode ok', [
-            'challenge_uuid' => $payload['challenge_uuid'] ?? null,
-            'token_fingerprint' => $requestContext['token_fingerprint_sha256_12'] ?? null,
-            'exp' => $exp,
-            'now' => $nowTs,
-        ]);
-        // #endregion
 
         return $payload;
     }
@@ -101,16 +81,6 @@ class ChallengeTokenService
                 'skew_seconds' => $nowTs - $exp,
             ]));
         }
-
-        // #region agent log
-        DebugSessionLogger::log('H1', 'ChallengeTokenService::decodeForResend', 'resend decode ok', [
-            'challenge_uuid' => $payload['challenge_uuid'] ?? null,
-            'token_fingerprint' => $requestContext['token_fingerprint_sha256_12'] ?? null,
-            'token_expired_for_verify' => $nowTs > $exp,
-            'exp' => $exp,
-            'now' => $nowTs,
-        ]);
-        // #endregion
 
         return $payload;
     }
