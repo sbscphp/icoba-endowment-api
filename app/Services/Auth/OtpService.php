@@ -36,6 +36,11 @@ class OtpService
         return max(1, (int) config('security.otp_minutes', 5));
     }
 
+    private function otpExpirySeconds(): int
+    {
+        return $this->otpExpiryMinutes() * 60;
+    }
+
     private function otpSendCooldownSeconds(): int
     {
         return max(1, (int) config('security.otp_send_cooldown_seconds'));
@@ -150,7 +155,7 @@ class OtpService
         if ($gate['mode'] === 'reuse') {
             /** @var AuthChallenge $challenge */
             $challenge = $gate['challenge'];
-            $ttlRemaining = max(1, $challenge->expires_at->getTimestamp() - time());
+            $ttlRemaining = max(1, $this->challengeSecondsRemaining($challenge) ?? 1);
             $issuedToken = $this->challengeTokenService->issue($challenge, $ttlRemaining);
 
             OtpFlowLogger::log($purpose->value, 'send reuse (no new OTP)', array_merge(
@@ -174,7 +179,10 @@ class OtpService
             ];
         }
 
-        [$plainOtp, $challenge] = DB::transaction(function () use ($subject, $purpose, $channel) {
+        $ttlSeconds = $this->otpExpirySeconds();
+        $expiresAt = now()->addSeconds($ttlSeconds);
+
+        [$plainOtp, $challenge] = DB::transaction(function () use ($subject, $purpose, $channel, $expiresAt) {
             AuthChallenge::query()
                 ->where('subject_type', $this->subjectType($subject))
                 ->where('subject_id', $subject->uuid)
@@ -192,7 +200,7 @@ class OtpService
                 'purpose' => $purpose,
                 'channel' => $channel->value,
                 'code_hash' => Hash::make($otp),
-                'expires_at' => now()->addMinutes($this->otpExpiryMinutes()),
+                'expires_at' => $expiresAt,
             ]);
 
             return [$otp, $challenge];
@@ -200,8 +208,8 @@ class OtpService
 
         $this->dispatchOtp($subject, $plainOtp, $purpose, $purposeLabel, $channel);
 
-        $ttlSeconds = $this->otpExpiryMinutes() * 60;
-        $issuedToken = $this->challengeTokenService->issue($challenge, $ttlSeconds);
+        $expiresIn = max(1, $this->challengeSecondsRemaining($challenge) ?? $ttlSeconds);
+        $issuedToken = $this->challengeTokenService->issue($challenge, $expiresIn);
 
         OtpFlowLogger::log($purpose->value, 'send fresh OTP', array_merge(
             OtpFlowLogger::tokenMeta($issuedToken),
@@ -209,7 +217,8 @@ class OtpService
                 'challenge_uuid' => $challenge->uuid,
                 'challenge_id' => $challenge->id,
                 'channel' => $channel->value,
-                'expires_in_sec' => $ttlSeconds,
+                'expires_in_sec' => $expiresIn,
+                'challenge_exp_in_sec' => $this->challengeSecondsRemaining($challenge),
                 'invalidated_prior_challenges' => AuthChallenge::query()
                     ->where('subject_type', $this->subjectType($subject))
                     ->where('subject_id', $subject->uuid)
@@ -223,7 +232,7 @@ class OtpService
 
         return [
             'challenge_token' => $issuedToken,
-            'expires_in' => $ttlSeconds,
+            'expires_in' => $expiresIn,
             'cooldown_active' => false,
             'otp_purpose' => $purpose->value,
             'otp_channel' => $channel->value,
@@ -402,6 +411,15 @@ class OtpService
             ->where('purpose', $purpose->value)
             ->first();
 
+        if ($challenge !== null) {
+            OtpFlowLogger::log($purpose->value, 'verify challenge loaded', [
+                'token_fp' => OtpFlowLogger::tokenFingerprint($challengeToken),
+                'challenge_id' => $challenge->id,
+                'challenge_exp_in_sec' => $this->challengeSecondsRemaining($challenge),
+                'attempts' => $challenge->attempts,
+            ]);
+        }
+
         $latest = AuthChallenge::query()
             ->where('subject_type', $payload['subject_type'])
             ->where('subject_id', $payload['subject_id'])
@@ -411,8 +429,8 @@ class OtpService
             ->orderByDesc('id')
             ->first();
 
-        if (! $challenge || $challenge->used_at || now()->greaterThan($challenge->expires_at)) {
-            $reason = ! $challenge ? 'challenge_not_found' : ($challenge->used_at ? 'challenge_already_used' : 'challenge_expired');
+        if (! $challenge || $challenge->used_at !== null || $challenge->expires_at->isPast()) {
+            $reason = ! $challenge ? 'challenge_not_found' : ($challenge->used_at !== null ? 'challenge_already_used' : 'challenge_expired');
             $stale = $this->hasSupersedingActiveChallenge($challengeToken, $purpose);
 
             OtpFlowLogger::log($purpose->value, 'verify FAIL challenge unusable', [
@@ -421,6 +439,7 @@ class OtpService
                 'challenge_id' => $challenge?->id,
                 'challenge_uuid' => $payload['challenge_uuid'],
                 'attempts' => $challenge?->attempts,
+                'challenge_exp_in_sec' => $this->challengeSecondsRemaining($challenge),
                 'used_at' => $challenge?->used_at?->toIso8601String(),
                 'latest_active_challenge_id' => $latest?->id,
                 'latest_active_challenge_uuid' => $latest?->uuid,
@@ -465,6 +484,7 @@ class OtpService
                 'attempts_after' => $attemptsBefore + 1,
                 'max_attempts' => self::MAX_ATTEMPTS,
                 'retries_left' => max(0, self::MAX_ATTEMPTS - ($attemptsBefore + 1)),
+                'challenge_exp_in_sec' => $this->challengeSecondsRemaining($challenge),
             ]);
 
             throw new ApiException('Invalid or expired verification code.', 422);
@@ -507,6 +527,15 @@ class OtpService
             422,
             ['stale_challenge_token' => true]
         );
+    }
+
+    private function challengeSecondsRemaining(?AuthChallenge $challenge): ?int
+    {
+        if ($challenge?->expires_at === null) {
+            return null;
+        }
+
+        return max(0, $challenge->expires_at->getTimestamp() - now()->timestamp);
     }
 
     private function subjectType(User|Admin $subject): string

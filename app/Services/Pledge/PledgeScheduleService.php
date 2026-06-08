@@ -168,9 +168,82 @@ class PledgeScheduleService
         return is_string($date) && $date !== '' ? $date : null;
     }
 
+    public function pauseResumeMaxMonthsFromDueDate(): int
+    {
+        $months = config('pledges.pause_resume_max_months_from_due_date', 3);
+
+        return max(1, (int) $months);
+    }
+
+    /**
+     * @param  Collection<int, Transaction>|null  $transactions
+     * @return array<string, mixed>|null
+     */
+    public function nextDueInstallment(Pledge $pledge, ?Collection $transactions = null): ?array
+    {
+        $view = $this->buildForPledge($pledge, $transactions);
+        $statuses = [
+            PledgeScheduleItemStatus::PENDING->value,
+            PledgeScheduleItemStatus::PARTIAL->value,
+            PledgeScheduleItemStatus::OVERDUE->value,
+        ];
+
+        if ($this->isPledgePaused($pledge)) {
+            $statuses[] = PledgeScheduleItemStatus::PAUSED->value;
+        }
+
+        foreach ($view['items'] as $item) {
+            if (! in_array($item['status'], $statuses, true)) {
+                continue;
+            }
+
+            if ((float) $item['remaining_amount'] <= 0.00001) {
+                continue;
+            }
+
+            return $item;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  Collection<int, Transaction>|null  $transactions
+     */
+    public function assertResumeDateWithinLimit(Pledge $pledge, string $resumeDate, ?Collection $transactions = null): void
+    {
+        $installment = $this->nextDueInstallment($pledge, $transactions);
+        if ($installment === null) {
+            return;
+        }
+
+        $dueDate = $installment['due_date'] ?? null;
+        if (! is_string($dueDate) || $dueDate === '') {
+            return;
+        }
+
+        $maxMonths = $this->pauseResumeMaxMonthsFromDueDate();
+        $limitDate = Carbon::parse($dueDate)->addMonths($maxMonths)->endOfDay();
+        $resume = Carbon::parse($resumeDate)->startOfDay();
+
+        if ($resume->gt($limitDate)) {
+            throw ValidationException::withMessages([
+                'resume_date' => [
+                    sprintf(
+                        'The resume date cannot be more than %d month%s after the next installment due date (%s).',
+                        $maxMonths,
+                        $maxMonths === 1 ? '' : 's',
+                        Carbon::parse($dueDate)->format('F j, Y'),
+                    ),
+                ],
+            ]);
+        }
+    }
+
     public function pausePledge(Pledge $pledge, string $resumeDate): Pledge
     {
         $this->assertPledgeIsManageable($pledge);
+        $this->assertResumeDateWithinLimit($pledge, $resumeDate);
         $metadata = $pledge->metadata ?? [];
         $metadata['is_paused'] = true;
         $metadata['paused_at'] = now()->toIso8601String();
