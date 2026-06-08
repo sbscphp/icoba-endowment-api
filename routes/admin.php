@@ -301,10 +301,12 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:content_management.read']);
 
             Route::prefix('hero-slides')->group(function () {
-                Route::get('/', [HeroSlideController::class, 'index'])
+                Route::get('/', [HeroSlideController::class, 'show'])
                     ->middleware(['permission:content_management.read']);
                 Route::post('/', [HeroSlideController::class, 'store'])
                     ->middleware(['permission:content_management.create']);
+                Route::patch('/', [HeroSlideController::class, 'update'])
+                    ->middleware(['permission:content_management.update']);
                 Route::get('/{slideId}', [HeroSlideController::class, 'show'])
                     ->middleware(['permission:content_management.read']);
                 Route::patch('/{slideId}', [HeroSlideController::class, 'update'])

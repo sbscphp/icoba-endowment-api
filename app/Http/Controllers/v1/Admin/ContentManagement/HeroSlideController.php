@@ -16,21 +16,6 @@ class HeroSlideController extends Controller
         private readonly HeroSlideService $heroSlideService,
     ) {}
 
-    public function index()
-    {
-        try {
-            $slide = $this->heroSlideService->current();
-
-            return JsonResponser::send(
-                false,
-                'Hero slide retrieved.',
-                $slide !== null ? HeroSlideResource::make($slide)->resolve() : null
-            );
-        } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'Admin\ContentManagement\HeroSlideController@index');
-        }
-    }
-
     public function store(CreateHeroSlideRequest $request)
     {
         try {
@@ -47,27 +32,34 @@ class HeroSlideController extends Controller
         }
     }
 
-    public function show(string $slideId)
+    public function show(?string $slideId = null)
     {
         try {
-            $slide = $this->heroSlideService->findSlide($slideId);
-            $slide->load('updatedByAdmin');
+            $slide = $slideId !== null
+                ? $this->heroSlideService->findSlide($slideId)
+                : $this->heroSlideService->current();
+
+            if ($slide !== null) {
+                $slide->loadMissing('updatedByAdmin');
+            }
 
             return JsonResponser::send(
                 false,
                 'Hero slide retrieved.',
-                HeroSlideResource::make($slide)->resolve()
+                $slide !== null ? HeroSlideResource::make($slide)->resolve() : null
             );
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\ContentManagement\HeroSlideController@show');
         }
     }
 
-    public function update(UpdateHeroSlideRequest $request, string $slideId)
+    public function update(UpdateHeroSlideRequest $request, ?string $slideId = null)
     {
         try {
             $adminUuid = $request->user()?->uuid;
-            $slide = $this->heroSlideService->update($slideId, $request->validated(), $adminUuid);
+            $slide = $slideId !== null
+                ? $this->heroSlideService->update($slideId, $request->validated(), $adminUuid)
+                : $this->heroSlideService->updateCurrent($request->validated(), $adminUuid);
             $slide->load('updatedByAdmin');
 
             return JsonResponser::send(
