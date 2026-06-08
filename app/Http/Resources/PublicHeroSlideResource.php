@@ -20,6 +20,7 @@ class PublicHeroSlideResource extends JsonResource
             'slide_id' => $this->uuid,
             'title' => $this->title,
             'banner_url' => $this->banner_url,
+            'is_active' => (bool) $this->is_active,
             // 'primary_cta_url' => $this->primary_cta_url,
             // 'primary_cta_text' => $this->primary_cta_text,
             // 'secondary_cta_url' => $this->secondary_cta_url,
