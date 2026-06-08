@@ -56,12 +56,14 @@ class OtpService
         return $this->verifyOtp($challengeToken, $otpCode, OtpPurposeEnum::LOGIN);
     }
 
-    public function resendLoginOtp(string $challengeToken): array
+    public function resendLoginOtp(string $challengeToken, ?OtpChannelEnum $channel = null): array
     {
         $payload = $this->challengeTokenService->decodeForResend($challengeToken, OtpPurposeEnum::LOGIN);
         $subject = $this->resolveSubjectFromPayload($payload);
 
-        return $this->sendOtp($subject, OtpPurposeEnum::LOGIN, 'login', OtpChannelEnum::EMAIL);
+        $channel ??= $this->channelFromPayload($payload);
+
+        return $this->sendOtp($subject, OtpPurposeEnum::LOGIN, 'login', $channel);
     }
 
     public function sendEmailVerificationOtp(User $user, OtpChannelEnum $channel = OtpChannelEnum::EMAIL): array
