@@ -69,4 +69,25 @@ final class PledgeScheduleServiceTest extends TestCase
             'interval' => 3,
         ], $resolved);
     }
+
+    public function test_pledge_resume_date_reads_metadata(): void
+    {
+        $pledge = new Pledge([
+            'metadata' => [
+                'is_paused' => true,
+                'resume_date' => '2026-06-15',
+            ],
+        ]);
+
+        $this->assertTrue($this->service->isPledgePaused($pledge));
+        $this->assertSame('2026-06-15', $this->service->pledgeResumeDate($pledge));
+    }
+
+    public function test_pause_resume_reminder_key_format(): void
+    {
+        $this->assertSame(
+            '2026-06-20:3_days_before',
+            $this->service->pauseResumeReminderKey('2026-06-20', '3_days_before'),
+        );
+    }
 }

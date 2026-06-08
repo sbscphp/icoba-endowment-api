@@ -161,13 +161,25 @@ class PledgeScheduleService
         return is_string($at) && $at !== '' ? $at : null;
     }
 
-    public function pausePledge(Pledge $pledge): Pledge
+    public function pledgeResumeDate(Pledge $pledge): ?string
+    {
+        $date = data_get($pledge->metadata, 'resume_date');
+
+        return is_string($date) && $date !== '' ? $date : null;
+    }
+
+    public function pausePledge(Pledge $pledge, string $resumeDate): Pledge
     {
         $this->assertPledgeIsManageable($pledge);
         $metadata = $pledge->metadata ?? [];
         $metadata['is_paused'] = true;
         $metadata['paused_at'] = now()->toIso8601String();
-        unset($metadata['schedule_paused'], $metadata['schedule_paused_at']);
+        $metadata['resume_date'] = Carbon::parse($resumeDate)->toDateString();
+        unset(
+            $metadata['schedule_paused'],
+            $metadata['schedule_paused_at'],
+            $metadata['pause_resume_reminders_sent'],
+        );
         $pledge->update(['metadata' => $metadata]);
 
         return $pledge->fresh();
@@ -178,10 +190,42 @@ class PledgeScheduleService
         $this->assertPledgeIsManageable($pledge);
         $metadata = $pledge->metadata ?? [];
         $metadata['is_paused'] = false;
-        unset($metadata['paused_at'], $metadata['schedule_paused'], $metadata['schedule_paused_at']);
+        unset(
+            $metadata['paused_at'],
+            $metadata['resume_date'],
+            $metadata['schedule_paused'],
+            $metadata['schedule_paused_at'],
+            $metadata['pause_resume_reminders_sent'],
+        );
         $pledge->update(['metadata' => $metadata]);
 
         return $pledge->fresh();
+    }
+
+    public function wasPauseResumeReminderSent(Pledge $pledge, string $resumeDate, string $reminderKind): bool
+    {
+        $sent = data_get($pledge->metadata, 'pause_resume_reminders_sent', []);
+
+        return is_array($sent) && in_array($this->pauseResumeReminderKey($resumeDate, $reminderKind), $sent, true);
+    }
+
+    public function markPauseResumeReminderSent(Pledge $pledge, string $resumeDate, string $reminderKind): void
+    {
+        $metadata = $pledge->metadata ?? [];
+        $sent = is_array($metadata['pause_resume_reminders_sent'] ?? null)
+            ? $metadata['pause_resume_reminders_sent']
+            : [];
+        $key = $this->pauseResumeReminderKey($resumeDate, $reminderKind);
+        if (! in_array($key, $sent, true)) {
+            $sent[] = $key;
+        }
+        $metadata['pause_resume_reminders_sent'] = $sent;
+        $pledge->update(['metadata' => $metadata]);
+    }
+
+    public function pauseResumeReminderKey(string $resumeDate, string $reminderKind): string
+    {
+        return $resumeDate.':'.$reminderKind;
     }
 
     public function wasPaymentReminderSent(Pledge $pledge, string $scheduleItemId, string $dueDate): bool

@@ -20,6 +20,10 @@ Schedule::command('pledges:send-payment-reminders')
     ->dailyAt('08:00')
     ->withoutOverlapping();
 
+Schedule::command('pledges:send-pause-resume-reminders')
+    ->dailyAt('08:00')
+    ->withoutOverlapping();
+
 Schedule::command('sms:check-balance --scheduled')
     ->dailyAt('09:00')
     ->withoutOverlapping();

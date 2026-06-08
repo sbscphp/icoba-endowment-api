@@ -11,6 +11,7 @@ class UpdatePledgePauseRequest extends ApiFormRequest
     {
         return [
             'action' => ['required', 'string', Rule::in(['pause', 'resume'])],
+            'resume_date' => ['required_if:action,pause', 'date', 'after:today'],
         ];
     }
 }

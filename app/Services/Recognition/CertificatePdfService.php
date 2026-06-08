@@ -6,6 +6,7 @@ use App\Enums\CertificateImageType;
 use App\Enums\CertificatePreviewFormat;
 use App\Enums\CertificateTextPosition;
 use App\Exceptions\ApiException;
+use App\Support\CertificateDesignDefaults;
 use App\Models\CertificateTemplate;
 use App\Models\DonorRecognition;
 use App\Models\TierConfiguration;
@@ -102,9 +103,11 @@ final class CertificatePdfService
         $recognition->loadMissing('tier', 'certificateTemplate');
 
         $snapshot = is_array($recognition->snapshot) ? $recognition->snapshot : [];
-        $design = is_array($snapshot['design'] ?? null)
-            ? $snapshot['design']
-            : (is_array($recognition->certificateTemplate?->design) ? $recognition->certificateTemplate->design : []);
+        $design = CertificateDesignDefaults::applyToDesign(
+            is_array($snapshot['design'] ?? null)
+                ? $snapshot['design']
+                : (is_array($recognition->certificateTemplate?->design) ? $recognition->certificateTemplate->design : []),
+        );
 
         $replacements = [
             '{{awardee_name}}' => $recognition->awardee_name,

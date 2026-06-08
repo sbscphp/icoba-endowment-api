@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\CertificateTemplate;
+use App\Support\CertificateDesignDefaults;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -26,7 +27,9 @@ class CertificateTemplateResource extends JsonResource
                 'tier_id' => $tier->uuid,
                 'name' => $tier->name,
             ] : null,
-            'design' => is_array($this->design) ? $this->design : [],
+            'design' => is_array($this->design)
+                ? CertificateDesignDefaults::sanitizeForStorage($this->design)
+                : [],
             'status' => $this->is_active ? 'active' : 'inactive',
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

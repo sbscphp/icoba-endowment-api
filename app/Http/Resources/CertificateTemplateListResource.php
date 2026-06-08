@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\CertificateTemplate;
+use App\Support\CertificateDesignDefaults;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -17,7 +18,9 @@ class CertificateTemplateListResource extends JsonResource
     public function toArray(Request $request): array
     {
         $this->resource->loadMissing('tier:uuid,name');
-        $design = is_array($this->design) ? $this->design : [];
+        $design = is_array($this->design)
+            ? CertificateDesignDefaults::sanitizeForStorage($this->design)
+            : [];
 
         return [
             'template_id' => $this->uuid,
