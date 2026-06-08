@@ -30,6 +30,7 @@ Route::prefix('v1')->group(function () {
         Route::post('forgot-password/resend', [PasswordController::class, 'forgotPasswordResend'])->middleware('throttle:customer-otp-send');
         Route::post('forgot-password/verify', [PasswordController::class, 'forgotPasswordVerify'])->middleware('throttle:customer-otp-verify');
         Route::post('reset-password', [PasswordController::class, 'resetPassword'])->middleware('throttle:customer-otp-verify');
+        Route::post('refresh', [LoginController::class, 'refresh'])->middleware('throttle:customer-token-refresh');
 
         Route::middleware('auth:sanctum')->post('logout', [LoginController::class, 'logout']);
     });

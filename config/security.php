@@ -116,6 +116,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | API Token Lifetimes (Sanctum)
+    |--------------------------------------------------------------------------
+    |
+    | Access tokens are short-lived bearer credentials. Refresh tokens are
+    | long-lived and may only be exchanged at the refresh endpoints.
+    |
+    */
+    'access_token_minutes' => max(1, (int) env('ACCESS_TOKEN_MINUTES', 60)),
+    'refresh_token_days' => max(1, (int) env('REFRESH_TOKEN_DAYS', 1)),
+    'refresh_token_rotation' => filter_var(env('REFRESH_TOKEN_ROTATION', true), FILTER_VALIDATE_BOOL),
+
+    /*
+    |--------------------------------------------------------------------------
     | Activity Tracking
     |--------------------------------------------------------------------------
     |
