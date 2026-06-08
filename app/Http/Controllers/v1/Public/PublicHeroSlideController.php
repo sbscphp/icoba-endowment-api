@@ -17,12 +17,12 @@ class PublicHeroSlideController extends Controller
     public function index()
     {
         try {
-            $slides = $this->publicHeroSlideService->listActive();
+            $slide = $this->publicHeroSlideService->listActive();
 
             return JsonResponser::send(
                 false,
-                'Hero slides retrieved.',
-                PublicHeroSlideResource::collection($slides)->resolve()
+                'Hero slide retrieved.',
+                $slide !== null ? PublicHeroSlideResource::make($slide)->resolve() : null
             );
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Public\PublicHeroSlideController@index');
