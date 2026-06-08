@@ -255,8 +255,19 @@ class DonationReconciliationService
             'paid_into_account_key' => $account['account_key'],
         ];
 
+        $campaignUuid = $this->resolveCampaignUuidFromPayload($payload, $account['currency']);
+        $pledgeUuid = isset($payload['pledge_uuid']) && trim((string) $payload['pledge_uuid']) !== ''
+            ? (string) $payload['pledge_uuid']
+            : null;
+        $userUuid = isset($payload['user_uuid']) && trim((string) $payload['user_uuid']) !== ''
+            ? (string) $payload['user_uuid']
+            : null;
+
         $transaction = Transaction::query()->create([
             'transaction_id' => $transactionId,
+            'campaign_uuid' => $campaignUuid,
+            'pledge_uuid' => $pledgeUuid,
+            'user_uuid' => $userUuid,
             'amount' => $amount,
             'currency' => $account['currency'],
             'exchange_rate_to_naira' => $snapshot['exchange_rate_to_naira'],
@@ -646,6 +657,40 @@ class DonationReconciliationService
 
             $locked->save();
         });
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function resolveCampaignUuidFromPayload(array $payload, string $currency): string
+    {
+        $campaignUuid = isset($payload['campaign_uuid']) && trim((string) $payload['campaign_uuid']) !== ''
+            ? (string) $payload['campaign_uuid']
+            : null;
+        $pledgeUuid = isset($payload['pledge_uuid']) && trim((string) $payload['pledge_uuid']) !== ''
+            ? (string) $payload['pledge_uuid']
+            : null;
+
+        if ($pledgeUuid !== null) {
+            $pledge = Pledge::query()->where('uuid', $pledgeUuid)->first();
+            if ($pledge === null) {
+                throw ValidationException::withMessages(['pledge_uuid' => ['Pledge not found.']]);
+            }
+            if (strtoupper((string) $pledge->currency) !== strtoupper($currency)) {
+                throw ValidationException::withMessages([
+                    'pledge_uuid' => ['Pledge currency does not match transaction currency.'],
+                ]);
+            }
+            $campaignUuid = $campaignUuid ?? $pledge->campaign_uuid;
+        }
+
+        if ($campaignUuid === null) {
+            throw ValidationException::withMessages([
+                'campaign_uuid' => ['Provide either a campaign or a pledge for reconciliation.'],
+            ]);
+        }
+
+        return $campaignUuid;
     }
 
     private function paidAtFromMetadata(Transaction $transaction): ?Carbon
