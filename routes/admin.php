@@ -252,6 +252,8 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:reconciliation.read']);
             Route::get('queue', [ReconciliationController::class, 'queue'])
                 ->middleware(['permission:reconciliation.read']);
+            Route::post('queue', [ReconciliationController::class, 'store'])
+                ->middleware(['permission:reconciliation.update']);
             Route::get('queue/{uuid}', [ReconciliationController::class, 'show'])
                 ->whereUuid('uuid')
                 ->middleware(['permission:reconciliation.read']);
@@ -329,8 +331,8 @@ Route::prefix('v1/admin')->group(function () {
 
         Route::prefix('email-campaigns')->group(function () {
             Route::get('/dropdown/{status?}', [EmailCampaignController::class, 'dropdown'])
-                ->where('status', 'draft|queued|sent|partially_sent|failed|all')
-                ->middleware(['permission:email_campaigns.read']);
+                ->where('status', 'draft|queued|sent|partially_sent|failed|all');
+                // ->middleware(['permission:email_campaigns.read']);
             Route::get('/design-templates/options', [EmailCampaignController::class, 'designTemplateOptions'])
                 ->middleware(['permission:email_campaigns.read']);
             Route::get('/audiences/options', [EmailCampaignController::class, 'audienceOptions'])
