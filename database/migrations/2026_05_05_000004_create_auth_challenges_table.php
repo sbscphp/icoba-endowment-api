@@ -16,9 +16,9 @@ return new class extends Migration
             $table->string('purpose');
             $table->string('channel')->default('email');
             $table->string('code_hash');
-            $table->timestamp('expires_at')->index();
+            $table->dateTime('expires_at')->index();
             $table->unsignedTinyInteger('attempts')->default(0);
-            $table->timestamp('used_at')->nullable();
+            $table->dateTime('used_at')->nullable();
             $table->json('metadata')->nullable();
             $table->timestamps();
 

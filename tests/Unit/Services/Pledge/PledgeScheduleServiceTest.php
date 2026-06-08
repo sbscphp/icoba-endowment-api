@@ -3,12 +3,14 @@
 namespace Tests\Unit\Services\Pledge;
 
 use App\Enums\PledgePaymentPlanType;
+use App\Enums\PledgeStatus;
 use App\Models\Pledge;
 use App\Services\Pledge\PledgeBalanceService;
 use App\Services\Pledge\PledgeScheduleInput;
 use App\Services\Pledge\PledgeScheduleService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 final class PledgeScheduleServiceTest extends TestCase
@@ -19,6 +21,13 @@ final class PledgeScheduleServiceTest extends TestCase
     {
         parent::setUp();
         $this->service = new PledgeScheduleService(new PledgeBalanceService);
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     public function test_custom_daily_interval_generates_equal_installments_and_due_dates(): void
@@ -89,5 +98,79 @@ final class PledgeScheduleServiceTest extends TestCase
             '2026-06-20:3_days_before',
             $this->service->pauseResumeReminderKey('2026-06-20', '3_days_before'),
         );
+    }
+
+    public function test_pause_resume_max_months_reads_config(): void
+    {
+        config(['pledges.pause_resume_max_months_from_due_date' => 6]);
+
+        $this->assertSame(6, $this->service->pauseResumeMaxMonthsFromDueDate());
+    }
+
+    public function test_assert_resume_date_within_limit_accepts_date_within_window(): void
+    {
+        Carbon::setTestNow('2026-06-01 12:00:00');
+
+        $pledge = $this->makePledgeForPauseValidation('2026-06-15');
+
+        $this->assertSame('2026-06-15', $this->service->nextDueInstallment($pledge, new Collection)['due_date']);
+        $this->service->assertResumeDateWithinLimit($pledge, '2026-09-15', new Collection);
+
+        $this->addToAssertionCount(1);
+    }
+
+    public function test_assert_resume_date_within_limit_rejects_date_beyond_window(): void
+    {
+        Carbon::setTestNow('2026-06-01 12:00:00');
+
+        $pledge = $this->makePledgeForPauseValidation('2026-06-15');
+
+        try {
+            $this->service->assertResumeDateWithinLimit($pledge, '2026-09-16', new Collection);
+            $this->fail('Expected ValidationException was not thrown.');
+        } catch (ValidationException $exception) {
+            $this->assertSame(
+                'The resume date cannot be more than 3 months after the next installment due date (June 15, 2026).',
+                $exception->errors()['resume_date'][0],
+            );
+        }
+    }
+
+    private function makePledgeForPauseValidation(string $dueDate): Pledge
+    {
+        return new Pledge([
+            'uuid' => 'pledge-pause-validation',
+            'status' => PledgeStatus::ACTIVE,
+            'committed_amount' => 300000,
+            'currency' => 'NGN',
+            'committed_amount_ngn' => 300000,
+            'exchange_rate_to_naira' => 1,
+            'payment_plan_type' => PledgePaymentPlanType::MONTHLY,
+            'installment_count' => 3,
+            'schedule' => [
+                [
+                    'id' => 'installment-1',
+                    'sequence' => 1,
+                    'due_date' => $dueDate,
+                    'amount' => 100000,
+                    'amount_ngn' => 100000,
+                ],
+                [
+                    'id' => 'installment-2',
+                    'sequence' => 2,
+                    'due_date' => '2026-07-15',
+                    'amount' => 100000,
+                    'amount_ngn' => 100000,
+                ],
+                [
+                    'id' => 'installment-3',
+                    'sequence' => 3,
+                    'due_date' => '2026-08-15',
+                    'amount' => 100000,
+                    'amount_ngn' => 100000,
+                ],
+            ],
+            'created_at' => Carbon::parse('2026-05-15'),
+        ]);
     }
 }

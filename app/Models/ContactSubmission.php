@@ -21,6 +21,7 @@ class ContactSubmission extends Model
             'status' => ContactSubmissionStatus::class,
             'resolved_at' => 'datetime',
             'email_sent_at' => 'datetime',
+            'admin_notified_at' => 'datetime',
         ];
     }
 

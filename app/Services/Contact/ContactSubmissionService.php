@@ -6,6 +6,7 @@ use App\Enums\ContactSubmissionStatus;
 use App\Enums\ContactSubmissionUserType;
 use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Jobs\SendContactSubmissionAcknowledgementEmailJob;
+use App\Jobs\SendContactSubmissionAdminNotificationEmailJob;
 use App\Models\ContactSubmission;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -28,6 +29,7 @@ class ContactSubmissionService
         ]);
 
         SendContactSubmissionAcknowledgementEmailJob::dispatch($submission->uuid);
+        SendContactSubmissionAdminNotificationEmailJob::dispatch($submission->uuid);
 
         return $submission;
     }
