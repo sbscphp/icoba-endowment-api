@@ -3,6 +3,7 @@
 namespace App\Services\Reconciliation;
 
 use App\Http\Requests\Concerns\ListingFilterRules;
+use App\Enums\GivingIdentitySource;
 use App\Enums\PaymentGateway;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
@@ -14,6 +15,7 @@ use App\Models\User;
 use App\Services\Bank\BankAccountRegistry;
 use App\Services\Donation\BankTransferReferenceService;
 use App\Services\Donation\DonorCumulativeTotalService;
+use App\Services\GivingIdentity\GivingIdentityResolver;
 use App\Services\Tier\TierResolutionService;
 use App\Services\Transaction\TransactionFinalizationService;
 use App\Services\Transaction\TransactionNgnSnapshotService;
@@ -34,6 +36,7 @@ class DonationReconciliationService
         private readonly TierResolutionService $tierResolution,
         private readonly DonorCumulativeTotalService $cumulativeTotal,
         private readonly ReconciliationDonorUserService $reconciliationDonorUser,
+        private readonly GivingIdentityResolver $givingIdentityResolver,
     ) {}
 
     /**
@@ -226,10 +229,14 @@ class DonationReconciliationService
         $bankTransferReference = $this->bankTransferReference->extractFromNarration($narration)
             ?? $this->bankTransferReference->extractFromNarration($referenceId);
 
+        if ($bankTransferReference === null && $referenceId !== '') {
+            $bankTransferReference = mb_substr($referenceId, 0, 48);
+        }
+
         if ($bankTransferReference !== null
             && Transaction::query()->where('bank_transfer_reference', $bankTransferReference)->exists()) {
             throw ValidationException::withMessages([
-                'narration' => ['A transaction with this bank transfer reference already exists.'],
+                'reference_id' => ['A transaction with this bank transfer reference already exists.'],
             ]);
         }
 
@@ -262,12 +269,27 @@ class DonationReconciliationService
         $userUuid = isset($payload['user_uuid']) && trim((string) $payload['user_uuid']) !== ''
             ? (string) $payload['user_uuid']
             : null;
+        $linkedUser = $userUuid !== null
+            ? User::query()
+                ->where('uuid', $userUuid)
+                ->first(['uuid', 'donor_type_uuid', 'email', 'firstname', 'lastname'])
+            : null;
+        $pledge = $pledgeUuid !== null
+            ? Pledge::query()->where('uuid', $pledgeUuid)->first()
+            : null;
+        $givingIdentityUuid = $this->resolveGivingIdentityUuid($linkedUser, $pledge);
 
         $transaction = Transaction::query()->create([
             'transaction_id' => $transactionId,
             'campaign_uuid' => $campaignUuid,
             'pledge_uuid' => $pledgeUuid,
             'user_uuid' => $userUuid,
+            'giving_identity_uuid' => $givingIdentityUuid,
+            'donor_type_uuid' => $linkedUser?->donor_type_uuid,
+            'donor_email' => $linkedUser?->email,
+            'donor_name' => $linkedUser !== null
+                ? trim(($linkedUser->firstname ?? '').' '.($linkedUser->lastname ?? ''))
+                : null,
             'amount' => $amount,
             'currency' => $account['currency'],
             'exchange_rate_to_naira' => $snapshot['exchange_rate_to_naira'],
@@ -277,6 +299,7 @@ class DonationReconciliationService
             'application_type' => TransactionApplicationType::BANK_TRANSFER,
             'paid_into_account_number' => $account['account_number'],
             'fcmb_statement_reference' => $referenceId,
+            'narration' => $narration,
             'bank_transfer_reference' => $bankTransferReference,
             'awaiting_bank_verification_at' => $paidAt,
             'is_anonymous' => array_key_exists('is_anonymous', $payload) ? (bool) $payload['is_anonymous'] : false,
@@ -630,6 +653,9 @@ class DonationReconciliationService
 
             if ($user !== null) {
                 $locked->user_uuid = $user->uuid;
+                if (blank($locked->donor_type_uuid) && filled($user->donor_type_uuid)) {
+                    $locked->donor_type_uuid = $user->donor_type_uuid;
+                }
                 if (blank($locked->donor_email) && filled($user->email)) {
                     $locked->donor_email = $user->email;
                 }
@@ -645,6 +671,14 @@ class DonationReconciliationService
             if ($pledge !== null) {
                 $locked->pledge_uuid = $pledge->uuid;
                 $locked->campaign_uuid = $locked->campaign_uuid ?? $pledge->campaign_uuid;
+                if (blank($locked->donor_type_uuid) && filled($pledge->donor_type_uuid)) {
+                    $locked->donor_type_uuid = $pledge->donor_type_uuid;
+                }
+            }
+
+            $givingIdentityUuid = $this->resolveGivingIdentityUuid($user, $pledge);
+            if ($givingIdentityUuid !== null) {
+                $locked->giving_identity_uuid = $givingIdentityUuid;
             }
 
             if ($note !== null) {
@@ -657,6 +691,26 @@ class DonationReconciliationService
 
             $locked->save();
         });
+    }
+
+    private function resolveGivingIdentityUuid(?User $user, ?Pledge $pledge): ?string
+    {
+        if ($pledge !== null && filled($pledge->giving_identity_uuid)) {
+            return (string) $pledge->giving_identity_uuid;
+        }
+
+        if ($user === null) {
+            return null;
+        }
+
+        $resolvedUser = User::query()->where('uuid', $user->uuid)->first();
+        if ($resolvedUser === null) {
+            return null;
+        }
+
+        return $this->givingIdentityResolver
+            ->resolveForUser($resolvedUser, GivingIdentitySource::RECONCILIATION)
+            ->uuid;
     }
 
     /**
