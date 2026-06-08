@@ -6,6 +6,7 @@ use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RequestResponseEncryptionMiddleware;
 use App\Http\Middleware\TrackLastActiveAt;
 use App\Responser\JsonResponser;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -66,6 +67,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (HttpException $e, $request) {
             if ($request->expectsJson()) {
                 return JsonResponser::send(true, $e->getMessage(), null, $e->getStatusCode());
+            }
+        });
+
+        $exceptions->render(function (AuthenticationException $e, $request) {
+            if ($request->expectsJson()) {
+                $message = $e->getMessage() !== '' ? $e->getMessage() : 'Unauthenticated.';
+
+                return JsonResponser::send(true, $message, null, 401);
             }
         });
     })->create();
