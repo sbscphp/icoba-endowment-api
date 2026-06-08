@@ -57,7 +57,7 @@ class ReconciliationQueueResource extends JsonResource
                 ? trim(($this->reconciledByAdmin->firstname ?? '').' '.($this->reconciledByAdmin->lastname ?? ''))
                 : null,
             'reconciliation_note' => $this->reconciliation_note,
-            'narration' => $metadata['narration'] ?? null,
+            'narration' => $this->narration ?? $metadata['narration'] ?? $metadata['bank_narration'] ?? null,
             'source' => $metadata['source'] ?? null,
             'created_at' => $this->created_at,
             'paid_at' => $this->paid_at,

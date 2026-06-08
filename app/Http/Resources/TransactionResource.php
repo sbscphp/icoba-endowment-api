@@ -80,6 +80,7 @@ class TransactionResource extends JsonResource
             'paid_into_account_number' => $this->paid_into_account_number,
             'paid_into' => $this->resolvePaidIntoLabel(),
             'fcmb_statement_reference' => $this->fcmb_statement_reference,
+            'narration' => $this->narration ?? $metadata['narration'] ?? $metadata['bank_narration'] ?? null,
             'awaiting_bank_verification_at' => $this->awaiting_bank_verification_at,
             'reconciled_at' => $this->reconciled_at,
             'reconciled_by_admin_uuid' => $this->reconciled_by_admin_uuid,
