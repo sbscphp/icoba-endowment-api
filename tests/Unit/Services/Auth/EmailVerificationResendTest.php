@@ -153,6 +153,56 @@ final class EmailVerificationResendTest extends TestCase
         Mail::assertSent(OTPMail::class);
     }
 
+    public function test_fresh_otp_challenge_expiry_matches_token_ttl(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->unverified()->create();
+        $result = $this->otpService->sendEmailVerificationOtp($user, OtpChannelEnum::EMAIL);
+
+        $challenge = AuthChallenge::query()->whereNull('used_at')->orderByDesc('id')->firstOrFail();
+        $payload = decrypt($result['challenge_token']);
+
+        $challengeTtl = $challenge->expires_at->getTimestamp() - $challenge->created_at->getTimestamp();
+        $tokenTtl = (int) ($payload['exp'] ?? 0) - (int) ($payload['iat'] ?? 0);
+
+        $this->assertSame(300, $result['expires_in']);
+        $this->assertGreaterThanOrEqual(299, $challengeTtl);
+        $this->assertLessThanOrEqual(300, $challengeTtl);
+        $this->assertSame($challenge->expires_at->getTimestamp(), (int) $payload['exp']);
+        $this->assertGreaterThanOrEqual(299, $tokenTtl);
+    }
+
+    public function test_wrong_otp_then_correct_otp_succeeds_with_same_resend_token(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->unverified()->create();
+        $signup = $this->otpService->sendEmailVerificationOtp($user, OtpChannelEnum::EMAIL);
+
+        $this->travel(315)->seconds();
+
+        $resend = $this->otpService->resendEmailVerificationOtp($signup['challenge_token']);
+        $token = $resend['challenge_token'];
+
+        $challenge = AuthChallenge::query()->whereNull('used_at')->orderByDesc('id')->firstOrFail();
+        $plainOtp = '654321';
+        $challenge->forceFill(['code_hash' => Hash::make($plainOtp)])->save();
+
+        try {
+            $this->otpService->verifyEmailVerificationOtp($token, '654322');
+            $this->fail('Expected wrong OTP to fail.');
+        } catch (ApiException $e) {
+            $this->assertSame('Invalid or expired verification code.', $e->getMessage());
+        }
+
+        $verified = $this->otpService->verifyEmailVerificationOtp($token, $plainOtp);
+
+        $this->assertSame($user->uuid, $verified->uuid);
+        $this->assertSame(2, (int) $challenge->fresh()->attempts);
+        $this->assertNotNull($challenge->fresh()->used_at);
+    }
+
     private function issueTokenForUser(User $user, OtpPurposeEnum $purpose, int $ttlSeconds): string
     {
         $challenge = AuthChallenge::create([

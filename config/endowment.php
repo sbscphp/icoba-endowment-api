@@ -12,6 +12,11 @@ return [
 
     'contact_email' => env('ENDOWMENT_CONTACT_EMAIL', 'contact@icobaendowment.org'),
 
+    'contact_submission_notify_email' => env(
+        'ENDOWMENT_CONTACT_SUBMISSION_NOTIFY_EMAIL',
+        env('ENDOWMENT_CONTACT_EMAIL', 'contact@icobaendowment.org'),
+    ),
+
     'website' => env('ENDOWMENT_WEBSITE', 'www.icobaendowment.org'),
 
     'executive_director_name' => env('ENDOWMENT_EXECUTIVE_DIRECTOR', 'Dr. Sarah Johnson'),

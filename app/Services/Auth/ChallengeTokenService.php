@@ -12,6 +12,9 @@ class ChallengeTokenService
     public function issue(AuthChallenge $challenge, int $ttlSeconds): string
     {
         $issuedAt = now()->timestamp;
+        $exp = $challenge->expires_at !== null
+            ? max($issuedAt + 1, $challenge->expires_at->getTimestamp())
+            : $issuedAt + max(1, $ttlSeconds);
 
         return encrypt([
             'challenge_uuid' => (string) $challenge->uuid,
@@ -19,7 +22,7 @@ class ChallengeTokenService
             'subject_id' => (string) $challenge->subject_id,
             'purpose' => $challenge->purpose instanceof OtpPurposeEnum ? $challenge->purpose->value : (string) $challenge->purpose,
             'iat' => $issuedAt,
-            'exp' => $issuedAt + $ttlSeconds,
+            'exp' => $exp,
         ]);
     }
 
