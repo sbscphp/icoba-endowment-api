@@ -49,6 +49,25 @@ class HeroSlideService
         return $this->resolveSlide($slideId);
     }
 
+    public function currentOrFail(): HeroSlide
+    {
+        $slide = $this->current();
+
+        if ($slide === null) {
+            throw (new ModelNotFoundException)->setModel(HeroSlide::class);
+        }
+
+        return $slide;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public function updateCurrent(array $payload, ?string $adminUuid = null): HeroSlide
+    {
+        return $this->update((string) $this->currentOrFail()->uuid, $payload, $adminUuid);
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      */
