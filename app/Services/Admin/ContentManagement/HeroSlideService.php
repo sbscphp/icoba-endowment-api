@@ -4,11 +4,9 @@ namespace App\Services\Admin\ContentManagement;
 
 use App\Exceptions\ApiException;
 use App\Helpers\FileUploadHelper;
-use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\HeroSlide;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Pagination\LengthAwarePaginator;
 use InvalidArgumentException;
 
 class HeroSlideService
@@ -37,14 +35,13 @@ class HeroSlideService
         return $slide->fresh(['updatedByAdmin']) ?? $slide;
     }
 
-    /**
-     * @param  array<string, mixed>  $validated
-     */
-    public function list(array $validated): LengthAwarePaginator
+    public function current(): ?HeroSlide
     {
-        $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
-
-        return $this->baseListQuery($validated)->paginate($perPage);
+        return HeroSlide::query()
+            ->with('updatedByAdmin')
+            ->orderBy('sort_order')
+            ->orderBy('title')
+            ->first();
     }
 
     public function findSlide(string $slideId): HeroSlide
@@ -102,40 +99,6 @@ class HeroSlideService
         }
 
         $slide->delete();
-    }
-
-    /**
-     * @param  array<string, mixed>  $validated
-     */
-    private function baseListQuery(array $validated): Builder
-    {
-        $sortBy = (string) ($validated['sort_by'] ?? 'sort_order');
-        $sortDirection = strtolower((string) ($validated['sort_direction'] ?? 'asc')) === 'desc' ? 'desc' : 'asc';
-
-        $query = HeroSlide::query()->with('updatedByAdmin');
-
-        ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
-
-        $search = trim((string) ($validated['search'] ?? ''));
-        if ($search !== '') {
-            $query->where(function (Builder $builder) use ($search): void {
-                $builder->where('title', 'like', '%'.$search.'%')
-                    ->orWhere('uuid', 'like', '%'.$search.'%');
-            });
-        }
-
-        $status = data_get($validated, 'filters.status');
-        if ($status === 'active') {
-            $query->where('is_active', true);
-        } elseif ($status === 'inactive') {
-            $query->where('is_active', false);
-        }
-
-        if (! in_array($sortBy, ['title', 'sort_order', 'is_active', 'created_at', 'updated_at'], true)) {
-            $sortBy = 'sort_order';
-        }
-
-        return $query->orderBy($sortBy, $sortDirection);
     }
 
     private function resolveSlide(string $slideId): HeroSlide

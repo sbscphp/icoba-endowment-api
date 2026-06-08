@@ -5,15 +5,10 @@ namespace App\Http\Controllers\v1\Admin\ContentManagement;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ContentManagement\CreateHeroSlideRequest;
-use App\Http\Requests\Admin\ContentManagement\HeroSlideListRequest;
 use App\Http\Requests\Admin\ContentManagement\UpdateHeroSlideRequest;
-use App\Http\Resources\HeroSlideListResource;
 use App\Http\Resources\HeroSlideResource;
 use App\Responser\JsonResponser;
 use App\Services\Admin\ContentManagement\HeroSlideService;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Pagination\LengthAwarePaginator;
 
 class HeroSlideController extends Controller
 {
@@ -21,15 +16,15 @@ class HeroSlideController extends Controller
         private readonly HeroSlideService $heroSlideService,
     ) {}
 
-    public function index(HeroSlideListRequest $request)
+    public function index()
     {
         try {
-            $paginator = $this->heroSlideService->list($request->validated());
+            $slide = $this->heroSlideService->current();
 
             return JsonResponser::send(
                 false,
-                'Hero slides retrieved.',
-                $this->paginatedPayload($paginator, HeroSlideListResource::class)
+                'Hero slide retrieved.',
+                $slide !== null ? HeroSlideResource::make($slide)->resolve() : null
             );
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\ContentManagement\HeroSlideController@index');
@@ -112,19 +107,5 @@ class HeroSlideController extends Controller
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\ContentManagement\HeroSlideController@destroy');
         }
-    }
-
-    /**
-     * @param  class-string<JsonResource>  $resourceClass
-     * @return array<string, mixed>
-     */
-    private function paginatedPayload(LengthAwarePaginator $paginator, string $resourceClass): array
-    {
-        $payload = $paginator->toArray();
-        /** @var AnonymousResourceCollection $resource */
-        $resource = $resourceClass::collection($paginator);
-        $payload['data'] = $resource->resolve();
-
-        return $payload;
     }
 }

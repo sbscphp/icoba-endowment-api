@@ -20,11 +20,11 @@ class PublicHeroSlideResource extends JsonResource
             'slide_id' => $this->uuid,
             'title' => $this->title,
             'banner_url' => $this->banner_url,
-            'primary_cta_url' => $this->primary_cta_url,
-            'primary_cta_text' => $this->primary_cta_text,
-            'secondary_cta_url' => $this->secondary_cta_url,
-            'secondary_cta_text' => $this->secondary_cta_text,
-            'sort_order' => (int) $this->sort_order,
+            // 'primary_cta_url' => $this->primary_cta_url,
+            // 'primary_cta_text' => $this->primary_cta_text,
+            // 'secondary_cta_url' => $this->secondary_cta_url,
+            // 'secondary_cta_text' => $this->secondary_cta_text,
+            // 'sort_order' => (int) $this->sort_order,
         ];
     }
 }
