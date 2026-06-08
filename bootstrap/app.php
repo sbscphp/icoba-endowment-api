@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\ApiException;
+use App\Http\Middleware\EnsureAccessToken;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RequestResponseEncryptionMiddleware;
@@ -33,6 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
             AddLinkHeadersForPreloadedAssets::class,
         ]);
         $middleware->api(append: [
+            EnsureAccessToken::class,
             TrackLastActiveAt::class,
         ]);
 

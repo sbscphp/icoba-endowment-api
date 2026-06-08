@@ -6,9 +6,11 @@ use App\Enums\eClientType;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Http\Requests\Auth\RefreshTokenRequest;
 use App\Http\Requests\Auth\ResendOtpRequest;
 use App\Http\Requests\Auth\VerifyOtpRequest;
 use App\Http\Resources\Auth\AuthResource;
+use App\Http\Resources\Auth\TokenRefreshResource;
 use App\Responser\JsonResponser;
 use App\Services\Auth\AuthService;
 use Illuminate\Http\Request;
@@ -61,6 +63,21 @@ class AdminLoginController extends Controller
             return JsonResponser::send(false, 'Verification code sent.', $payload, 200);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'AdminLoginController@resendOtp');
+        }
+    }
+
+    public function refresh(RefreshTokenRequest $request)
+    {
+        try {
+            $payload = $this->authService->refreshAdminToken(
+                (string) $request->input('refresh_token'),
+                $request,
+                eClientType::WEB->value
+            );
+
+            return JsonResponser::send(false, 'Token refreshed successfully.', TokenRefreshResource::make($payload), 200);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'AdminLoginController@refresh');
         }
     }
 

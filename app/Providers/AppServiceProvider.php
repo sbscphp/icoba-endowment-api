@@ -74,6 +74,14 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(5)->by($this->loginThrottleKey($request));
         });
 
+        RateLimiter::for('customer-token-refresh', function (Request $request) {
+            return Limit::perMinute(10)->by($this->refreshThrottleKey($request));
+        });
+
+        RateLimiter::for('admin-token-refresh', function (Request $request) {
+            return Limit::perMinute(10)->by($this->refreshThrottleKey($request));
+        });
+
         RateLimiter::for('customer-otp-send', function (Request $request) {
             $window = max(1, (int) config('security.otp_minutes', 5));
             $max = max(1, (int) config('security.otp_send_max_per_window', 3));
@@ -131,6 +139,14 @@ class AppServiceProvider extends ServiceProvider
     {
         $ip = (string) $request->ip();
         $token = (string) $request->input('challenge_token');
+
+        return $token !== '' ? $ip.'|'.hash('sha256', $token) : $ip;
+    }
+
+    private function refreshThrottleKey(Request $request): string
+    {
+        $ip = (string) $request->ip();
+        $token = (string) $request->input('refresh_token');
 
         return $token !== '' ? $ip.'|'.hash('sha256', $token) : $ip;
     }

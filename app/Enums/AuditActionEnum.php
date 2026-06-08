@@ -8,6 +8,7 @@ enum AuditActionEnum: string
     case EMAIL_VERIFIED = 'EMAIL_VERIFIED';
     case LOGIN_SUCCESS = 'LOGIN_SUCCESS';
     case LOGIN_FAILED = 'LOGIN_FAILED';
+    case TOKEN_REFRESHED = 'TOKEN_REFRESHED';
     case OTP_SENT = 'OTP_SENT';
     case OTP_VERIFIED = 'OTP_VERIFIED';
     case OTP_FAILED = 'OTP_FAILED';

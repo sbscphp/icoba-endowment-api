@@ -11,6 +11,7 @@ use App\Mail\OTPMail;
 use App\Models\Admin;
 use App\Models\AuthChallenge;
 use App\Models\User;
+use App\Support\DebugSessionLogger;
 use App\Services\Theme\ThemeResolver;
 use App\Services\ThirdParty\SMS\SmsService;
 use Illuminate\Support\Facades\DB;
@@ -150,9 +151,20 @@ class OtpService
             /** @var AuthChallenge $challenge */
             $challenge = $gate['challenge'];
             $ttlRemaining = max(1, $challenge->expires_at->getTimestamp() - time());
+            $issuedToken = $this->challengeTokenService->issue($challenge, $ttlRemaining);
+
+            // #region agent log
+            DebugSessionLogger::log('H5', 'OtpService::sendOtp', 'resend reuse mode — no new OTP issued', [
+                'purpose' => $purpose->value,
+                'channel' => $channel->value,
+                'challenge_uuid' => $challenge->uuid,
+                'challenge_id' => $challenge->id,
+                'token_fingerprint' => DebugSessionLogger::tokenFingerprint($issuedToken),
+            ]);
+            // #endregion
 
             return [
-                'challenge_token' => $this->challengeTokenService->issue($challenge, $ttlRemaining),
+                'challenge_token' => $issuedToken,
                 'expires_in' => $ttlRemaining,
                 'cooldown_active' => true,
                 'retry_after_seconds' => $gate['retry_after_seconds'],
@@ -162,8 +174,8 @@ class OtpService
             ];
         }
 
-        [$plainOtp, $challenge] = DB::transaction(function () use ($subject, $purpose, $channel) {
-            AuthChallenge::query()
+        [$plainOtp, $challenge, $invalidatedCount] = DB::transaction(function () use ($subject, $purpose, $channel) {
+            $invalidatedCount = AuthChallenge::query()
                 ->where('subject_type', $this->subjectType($subject))
                 ->where('subject_id', $subject->uuid)
                 ->where('purpose', $purpose->value)
@@ -183,15 +195,29 @@ class OtpService
                 'expires_at' => now()->addMinutes($this->otpExpiryMinutes()),
             ]);
 
-            return [$otp, $challenge];
+            return [$otp, $challenge, $invalidatedCount];
         });
 
         $this->dispatchOtp($subject, $plainOtp, $purpose, $purposeLabel, $channel);
 
         $ttlSeconds = $this->otpExpiryMinutes() * 60;
+        $issuedToken = $this->challengeTokenService->issue($challenge, $ttlSeconds);
+
+        // #region agent log
+        DebugSessionLogger::log('H1', 'OtpService::sendOtp', 'fresh OTP issued', [
+            'purpose' => $purpose->value,
+            'channel' => $channel->value,
+            'gate_mode' => 'send_new',
+            'challenge_uuid' => $challenge->uuid,
+            'challenge_id' => $challenge->id,
+            'invalidated_prior_challenges' => $invalidatedCount,
+            'token_fingerprint' => DebugSessionLogger::tokenFingerprint($issuedToken),
+            'otp_last2' => substr($plainOtp, -2),
+        ]);
+        // #endregion
 
         return [
-            'challenge_token' => $this->challengeTokenService->issue($challenge, $ttlSeconds),
+            'challenge_token' => $issuedToken,
             'expires_in' => $ttlSeconds,
             'cooldown_active' => false,
             'otp_purpose' => $purpose->value,
@@ -330,7 +356,26 @@ class OtpService
 
     private function verifyOtp(string $challengeToken, string $otpCode, OtpPurposeEnum $purpose): User|Admin
     {
-        $payload = $this->challengeTokenService->decode($challengeToken, $purpose);
+        $tokenFingerprint = DebugSessionLogger::tokenFingerprint($challengeToken);
+
+        try {
+            $payload = $this->challengeTokenService->decode($challengeToken, $purpose);
+        } catch (ApiException $e) {
+            // #region agent log
+            DebugSessionLogger::log('H3', 'OtpService::verifyOtp', 'verify aborted at token decode', [
+                'purpose' => $purpose->value,
+                'token_fingerprint' => $tokenFingerprint,
+                'reject_reason' => 'token_decode_failed',
+                'stale_token_detected' => $this->hasSupersedingActiveChallenge($challengeToken, $purpose),
+            ]);
+            // #endregion
+
+            if ($this->hasSupersedingActiveChallenge($challengeToken, $purpose)) {
+                throw $this->staleChallengeTokenException();
+            }
+
+            throw $e;
+        }
 
         $challenge = AuthChallenge::query()
             ->where('uuid', $payload['challenge_uuid'])
@@ -339,32 +384,115 @@ class OtpService
             ->where('purpose', $purpose->value)
             ->first();
 
-        if (! $challenge || $challenge->used_at || now()->greaterThan($challenge->expires_at)) {
-            throw new ApiException('Invalid or expired verification code.', 422);
-        }
-
         $latest = AuthChallenge::query()
-            ->where('subject_type', $challenge->subject_type)
-            ->where('subject_id', $challenge->subject_id)
+            ->where('subject_type', $payload['subject_type'])
+            ->where('subject_id', $payload['subject_id'])
             ->where('purpose', $purpose->value)
-            ->where('channel', $challenge->channel)
+            ->when($challenge, fn ($q) => $q->where('channel', $challenge->channel))
             ->whereNull('used_at')
             ->orderByDesc('id')
             ->first();
 
+        if (! $challenge || $challenge->used_at || now()->greaterThan($challenge->expires_at)) {
+            // #region agent log
+            DebugSessionLogger::log('H2', 'OtpService::verifyOtp', 'verify rejected: challenge unusable', [
+                'purpose' => $purpose->value,
+                'token_fingerprint' => $tokenFingerprint,
+                'token_challenge_uuid' => $payload['challenge_uuid'],
+                'token_challenge_id' => $challenge?->id,
+                'challenge_found' => $challenge !== null,
+                'challenge_used_at' => $challenge?->used_at?->toIso8601String(),
+                'challenge_expired' => $challenge ? now()->greaterThan($challenge->expires_at) : null,
+                'latest_active_challenge_id' => $latest?->id,
+                'latest_active_challenge_uuid' => $latest?->uuid,
+                'reject_reason' => ! $challenge ? 'challenge_not_found' : ($challenge->used_at ? 'challenge_already_used' : 'challenge_expired'),
+            ]);
+            // #endregion
+
+            if ($this->hasSupersedingActiveChallenge($challengeToken, $purpose)) {
+                throw $this->staleChallengeTokenException();
+            }
+
+            throw new ApiException('Invalid or expired verification code.', 422);
+        }
+
         if (! $latest || $latest->id !== $challenge->id || $challenge->attempts >= self::MAX_ATTEMPTS) {
+            // #region agent log
+            DebugSessionLogger::log('H4', 'OtpService::verifyOtp', 'verify rejected: not latest or max attempts', [
+                'purpose' => $purpose->value,
+                'token_fingerprint' => $tokenFingerprint,
+                'token_challenge_id' => $challenge->id,
+                'token_challenge_uuid' => $challenge->uuid,
+                'latest_active_challenge_id' => $latest?->id,
+                'latest_active_challenge_uuid' => $latest?->uuid,
+                'attempts' => $challenge->attempts,
+                'max_attempts' => self::MAX_ATTEMPTS,
+                'reject_reason' => ! $latest ? 'no_active_challenge' : ($latest->id !== $challenge->id ? 'stale_challenge_not_latest' : 'max_attempts_reached'),
+            ]);
+            // #endregion
+
+            if ($latest && $latest->id !== $challenge->id) {
+                throw $this->staleChallengeTokenException();
+            }
+
             throw new ApiException('Invalid or expired verification code.', 422);
         }
 
         $challenge->increment('attempts');
 
         if (! Hash::check($otpCode, $challenge->code_hash)) {
+            // #region agent log
+            DebugSessionLogger::log('H5', 'OtpService::verifyOtp', 'verify rejected: otp hash mismatch', [
+                'purpose' => $purpose->value,
+                'token_fingerprint' => $tokenFingerprint,
+                'challenge_id' => $challenge->id,
+                'challenge_uuid' => $challenge->uuid,
+                'attempts_after_increment' => $challenge->attempts,
+                'reject_reason' => 'otp_hash_mismatch',
+            ]);
+            // #endregion
             throw new ApiException('Invalid or expired verification code.', 422);
         }
 
         $challenge->forceFill(['used_at' => now()])->save();
 
+        // #region agent log
+        DebugSessionLogger::log('H1', 'OtpService::verifyOtp', 'verify succeeded', [
+            'purpose' => $purpose->value,
+            'token_fingerprint' => $tokenFingerprint,
+            'challenge_id' => $challenge->id,
+            'challenge_uuid' => $challenge->uuid,
+        ]);
+        // #endregion
+
         return $this->resolveSubject($challenge);
+    }
+
+    private function hasSupersedingActiveChallenge(string $challengeToken, OtpPurposeEnum $purpose): bool
+    {
+        try {
+            $payload = $this->challengeTokenService->decodeForResend($challengeToken, $purpose);
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return AuthChallenge::query()
+            ->where('subject_type', $payload['subject_type'])
+            ->where('subject_id', $payload['subject_id'])
+            ->where('purpose', $purpose->value)
+            ->whereNull('used_at')
+            ->where('expires_at', '>', now())
+            ->where('uuid', '!=', $payload['challenge_uuid'])
+            ->exists();
+    }
+
+    private function staleChallengeTokenException(): ApiException
+    {
+        return new ApiException(
+            'This verification session is no longer valid. Use the verification session returned when your latest code was sent.',
+            422,
+            ['stale_challenge_token' => true]
+        );
     }
 
     private function subjectType(User|Admin $subject): string

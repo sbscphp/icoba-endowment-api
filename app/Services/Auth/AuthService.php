@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthService
 {
@@ -337,7 +338,7 @@ class AuthService
                 'purpose' => 'EMAIL_VERIFICATION',
             ], 'Customer email verification OTP failed.', null, null, ModuleEnums::authentication, 422);
 
-            $this->maybeOpaqueLoginOtpException($th);
+            throw $th;
         }
 
         $user->forceFill(['email_verified_at' => now()])->save();
@@ -485,9 +486,27 @@ class AuthService
         return $this->withLoginTwoFactor($payload);
     }
 
+    public function refreshCustomerToken(string $refreshToken, Request $request, string $client = eClientType::MOBILE->value): array
+    {
+        return $this->refreshToken($refreshToken, $request, $client, UserTypeEnum::CUSTOMER, ['customer']);
+    }
+
+    public function refreshAdminToken(string $refreshToken, Request $request, string $client = eClientType::WEB->value): array
+    {
+        return $this->refreshToken($refreshToken, $request, $client, UserTypeEnum::ADMIN, ['admin']);
+    }
+
     public function logout($user): void
     {
-        $user?->currentAccessToken()?->delete();
+        $token = $user?->currentAccessToken();
+
+        if (! $token) {
+            return;
+        }
+
+        $client = $this->clientFromTokenName((string) $token->name);
+
+        $user->tokens()->whereIn('name', [$client, $this->refreshTokenName($client)])->delete();
     }
 
     /**
@@ -496,13 +515,200 @@ class AuthService
      */
     private function issueToken(User|Admin $authenticatable, string $client, array $abilities): array
     {
-        $authenticatable->tokens()->where('name', $client)->delete();
+        $this->revokeClientTokens($authenticatable, $client);
+
+        $accessExpiresAt = now()->addMinutes($this->accessTokenMinutes());
+        $refreshExpiresAt = now()->addDays($this->refreshTokenDays());
+        $refreshAbility = $this->refreshAbilityFor($abilities);
+
+        $accessToken = $authenticatable->createToken($client, $abilities, $accessExpiresAt);
+        $refreshToken = $authenticatable->createToken(
+            $this->refreshTokenName($client),
+            [$refreshAbility],
+            $refreshExpiresAt
+        );
 
         return [
-            'access_token' => $authenticatable->createToken($client, $abilities)->plainTextToken,
+            'access_token' => $accessToken->plainTextToken,
+            'refresh_token' => $refreshToken->plainTextToken,
             'token_type' => 'Bearer',
+            'expires_in' => max(1, $accessExpiresAt->getTimestamp() - now()->getTimestamp()),
+            'refresh_expires_in' => max(1, $refreshExpiresAt->getTimestamp() - now()->getTimestamp()),
             'user' => $authenticatable,
         ];
+    }
+
+    /**
+     * @param  array<int, string>  $accessAbilities
+     * @return array<string, mixed>
+     */
+    private function refreshToken(
+        string $refreshToken,
+        Request $request,
+        string $client,
+        UserTypeEnum $userType,
+        array $accessAbilities,
+    ): array {
+        $token = PersonalAccessToken::findToken($this->normalizeBearerToken($refreshToken));
+        $refreshAbility = $this->refreshAbilityFor($accessAbilities);
+
+        if (! $this->isValidRefreshToken($token, $client, $refreshAbility)) {
+            throw new ApiException('Invalid or expired refresh token.', 401);
+        }
+
+        $authenticatable = $token->tokenable;
+
+        if ($userType === UserTypeEnum::CUSTOMER && ! $authenticatable instanceof User) {
+            throw new ApiException('Invalid or expired refresh token.', 401);
+        }
+
+        if ($userType === UserTypeEnum::ADMIN && ! $authenticatable instanceof Admin) {
+            throw new ApiException('Invalid or expired refresh token.', 401);
+        }
+
+        $this->assertRefreshableAccount($authenticatable, $userType);
+
+        if ($userType === UserTypeEnum::ADMIN && (bool) $authenticatable->must_reset_password) {
+            throw new ApiException(
+                'Password reset is required before you can continue.',
+                403,
+                ['must_reset_password' => true]
+            );
+        }
+
+        $authenticatable->tokens()->where('name', $client)->delete();
+
+        if ($this->refreshTokenRotationEnabled()) {
+            $token->delete();
+        }
+
+        $accessExpiresAt = now()->addMinutes($this->accessTokenMinutes());
+        $refreshExpiresAt = now()->addDays($this->refreshTokenDays());
+
+        $accessToken = $authenticatable->createToken($client, $accessAbilities, $accessExpiresAt);
+
+        $payload = [
+            'access_token' => $accessToken->plainTextToken,
+            'token_type' => 'Bearer',
+            'expires_in' => max(1, $accessExpiresAt->getTimestamp() - now()->getTimestamp()),
+            'refresh_expires_in' => max(1, $refreshExpiresAt->getTimestamp() - now()->getTimestamp()),
+        ];
+
+        if ($this->refreshTokenRotationEnabled()) {
+            $newRefreshToken = $authenticatable->createToken(
+                $this->refreshTokenName($client),
+                [$refreshAbility],
+                $refreshExpiresAt
+            );
+            $payload['refresh_token'] = $newRefreshToken->plainTextToken;
+        } else {
+            $payload['refresh_token'] = $refreshToken;
+        }
+
+        GeneralHelper::storeAuditLog(
+            $userType,
+            AuditActionEnum::TOKEN_REFRESHED,
+            $request,
+            $authenticatable->uuid,
+            ['client' => $client],
+            $this->displayName($authenticatable).' refreshed their access token.',
+            $this->modelClassForUserType($userType),
+            $authenticatable->uuid,
+            ModuleEnums::authentication,
+            200,
+        );
+
+        return $payload;
+    }
+
+    private function revokeClientTokens(User|Admin $authenticatable, string $client): void
+    {
+        $authenticatable->tokens()->whereIn('name', [
+            $client,
+            $this->refreshTokenName($client),
+        ])->delete();
+    }
+
+    private function refreshTokenName(string $client): string
+    {
+        return $client.':refresh';
+    }
+
+    private function clientFromTokenName(string $tokenName): string
+    {
+        return str_ends_with($tokenName, ':refresh')
+            ? substr($tokenName, 0, -strlen(':refresh'))
+            : $tokenName;
+    }
+
+    /**
+     * @param  array<int, string>  $accessAbilities
+     */
+    private function refreshAbilityFor(array $accessAbilities): string
+    {
+        return in_array('admin', $accessAbilities, true) ? 'admin:refresh' : 'customer:refresh';
+    }
+
+    private function isValidRefreshToken(?PersonalAccessToken $token, string $client, string $refreshAbility): bool
+    {
+        if (! $token) {
+            return false;
+        }
+
+        if ((string) $token->name !== $this->refreshTokenName($client)) {
+            return false;
+        }
+
+        if (! $token->can($refreshAbility)) {
+            return false;
+        }
+
+        if ($token->expires_at && $token->expires_at->isPast()) {
+            $token->delete();
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private function assertRefreshableAccount(User|Admin $authenticatable, UserTypeEnum $userType): void
+    {
+        $this->autoUnlockIfExpired($authenticatable);
+
+        if ($this->isLocked($authenticatable)) {
+            throw new ApiException('Invalid or expired refresh token.', 401);
+        }
+
+        if (! $authenticatable->is_active || ! $authenticatable->can_login) {
+            throw new ApiException('Invalid or expired refresh token.', 401);
+        }
+
+        if ($userType === UserTypeEnum::CUSTOMER && $authenticatable instanceof User && $authenticatable->email_verified_at === null) {
+            throw new ApiException('Invalid or expired refresh token.', 401);
+        }
+    }
+
+    private function normalizeBearerToken(string $token): string
+    {
+        return str_starts_with($token, 'Bearer ')
+            ? trim(substr($token, 7))
+            : trim($token);
+    }
+
+    private function accessTokenMinutes(): int
+    {
+        return max(1, (int) config('security.access_token_minutes', 60));
+    }
+
+    private function refreshTokenDays(): int
+    {
+        return max(1, (int) config('security.refresh_token_days', 30));
+    }
+
+    private function refreshTokenRotationEnabled(): bool
+    {
+        return (bool) config('security.refresh_token_rotation', true);
     }
 
     /**

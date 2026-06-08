@@ -18,7 +18,10 @@ class AuthResource extends JsonResource
 
         return [
             'access_token' => data_get($this->resource, 'access_token'),
+            'refresh_token' => data_get($this->resource, 'refresh_token'),
             'token_type' => data_get($this->resource, 'token_type'),
+            'expires_in' => data_get($this->resource, 'expires_in'),
+            'refresh_expires_in' => data_get($this->resource, 'refresh_expires_in'),
             'registration_step' => data_get(
                 $this->resource,
                 'registration_step',
