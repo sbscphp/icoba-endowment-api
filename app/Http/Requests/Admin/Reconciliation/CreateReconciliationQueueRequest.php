@@ -93,6 +93,16 @@ class CreateReconciliationQueueRequest extends ApiFormRequest
                 return;
             }
 
+            $hasCampaign = $this->filled('campaign_uuid');
+            $hasPledge = $this->filled('pledge_uuid');
+
+            if (! $hasCampaign && ! $hasPledge) {
+                $validator->errors()->add(
+                    'campaign_uuid',
+                    'Provide either a campaign or a pledge for reconciliation.',
+                );
+            }
+
             if ($this->filled('user_uuid') && $this->hasDonorProfileInput()) {
                 $validator->errors()->add(
                     'user_uuid',
