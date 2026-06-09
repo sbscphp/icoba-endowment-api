@@ -24,8 +24,11 @@ class CheckSmsBalanceCommand extends Command
         if (! ($result['checked'] ?? false)) {
             $reason = (string) ($result['reason'] ?? 'unknown');
             $this->warn("Balance check skipped for {$result['provider']}: {$reason}.");
-
-            return self::FAILURE;
+        
+            // Don't fail if the provider just doesn't support it
+            return $reason === 'provider_does_not_support_balance_checks'
+                ? self::SUCCESS
+                : self::FAILURE;
         }
 
         $balance = $result['balance'] ?? 'unknown';
