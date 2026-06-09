@@ -166,7 +166,7 @@ class BankTransferService
 
         $referenceLabel = $reference !== '' ? $reference : 'N/A';
         $message = sprintf(
-            'A payment of %s with reference %s has been made. Please reconcile.',
+            'A payment of %s with reference %s has been made. Reconcile.',
             $amountLabel,
             $referenceLabel,
         );
