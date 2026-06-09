@@ -9,6 +9,7 @@ use App\Http\Resources\DatabaseNotificationResource;
 use App\Models\Admin;
 use App\Responser\JsonResponser;
 use App\Services\Notifications\NotificationInboxService;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 
 class NotificationController extends Controller
@@ -26,12 +27,10 @@ class NotificationController extends Controller
 
             $paginator = $this->inbox->paginate($admin, $perPage, $page, $validated);
 
-            $notifications = DatabaseNotificationResource::collection($paginator)->resource;
-
             return JsonResponser::send(
                 false,
                 'Notifications retrieved.',
-                $notifications
+                $this->paginatedPayload($paginator, $validated, $admin)
             );
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\Notification\NotificationController@index');
@@ -106,5 +105,17 @@ class NotificationController extends Controller
         }
 
         return $admin;
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    private function paginatedPayload(LengthAwarePaginator $paginator, array $validated, Admin $admin): array
+    {
+        $payload = $paginator->toArray();
+        $payload['data'] = DatabaseNotificationResource::collection($paginator)->resolve();
+
+        return array_merge($payload, $this->inbox->inboxCounts($admin, $validated));
     }
 }
