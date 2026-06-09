@@ -12,6 +12,7 @@ class ReconciliationPledgeSearchRequest extends ApiFormRequest
     {
         return [
             'user_identity' => ['required', 'uuid', 'exists:giving_identities,uuid'],
+            'campaign_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:campaigns,uuid'],
             'currency' => ['sometimes', 'nullable', 'string', Rule::in(Currency::values())],
         ];
     }
@@ -22,6 +23,8 @@ class ReconciliationPledgeSearchRequest extends ApiFormRequest
             'user_identity.required' => 'Please provide the donor giving identity.',
             'user_identity.uuid' => 'user_identity must be a valid giving identity UUID.',
             'user_identity.exists' => 'Selected giving identity does not exist.',
+            'campaign_uuid.uuid' => 'campaign_uuid must be a valid campaign UUID.',
+            'campaign_uuid.exists' => 'Selected campaign does not exist.',
             'currency.in' => 'Selected currency is invalid.',
         ]);
     }
