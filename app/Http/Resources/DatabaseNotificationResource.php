@@ -26,6 +26,7 @@ class DatabaseNotificationResource extends JsonResource
             'type' => (string) ($data['event'] ?? class_basename((string) $notification->type)),
             'title' => (string) ($data['title'] ?? 'Notification'),
             'message' => (string) ($data['message'] ?? ''),
+            'is_read' => $notification->read_at !== null,
             'read_at' => $notification->read_at?->toIso8601String(),
             'email_notifications_enabled' => $emailNotificationsEnabled,
             'push_notifications_enabled' => $pushNotificationsEnabled,
