@@ -284,9 +284,13 @@ class ReconciliationController extends Controller
             $currency = isset($validated['currency']) && $validated['currency'] !== ''
                 ? (string) $validated['currency']
                 : null;
+            $campaignUuid = isset($validated['campaign_uuid']) && $validated['campaign_uuid'] !== ''
+                ? (string) $validated['campaign_uuid']
+                : null;
             $pledges = $this->donationReconciliation->searchPendingPledges(
                 (string) $validated['user_identity'],
                 $currency,
+                $campaignUuid,
             );
 
             return JsonResponser::send(false, 'Pending pledge search results.', [

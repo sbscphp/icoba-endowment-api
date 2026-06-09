@@ -693,8 +693,11 @@ class DonationReconciliationService
      *
      * @return \Illuminate\Support\Collection<int, array<string, mixed>>
      */
-    public function searchPendingPledges(string $userIdentityUuid, ?string $currency = null): \Illuminate\Support\Collection
-    {
+    public function searchPendingPledges(
+        string $userIdentityUuid,
+        ?string $currency = null,
+        ?string $campaignUuid = null,
+    ): \Illuminate\Support\Collection {
         $identity = GivingIdentity::query()
             ->where('uuid', trim($userIdentityUuid))
             ->first(['uuid', 'user_uuid']);
@@ -714,6 +717,10 @@ class DonationReconciliationService
                 }
             })
             ->orderByDesc('created_at');
+
+        if ($campaignUuid !== null && $campaignUuid !== '') {
+            $query->where('campaign_uuid', $campaignUuid);
+        }
 
         if ($currency !== null && $currency !== '') {
             $query->where('currency', strtoupper($currency));
