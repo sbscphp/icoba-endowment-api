@@ -80,16 +80,6 @@ enum ePermission: string
     // 13. Audit trail
     case AUDIT_TRAIL_READ = 'audit_trail.read';
 
-    // 14. Notifications
-    case NOTIFICATIONS_READ = 'notifications.read';
-    // case NOTIFICATIONS_CREATE = 'notifications.create';
-    case NOTIFICATIONS_UPDATE = 'notifications.update';
-    case NOTIFICATIONS_DELETE = 'notifications.delete';
-
-    // 15. Settings
-    case SETTINGS_READ = 'settings.read';
-    case SETTINGS_UPDATE = 'settings.update';
-
     public static function values(): array
     {
         return array_column(self::cases(), 'value');
