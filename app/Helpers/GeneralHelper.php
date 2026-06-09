@@ -132,6 +132,7 @@ class GeneralHelper
 
         $pool = match ($type) {
             'numalpha' => '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
+            'numalpha_upper' => '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ',
             default => '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
         };
 

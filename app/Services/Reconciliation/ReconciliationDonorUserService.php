@@ -38,14 +38,14 @@ final class ReconciliationDonorUserService
 
         if ($this->userRepository->findByEmail($email) !== null) {
             throw ValidationException::withMessages([
-                'donor_email' => ['A user with this email already exists. Link the payment using user_uuid instead.'],
+                'donor_email' => ['A donor with this email already exists. Please choose an existing donor instead.'],
             ]);
         }
 
         $phoneNumber = trim((string) ($data['donor_phone'] ?? ''));
         if ($phoneNumber !== '' && $this->phoneNumberService->isRegistered($phoneNumber)) {
             throw ValidationException::withMessages([
-                'donor_phone' => ['A user with this phone number already exists. Link the payment using user_uuid instead.'],
+                'donor_phone' => ['A donor with this phone number already exists. Please choose an existing donor instead.'],
             ]);
         }
 

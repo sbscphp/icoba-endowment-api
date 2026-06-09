@@ -9,6 +9,7 @@ use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
 use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
+use App\Models\DonorType;
 use App\Models\Pledge;
 use App\Models\Transaction;
 use App\Models\User;
@@ -205,7 +206,7 @@ class DonationReconciliationService
     {
         $tx = Transaction::query()
             ->where('uuid', $uuid)
-            ->with(['campaign', 'pledge', 'donor', 'reconciledByAdmin', 'certificates'])
+            ->with(['campaign', 'pledge', 'donor.graduationSet', 'donor.donorType', 'donorType', 'reconciledByAdmin', 'certificates'])
             ->first();
 
         if ($tx === null) {
@@ -245,6 +246,38 @@ class DonationReconciliationService
      * }  $payload
      */
     public function createManual(array $payload, string $adminUuid): Transaction
+    {
+        return DB::transaction(function () use ($payload, $adminUuid): Transaction {
+            return $this->createManualWithinTransaction($payload, $adminUuid);
+        });
+    }
+
+    /**
+     * @param  array{
+     *     amount: float|string,
+     *     reference_id: string,
+     *     bank_key: string,
+     *     narration: string,
+     *     user_uuid?: ?string,
+     *     donor_type?: ?string,
+     *     donor_type_uuid?: ?string,
+     *     donor_email?: ?string,
+     *     donor_phone?: ?string,
+     *     firstname?: ?string,
+     *     lastname?: ?string,
+     *     set_number?: ?string,
+     *     alumni_identifier?: ?string,
+     *     organization_name?: ?string,
+     *     corporate_category_uuid?: ?string,
+     *     rc_number?: ?string,
+     *     tin?: ?string,
+     *     campaign_uuid?: ?string,
+     *     pledge_uuid?: ?string,
+     *     reconciliation_note?: ?string,
+     *     is_anonymous?: bool,
+     * }  $payload
+     */
+    private function createManualWithinTransaction(array $payload, string $adminUuid): Transaction
     {
         $amount = (float) $payload['amount'];
         $referenceId = trim((string) $payload['reference_id']);
@@ -299,6 +332,10 @@ class DonationReconciliationService
             'paid_into_account_number' => $account['account_number'],
             'paid_into_account_key' => $account['account_key'],
         ];
+        $reconciliationDraft = $this->buildReconciliationDraft($payload);
+        if ($reconciliationDraft !== []) {
+            $metadata['reconciliation_draft'] = $reconciliationDraft;
+        }
 
         $campaignUuid = $this->resolveCampaignUuidFromPayload($payload, $account['currency']);
         $pledgeUuid = isset($payload['pledge_uuid']) && trim((string) $payload['pledge_uuid']) !== ''
@@ -310,12 +347,16 @@ class DonationReconciliationService
         $linkedUser = $userUuid !== null
             ? User::query()
                 ->where('uuid', $userUuid)
-                ->first(['uuid', 'donor_type_uuid', 'email', 'firstname', 'lastname'])
+                ->first(['uuid', 'donor_type_uuid', 'email', 'firstname', 'lastname', 'phone_number'])
             : null;
         $pledge = $pledgeUuid !== null
             ? Pledge::query()->where('uuid', $pledgeUuid)->first()
             : null;
         $givingIdentityUuid = $this->resolveGivingIdentityUuid($linkedUser, $pledge);
+        $profileSnapshot = $this->resolveDonorProfileSnapshot($payload, $linkedUser);
+        $reconciliationNote = isset($payload['reconciliation_note']) && trim((string) $payload['reconciliation_note']) !== ''
+            ? trim((string) $payload['reconciliation_note'])
+            : null;
 
         $transaction = Transaction::query()->create([
             'transaction_id' => $transactionId,
@@ -323,11 +364,11 @@ class DonationReconciliationService
             'pledge_uuid' => $pledgeUuid,
             'user_uuid' => $userUuid,
             'giving_identity_uuid' => $givingIdentityUuid,
-            'donor_type_uuid' => $linkedUser?->donor_type_uuid,
-            'donor_email' => $linkedUser?->email,
-            'donor_name' => $linkedUser !== null
-                ? trim(($linkedUser->firstname ?? '').' '.($linkedUser->lastname ?? ''))
-                : null,
+            'donor_type_uuid' => $profileSnapshot['donor_type_uuid'],
+            'donor_email' => $profileSnapshot['donor_email'],
+            'donor_phone' => $profileSnapshot['donor_phone'],
+            'donor_name' => $profileSnapshot['donor_name'],
+            'reconciliation_note' => $reconciliationNote,
             'amount' => $amount,
             'currency' => $account['currency'],
             'exchange_rate_to_naira' => $snapshot['exchange_rate_to_naira'],
@@ -511,28 +552,40 @@ class DonationReconciliationService
             throw new ApiException('Only pending bank transfers can be completed.', 422);
         }
 
-        $linkage = $this->resolveReconciliationLinkage($payload, $transaction);
-        $this->persistReconciliationLinkage(
-            $transaction,
-            $linkage['user'],
-            $linkage['campaign_uuid'],
-            $linkage['pledge'],
-            $linkage['note'],
-            $linkage['is_anonymous'],
-        );
+        $transactionUuid = $transaction->uuid;
 
-        $transaction = $transaction->refresh();
+        try {
+            return DB::transaction(function () use ($transaction, $payload, $adminUuid): Transaction {
+                $this->persistDraftReconciliationProfile($transaction, $payload);
+                $transaction = $transaction->refresh();
 
-        $this->finalizationService->finalizeSuccessful($transaction, [
-            'reconciled_by_admin_uuid' => $adminUuid,
-            'reconciliation_note' => $linkage['note'],
-            'metadata' => [
-                'reconciliation_completed_at' => now()->toIso8601String(),
-            ],
-            'tax_receipt_email_meta_key' => 'bank_transfer_tax_receipt_email_queued',
-        ]);
+                $linkage = $this->resolveReconciliationLinkage($payload, $transaction);
+                $this->persistReconciliationLinkage(
+                    $transaction,
+                    $linkage['user'],
+                    $linkage['campaign_uuid'],
+                    $linkage['pledge'],
+                    $linkage['note'],
+                    $linkage['is_anonymous'],
+                );
 
-        return $this->findQueueItem($transaction->uuid);
+                $transaction = $transaction->refresh();
+
+                $this->finalizationService->finalizeSuccessful($transaction, [
+                    'reconciled_by_admin_uuid' => $adminUuid,
+                    'reconciliation_note' => $linkage['note'],
+                    'metadata' => [
+                        'reconciliation_completed_at' => now()->toIso8601String(),
+                    ],
+                    'tax_receipt_email_meta_key' => 'bank_transfer_tax_receipt_email_queued',
+                ]);
+
+                return $this->findQueueItem($transaction->uuid);
+            });
+        } catch (ValidationException $exception) {
+            $this->discardIncompleteManualReconciliation($transactionUuid);
+            throw $exception;
+        }
     }
 
     /**
@@ -806,5 +859,188 @@ class DonationReconciliationService
         }
 
         return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function buildReconciliationDraft(array $payload): array
+    {
+        $draft = [];
+
+        foreach ([
+            'user_uuid',
+            'donor_type',
+            'donor_type_uuid',
+            'donor_email',
+            'donor_phone',
+            'country_uuid',
+            'country_code',
+            'firstname',
+            'lastname',
+            'set_number',
+            'alumni_identifier',
+            'organization_name',
+            'corporate_category_uuid',
+            'rc_number',
+            'tin',
+            'campaign_uuid',
+            'pledge_uuid',
+            'reconciliation_note',
+            'is_anonymous',
+        ] as $field) {
+            if (! array_key_exists($field, $payload)) {
+                continue;
+            }
+
+            $value = $payload[$field];
+            if ($value === null || (is_string($value) && trim($value) === '')) {
+                continue;
+            }
+
+            $draft[$field] = $value;
+        }
+
+        return $draft;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array{
+     *     donor_email: ?string,
+     *     donor_phone: ?string,
+     *     donor_name: ?string,
+     *     donor_type_uuid: ?string,
+     * }
+     */
+    private function resolveDonorProfileSnapshot(array $payload, ?User $linkedUser): array
+    {
+        if ($linkedUser !== null) {
+            return [
+                'donor_email' => $linkedUser->email,
+                'donor_phone' => $linkedUser->phone_number,
+                'donor_name' => trim(($linkedUser->firstname ?? '').' '.($linkedUser->lastname ?? '')) ?: null,
+                'donor_type_uuid' => $linkedUser->donor_type_uuid,
+            ];
+        }
+
+        return [
+            'donor_email' => isset($payload['donor_email']) && trim((string) $payload['donor_email']) !== ''
+                ? strtolower(trim((string) $payload['donor_email']))
+                : null,
+            'donor_phone' => isset($payload['donor_phone']) && trim((string) $payload['donor_phone']) !== ''
+                ? trim((string) $payload['donor_phone'])
+                : null,
+            'donor_name' => $this->resolveDonorNameFromPayload($payload),
+            'donor_type_uuid' => $this->resolveDonorTypeUuidFromPayload($payload),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function persistDraftReconciliationProfile(Transaction $transaction, array $payload): void
+    {
+        $draft = $this->buildReconciliationDraft($payload);
+        if ($draft === []) {
+            return;
+        }
+
+        $metadata = is_array($transaction->metadata) ? $transaction->metadata : [];
+        $existingDraft = is_array($metadata['reconciliation_draft'] ?? null)
+            ? $metadata['reconciliation_draft']
+            : [];
+        $metadata['reconciliation_draft'] = array_merge($existingDraft, $draft);
+
+        $linkedUser = isset($payload['user_uuid']) && trim((string) $payload['user_uuid']) !== ''
+            ? User::query()
+                ->where('uuid', (string) $payload['user_uuid'])
+                ->first(['uuid', 'donor_type_uuid', 'email', 'firstname', 'lastname', 'phone_number'])
+            : null;
+        $profileSnapshot = $this->resolveDonorProfileSnapshot($payload, $linkedUser);
+
+        $updates = [
+            'metadata' => $metadata,
+            'donor_email' => $profileSnapshot['donor_email'],
+            'donor_phone' => $profileSnapshot['donor_phone'],
+            'donor_name' => $profileSnapshot['donor_name'],
+            'donor_type_uuid' => $profileSnapshot['donor_type_uuid'],
+        ];
+
+        if (isset($payload['reconciliation_note']) && trim((string) $payload['reconciliation_note']) !== '') {
+            $updates['reconciliation_note'] = trim((string) $payload['reconciliation_note']);
+        }
+
+        if (array_key_exists('is_anonymous', $payload)) {
+            $updates['is_anonymous'] = (bool) $payload['is_anonymous'];
+        }
+
+        if (isset($payload['campaign_uuid']) && trim((string) $payload['campaign_uuid']) !== '') {
+            $updates['campaign_uuid'] = (string) $payload['campaign_uuid'];
+        }
+
+        if (isset($payload['pledge_uuid']) && trim((string) $payload['pledge_uuid']) !== '') {
+            $updates['pledge_uuid'] = (string) $payload['pledge_uuid'];
+        }
+
+        if ($linkedUser !== null) {
+            $updates['user_uuid'] = $linkedUser->uuid;
+        }
+
+        $transaction->forceFill($updates)->save();
+    }
+
+    private function discardIncompleteManualReconciliation(string $transactionUuid): void
+    {
+        $transaction = Transaction::query()->where('uuid', $transactionUuid)->first();
+        if ($transaction === null) {
+            return;
+        }
+
+        $metadata = is_array($transaction->metadata) ? $transaction->metadata : [];
+        if (($metadata['source'] ?? null) !== 'admin_manual') {
+            return;
+        }
+
+        if ($transaction->status !== TransactionStatus::PENDING || $transaction->reconciled_at !== null) {
+            return;
+        }
+
+        $transaction->delete();
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function resolveDonorNameFromPayload(array $payload): ?string
+    {
+        $organizationName = trim((string) ($payload['organization_name'] ?? ''));
+        if ($organizationName !== '') {
+            return $organizationName;
+        }
+
+        $name = trim(trim((string) ($payload['firstname'] ?? '')).' '.trim((string) ($payload['lastname'] ?? '')));
+
+        return $name !== '' ? $name : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function resolveDonorTypeUuidFromPayload(array $payload): ?string
+    {
+        if (isset($payload['donor_type_uuid']) && trim((string) $payload['donor_type_uuid']) !== '') {
+            return (string) $payload['donor_type_uuid'];
+        }
+
+        $slug = isset($payload['donor_type']) ? strtolower(trim((string) $payload['donor_type'])) : '';
+        if ($slug === '') {
+            return null;
+        }
+
+        $uuid = DonorType::query()->where('slug', $slug)->value('uuid');
+
+        return is_string($uuid) && $uuid !== '' ? $uuid : null;
     }
 }

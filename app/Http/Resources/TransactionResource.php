@@ -26,7 +26,11 @@ class TransactionResource extends JsonResource
         $tier = $this->resource->getAttribute('matched_tier');
 
         $metadata = is_array($this->metadata) ? $this->metadata : [];
+        $reconciliationDraft = is_array($metadata['reconciliation_draft'] ?? null)
+            ? $metadata['reconciliation_draft']
+            : [];
         $receiptLinks = $this->resolveReceiptLinks();
+        $donorType = $this->donorType ?? ($this->donor?->donorType);
 
         return [
             'transaction_uuid' => $this->uuid,
@@ -36,9 +40,22 @@ class TransactionResource extends JsonResource
             'paid_at' => $this->paid_at,
             // 'created_at' => $this->created_at,
             // 'updated_at' => $this->updated_at,
+            'user_uuid' => $this->user_uuid ?? ($reconciliationDraft['user_uuid'] ?? null),
             'donor_name' => $this->resolveDonorName(),
-            'donor_email' => $this->donor_email ?? $this->donor?->email,
-            'donor_phone' => $this->donor_phone ?? $this->donor?->phone_number,
+            'donor_email' => $this->donor_email ?? $this->donor?->email ?? ($reconciliationDraft['donor_email'] ?? null),
+            'donor_phone' => $this->donor_phone ?? $this->donor?->phone_number ?? ($reconciliationDraft['donor_phone'] ?? null),
+            'donor_type' => $donorType?->slug ?? ($reconciliationDraft['donor_type'] ?? null),
+            'donor_type_uuid' => $this->donor_type_uuid ?? ($reconciliationDraft['donor_type_uuid'] ?? null),
+            'firstname' => $this->donor?->firstname ?? ($reconciliationDraft['firstname'] ?? null),
+            'lastname' => $this->donor?->lastname ?? ($reconciliationDraft['lastname'] ?? null),
+            'set_number' => $set?->set_number ?? ($reconciliationDraft['set_number'] ?? null),
+            'alumni_identifier' => $this->donor?->alumni_identifier ?? ($reconciliationDraft['alumni_identifier'] ?? null),
+            'organization_name' => $this->organization_name ?? $this->donor?->organization_name ?? ($reconciliationDraft['organization_name'] ?? null),
+            'corporate_category_uuid' => $this->donor?->corporate_category_uuid ?? ($reconciliationDraft['corporate_category_uuid'] ?? null),
+            'rc_number' => $this->rc_number ?? $this->donor?->rc_number ?? ($reconciliationDraft['rc_number'] ?? null),
+            'tin' => $this->tin ?? $this->donor?->tin ?? ($reconciliationDraft['tin'] ?? null),
+            'country_code' => $this->donor?->country_code ?? ($reconciliationDraft['country_code'] ?? null),
+            'country_uuid' => $reconciliationDraft['country_uuid'] ?? null,
             'is_anonymous' => (bool) $this->is_anonymous,
             'linked_campaign' => $this->campaign !== null ? [
                 'campaign_id' => $this->campaign->uuid,
@@ -84,8 +101,9 @@ class TransactionResource extends JsonResource
             'awaiting_bank_verification_at' => $this->awaiting_bank_verification_at,
             'reconciled_at' => $this->reconciled_at,
             'reconciled_by_admin_uuid' => $this->reconciled_by_admin_uuid,
-            'reconciliation_note' => $this->reconciliation_note,
+            'reconciliation_note' => $this->reconciliation_note ?? ($reconciliationDraft['reconciliation_note'] ?? null),
             'reconciliation_status' => $this->resolveReconciliationStatus(),
+            'reconciliation_draft' => $reconciliationDraft !== [] ? $reconciliationDraft : null,
             'certificates' => $this->whenLoaded('certificates', fn () => \App\Http\Resources\Customer\CustomerRecognitionResource::collection($this->certificates)),
             'metadata' => $metadata,
         ];
@@ -183,6 +201,31 @@ class TransactionResource extends JsonResource
             }
         }
 
-        return $this->donor_name;
+        return $this->donor_name ?: $this->resolveDonorNameFromDraft();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function reconciliationDraft(): array
+    {
+        $metadata = is_array($this->metadata) ? $this->metadata : [];
+
+        return is_array($metadata['reconciliation_draft'] ?? null)
+            ? $metadata['reconciliation_draft']
+            : [];
+    }
+
+    private function resolveDonorNameFromDraft(): ?string
+    {
+        $draft = $this->reconciliationDraft();
+        $organizationName = trim((string) ($draft['organization_name'] ?? ''));
+        if ($organizationName !== '') {
+            return $organizationName;
+        }
+
+        $name = trim(trim((string) ($draft['firstname'] ?? '')).' '.trim((string) ($draft['lastname'] ?? '')));
+
+        return $name !== '' ? $name : null;
     }
 }
