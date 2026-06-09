@@ -2,12 +2,17 @@
 
 namespace App\Services\Donation;
 
+use App\Enums\Currency;
+use App\Enums\ePermission;
+use App\Enums\ModuleEnums;
 use App\Enums\TransactionApplicationType;
 use App\Exceptions\ApiException;
 use App\Models\Pledge;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Notifications\GenericDatabaseNotification;
 use App\Services\Admin\Transaction\TransactionService;
+use App\Services\Notifications\NotificationDispatchService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -24,6 +29,7 @@ class BankTransferService
         private readonly DonationIntentService $donationIntentService,
         private readonly TransactionService $transactionService,
         private readonly DonorNameRequirement $donorNameRequirement,
+        private readonly NotificationDispatchService $notificationDispatchService,
     ) {}
 
     /**
@@ -53,8 +59,9 @@ class BankTransferService
     public function confirmPaymentForCustomer(string $transactionUuid, ?User $user): Transaction
     {
         $transaction = $this->resolveCustomerTransaction($transactionUuid, $user);
+        $confirmed = false;
 
-        DB::transaction(function () use ($transaction): void {
+        DB::transaction(function () use ($transaction, &$confirmed): void {
             /** @var Transaction|null $locked */
             $locked = Transaction::query()
                 ->whereKey($transaction->getKey())
@@ -68,9 +75,17 @@ class BankTransferService
             $locked->forceFill([
                 'awaiting_bank_verification_at' => now(),
             ])->save();
+
+            $confirmed = true;
         });
 
-        return $this->transactionService->findTransaction($transaction->uuid);
+        $transaction = $this->transactionService->findTransaction($transaction->uuid);
+
+        if ($confirmed) {
+            $this->notifyAdminsOfConfirmedBankTransferPayment($transaction);
+        }
+
+        return $transaction;
     }
 
     private function assertPledgeOwnership(string $pledgeUuid, User $user): void
@@ -138,5 +153,57 @@ class BankTransferService
         }
 
         return $transaction;
+    }
+
+    private function notifyAdminsOfConfirmedBankTransferPayment(Transaction $transaction): void
+    {
+        $reference = trim((string) $transaction->bank_transfer_reference);
+        $amountLabel = $this->formatPaymentAmount((float) $transaction->amount, (string) $transaction->currency);
+        $adminFrontendBase = rtrim((string) config('app.admin_frontend_url'), '/');
+        $actionUrl = $adminFrontendBase !== ''
+            ? $adminFrontendBase.'/reconciliation/queue/'.$transaction->uuid
+            : null;
+
+        $referenceLabel = $reference !== '' ? $reference : 'N/A';
+        $message = sprintf(
+            'A payment of %s with reference %s has been made. Please reconcile.',
+            $amountLabel,
+            $referenceLabel,
+        );
+
+        $this->notificationDispatchService->notifyAdminsWithAllPermissions(
+            [
+                ePermission::TRANSACTIONS_READ->value,
+                ePermission::RECONCILIATION_READ->value,
+            ],
+            new GenericDatabaseNotification(
+                module: ModuleEnums::reconciliation->value,
+                event: 'bank_transfer_payment_confirmed',
+                title: 'New bank transfer payment',
+                message: $message,
+                meta: [
+                    'transaction_uuid' => $transaction->uuid,
+                    'amount' => (string) $transaction->amount,
+                    'currency' => (string) $transaction->currency,
+                    'bank_transfer_reference' => $reference !== '' ? $reference : null,
+                    'confirmed_at' => now()->toIso8601String(),
+                ],
+                actionUrl: $actionUrl,
+                mailSubject: 'New bank transfer payment requires reconciliation',
+                icon: '/icons/bank-transfer-payment.png',
+                severity: 'info',
+                tags: ['reconciliation', 'bank_transfer', 'payment'],
+                sendMail: true,
+                sendPush: false,
+            ),
+        );
+    }
+
+    private function formatPaymentAmount(float $amount, string $currency): string
+    {
+        $currencyEnum = Currency::tryFrom(strtoupper($currency));
+        $symbol = $currencyEnum?->symbol() ?? strtoupper($currency).' ';
+
+        return $symbol.number_format($amount, 2);
     }
 }
