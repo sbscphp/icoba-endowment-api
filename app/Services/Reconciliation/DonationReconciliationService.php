@@ -21,6 +21,7 @@ use App\Services\Transaction\TransactionFinalizationService;
 use App\Services\Transaction\TransactionNgnSnapshotService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon as SupportCarbon;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +29,8 @@ use Illuminate\Validation\ValidationException;
 
 class DonationReconciliationService
 {
+    public const MAX_EXPORT_ROWS = 5000;
+
     public function __construct(
         private readonly BankAccountRegistry $bankAccountRegistry,
         private readonly BankTransferReferenceService $bankTransferReference,
@@ -99,6 +102,43 @@ class DonationReconciliationService
      */
     public function queue(array $filters): LengthAwarePaginator
     {
+        $sortBy = isset($filters['sort_by']) ? (string) $filters['sort_by'] : 'created_at';
+        $sortDirection = isset($filters['sort_direction']) ? strtolower((string) $filters['sort_direction']) : 'desc';
+        $perPage = isset($filters['per_page']) ? (int) $filters['per_page'] : 25;
+        $perPage = max(1, min(100, $perPage));
+
+        return $this->buildQueueQuery($filters)
+            ->orderBy($this->resolveQueueSortColumn($sortBy), $sortDirection === 'asc' ? 'asc' : 'desc')
+            ->paginate($perPage);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array{0: EloquentCollection<int, Transaction>, 1: bool}
+     */
+    public function exportCollection(array $filters): array
+    {
+        $sortBy = isset($filters['sort_by']) ? (string) $filters['sort_by'] : 'created_at';
+        $sortDirection = isset($filters['sort_direction']) ? strtolower((string) $filters['sort_direction']) : 'desc';
+
+        $query = $this->buildQueueQuery($filters)
+            ->orderBy($this->resolveQueueSortColumn($sortBy), $sortDirection === 'asc' ? 'asc' : 'desc');
+
+        $total = (clone $query)->count();
+        $truncated = $total > self::MAX_EXPORT_ROWS;
+
+        /** @var EloquentCollection<int, Transaction> $rows */
+        $rows = $query->limit(self::MAX_EXPORT_ROWS)->get();
+
+        return [$rows, $truncated];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return Builder<Transaction>
+     */
+    private function buildQueueQuery(array $filters): Builder
+    {
         $status = isset($filters['filters']['reconciliation_status'])
             ? (string) $filters['filters']['reconciliation_status']
             : null;
@@ -153,14 +193,12 @@ class DonationReconciliationService
             $query->where('created_at', '<=', $end);
         }
 
-        $sortBy = isset($filters['sort_by']) ? (string) $filters['sort_by'] : 'created_at';
-        $sortDirection = isset($filters['sort_direction']) ? strtolower((string) $filters['sort_direction']) : 'desc';
-        $perPage = isset($filters['per_page']) ? (int) $filters['per_page'] : 25;
-        $perPage = max(1, min(100, $perPage));
+        return $query;
+    }
 
-        return $query
-            ->orderBy(in_array($sortBy, ['created_at', 'reconciled_at', 'paid_at', 'amount'], true) ? $sortBy : 'created_at', $sortDirection === 'asc' ? 'asc' : 'desc')
-            ->paginate($perPage);
+    private function resolveQueueSortColumn(string $sortBy): string
+    {
+        return in_array($sortBy, ['created_at', 'reconciled_at', 'paid_at', 'amount'], true) ? $sortBy : 'created_at';
     }
 
     public function findQueueItem(string $uuid): Transaction
