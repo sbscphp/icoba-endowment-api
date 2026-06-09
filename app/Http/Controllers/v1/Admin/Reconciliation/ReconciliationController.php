@@ -9,6 +9,7 @@ use App\Http\Requests\Admin\DateRangeStatsRequest;
 use App\Http\Requests\Admin\Reconciliation\CompleteReconciliationRequest;
 use App\Http\Requests\Admin\Reconciliation\CreateReconciliationQueueRequest;
 use App\Http\Requests\Admin\Reconciliation\LinkDonationToPledgeRequest;
+use App\Http\Requests\Admin\Reconciliation\ReconciliationPledgeSearchRequest;
 use App\Http\Requests\Admin\Reconciliation\ReconciliationQueueListRequest;
 use App\Http\Requests\Admin\Reconciliation\UpdateReconciliationBankRequest;
 use App\Http\Resources\ReconciliationQueueResource;
@@ -273,6 +274,26 @@ class ReconciliationController extends Controller
             ]);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\Reconciliation\ReconciliationController@donorSearch');
+        }
+    }
+
+    public function pledgeSearch(ReconciliationPledgeSearchRequest $request)
+    {
+        try {
+            $validated = $request->validated();
+            $currency = isset($validated['currency']) && $validated['currency'] !== ''
+                ? (string) $validated['currency']
+                : null;
+            $pledges = $this->donationReconciliation->searchPendingPledges(
+                (string) $validated['user_identity'],
+                $currency,
+            );
+
+            return JsonResponser::send(false, 'Pending pledge search results.', [
+                'items' => $pledges->values()->all(),
+            ]);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\Reconciliation\ReconciliationController@pledgeSearch');
         }
     }
 

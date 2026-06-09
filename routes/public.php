@@ -21,16 +21,18 @@ Route::prefix('v1')->group(function () {
         Route::get('leaderboard/top-sets', [LeaderboardController::class, 'topSets']);
         Route::get('leaderboard/recent-donations', [LeaderboardController::class, 'recentDonations']);
 
-        Route::get('campaigns', [PublicCampaignController::class, 'index']);
-        Route::get('campaigns/dropdown', [PublicCampaignController::class, 'dropdown']);
+        Route::middleware('auth.attempt')->group(function (): void {
+            Route::get('campaigns', [PublicCampaignController::class, 'index']);
+            Route::get('campaigns/dropdown', [PublicCampaignController::class, 'dropdown']);
+            Route::get('campaigns/fund-progress', [LeaderboardController::class, 'fundProgressList']);
+            Route::get('campaigns/{campaignUuid}/fund-progress', [LeaderboardController::class, 'fundProgress']);
+            Route::get('campaigns/{campaignUuid}', [PublicCampaignController::class, 'show'])
+                ->whereUuid('campaignUuid');
+        });
 
         Route::get('tiers', [PublicTierController::class, 'index']);
         Route::get('hero-slides', [PublicHeroSlideController::class, 'index']);
         Route::get('bank-accounts', [PublicBankAccountController::class, 'index']);
-        Route::get('campaigns/fund-progress', [LeaderboardController::class, 'fundProgressList']);
-        Route::get('campaigns/{campaignUuid}/fund-progress', [LeaderboardController::class, 'fundProgress']);
-        Route::get('campaigns/{campaignUuid}', [PublicCampaignController::class, 'show'])
-            ->whereUuid('campaignUuid');
 
         Route::get('receipts/{receiptNumber}/download', [ReceiptDownloadController::class, 'guestPdf'])
             ->middleware(['throttle:public-receipt']);

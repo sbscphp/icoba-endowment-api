@@ -9,6 +9,7 @@ use App\Enums\TransactionStatus;
 use App\Helpers\GeneralHelper;
 use App\Models\Pledge;
 use App\Models\Transaction;
+use App\Services\Donation\CampaignAnonymousDonationValidator;
 use App\Services\Pledge\PledgeBalanceService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -19,6 +20,7 @@ class PledgeService
 {
     public function __construct(
         private readonly PledgeBalanceService $balanceService,
+        private readonly CampaignAnonymousDonationValidator $anonymousDonationValidator,
     ) {}
 
     /**
@@ -59,7 +61,7 @@ class PledgeService
     {
         $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
         $query = Pledge::query()->with([
-            'campaign:uuid,name,campaign_id',
+            'campaign:uuid,name,campaign_id,allow_anonymous_donation',
             'donor:uuid,firstname,lastname,email,phone_number',
         ])->where('user_uuid', $userUuid);
 
@@ -237,6 +239,11 @@ class PledgeService
      */
     public function createPledge(array $data): Pledge
     {
+        $this->anonymousDonationValidator->assertAllowed(
+            (string) ($data['campaign_uuid'] ?? ''),
+            (bool) ($data['is_anonymous'] ?? false),
+        );
+
         $pledge = Pledge::query()->create($data);
 
         return $pledge->fresh(['campaign', 'donor']);

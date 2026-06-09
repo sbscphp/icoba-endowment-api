@@ -25,6 +25,7 @@ class PledgeListResource extends JsonResource
             'campaign' => $this->campaign !== null ? [
                 'uuid' => $this->campaign->uuid,
                 'name' => $this->campaign->name,
+                'allow_anonymous_donation' => (bool) $this->campaign->allow_anonymous_donation,
             ] : null,
             'committed_amount' => (string) $this->committed_amount,
             'committed_amount_ngn' => $this->committed_amount_ngn !== null ? (string) $this->committed_amount_ngn : null,
