@@ -28,6 +28,50 @@ class NotificationDispatchService
     }
 
     /**
+     * Active admins who hold every listed permission (directly or via role).
+     *
+     * @param  list<string>  $permissions
+     */
+    public function notifyAdminsWithAllPermissions(array $permissions, Notification $notification, bool $queue = false): int
+    {
+        $permissions = array_values(array_filter(array_unique(array_map('strval', $permissions))));
+        if ($permissions === []) {
+            return 0;
+        }
+
+        try {
+            $admins = Admin::query()
+                ->where('is_active', true)
+                ->where('can_login', true)
+                ->get()
+                ->filter(function (Admin $admin) use ($permissions): bool {
+                    foreach ($permissions as $permission) {
+                        if (! $admin->hasPermissionTo($permission)) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                });
+
+            if ($admins->isEmpty()) {
+                return 0;
+            }
+
+            return $this->deliverToEach($admins, $notification, $queue, Admin::class);
+        } catch (\Throwable $e) {
+            Log::error('Error in notifyAdminsWithAllPermissions', [
+                'permissions' => $permissions,
+                'error' => $e->getMessage(),
+                'notification' => $notification::class,
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return 0;
+        }
+    }
+
+    /**
      * @param  list<string>  $adminUuids
      */
     public function notifyAdminsByUuids(array $adminUuids, Notification $notification, bool $queue = false): int
