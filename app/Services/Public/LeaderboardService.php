@@ -523,12 +523,9 @@ SQL;
         $query = DB::table('campaigns')
             ->leftJoinSub($raisedSubquery, 'raised_totals', 'raised_totals.campaign_uuid', '=', 'campaigns.uuid');
 
-        if (! $forAuthenticatedCustomer) {
-            $query->where('campaigns.allow_public_donation', true);
-        }
+        PublicCampaignVisibility::applyToQuery($query, $forAuthenticatedCustomer);
 
         return $query
-            ->where('campaigns.status', '!=', CampaignStatus::DRAFT->value)
             ->whereNull('campaigns.deleted_at')
             ->orderBy('campaigns.name')
             ->select([
@@ -565,10 +562,7 @@ SQL;
         $forAuthenticatedCustomer = (bool) ($filters['for_authenticated_customer'] ?? false);
 
         $campaignQuery = Campaign::query()->where('uuid', $campaignUuid);
-        if (! $forAuthenticatedCustomer) {
-            $campaignQuery->where('allow_public_donation', true);
-        }
-        $campaignQuery->where('status', '!=', CampaignStatus::DRAFT);
+        PublicCampaignVisibility::applyToEloquent($campaignQuery, $forAuthenticatedCustomer);
 
         $campaign = $campaignQuery->firstOrFail();
         $amountColumn = $this->resolveAmountColumn($filters);

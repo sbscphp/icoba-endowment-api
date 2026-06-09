@@ -58,11 +58,7 @@ class PublicCampaignService
      */
     private function applyPublicVisibilityConstraints(Builder $query, bool $forAuthenticatedCustomer = false): void
     {
-        if (! $forAuthenticatedCustomer) {
-            $query->where('allow_public_donation', true);
-        }
-
-        $query->where('status', '!=', CampaignStatus::DRAFT);
+        PublicCampaignVisibility::applyToEloquent($query, $forAuthenticatedCustomer);
     }
 
     /**

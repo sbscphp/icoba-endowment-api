@@ -3,15 +3,17 @@
 namespace App\Http\Controllers\v1\Public;
 
 use App\Helpers\GeneralHelper;
+use App\Http\Controllers\Concerns\ResolvesAuthenticatedCustomer;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Public\LeaderboardRequest;
 use App\Http\Requests\Public\TopSetsRequest;
-use App\Models\User;
 use App\Responser\JsonResponser;
 use App\Services\Public\LeaderboardService;
 
 class LeaderboardController extends Controller
 {
+    use ResolvesAuthenticatedCustomer;
+
     public function __construct(
         private readonly LeaderboardService $leaderboardService,
     ) {}
@@ -66,7 +68,7 @@ class LeaderboardController extends Controller
     {
         try {
             $payload = $this->leaderboardService->campaignsFundProgressList(
-                $this->filtersWithAuthContext($request->validated(), $request),
+                $this->filtersWithCustomerAuthContext($request->validated(), $request),
             );
 
             return JsonResponser::send(false, 'Fund progress list retrieved.', $payload);
@@ -80,7 +82,7 @@ class LeaderboardController extends Controller
         try {
             $payload = $this->leaderboardService->campaignFundProgress(
                 $campaignUuid,
-                $this->filtersWithAuthContext($request->validated(), $request),
+                $this->filtersWithCustomerAuthContext($request->validated(), $request),
             );
 
             return JsonResponser::send(false, 'Fund progress retrieved.', $payload);
@@ -89,14 +91,4 @@ class LeaderboardController extends Controller
         }
     }
 
-    /**
-     * @param  array<string, mixed>  $validated
-     * @return array<string, mixed>
-     */
-    private function filtersWithAuthContext(array $validated, LeaderboardRequest $request): array
-    {
-        $validated['for_authenticated_customer'] = $request->user() instanceof User;
-
-        return $validated;
-    }
 }
