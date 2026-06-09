@@ -4,31 +4,33 @@ namespace App\Http\Controllers\v1\Customer\Notification;
 
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Customer\Notification\NotificationListRequest;
 use App\Http\Resources\DatabaseNotificationResource;
 use App\Models\User;
 use App\Responser\JsonResponser;
 use App\Services\Notifications\NotificationInboxService;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 
 class NotificationController extends Controller
 {
     public function __construct(private readonly NotificationInboxService $inbox) {}
 
-    public function index(Request $request)
+    public function index(NotificationListRequest $request)
     {
         try {
             $user = $this->requireCustomer($request);
+            $validated = $request->validated();
 
-            $perPage = min(max((int) $request->query('per_page', 15), 1), 100);
+            $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
+            $page = max(1, (int) ($validated['page'] ?? 1));
 
-            $paginator = $this->inbox->paginate($user, $perPage);
+            $paginator = $this->inbox->paginate($user, $perPage, $page, $validated);
 
-            $notifications = DatabaseNotificationResource::collection($paginator)->resource;
-    
             return JsonResponser::send(
                 false,
                 'Notifications retrieved.',
-                $notifications
+                $this->paginatedPayload($paginator, $validated, $user)
             );
 
         } catch (\Throwable $th) {
@@ -104,5 +106,17 @@ class NotificationController extends Controller
         }
 
         return $user;
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    private function paginatedPayload(LengthAwarePaginator $paginator, array $validated, User $user): array
+    {
+        $payload = $paginator->toArray();
+        $payload['data'] = DatabaseNotificationResource::collection($paginator)->resolve();
+
+        return array_merge($payload, $this->inbox->inboxCounts($user, $validated));
     }
 }
