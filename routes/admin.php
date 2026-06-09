@@ -40,25 +40,20 @@ Route::prefix('v1/admin')->group(function () {
     Route::get('audit-trails', [AuditTrailController::class, 'index'])
         ->middleware(['auth:sanctum', 'permission:audit_trail.read']);
 
-    Route::prefix('notifications')->middleware(['auth:sanctum'])->group(function () {
-        Route::middleware(['permission:notifications.read'])->group(function () {
-            Route::get('/', [NotificationController::class, 'index']);
-            Route::get('/{id}', [NotificationController::class, 'show']);
-        });
-
-        Route::middleware(['permission:notifications.update'])->group(function () {
-            Route::post('/read-all', [NotificationController::class, 'markAllRead']);
-            Route::patch('/{id}/read', [NotificationController::class, 'markRead']);
-            Route::patch('/{id}/unread', [NotificationController::class, 'markUnread']);
-            Route::delete('/{id}/dismiss', [NotificationController::class, 'dismiss']);
-        });
+    Route::middleware('auth:sanctum')->prefix('notifications')->group(function () {
+        Route::get('/', [NotificationController::class, 'index']);
+        Route::post('/read-all', [NotificationController::class, 'markAllRead']);
+        Route::get('/{id}', [NotificationController::class, 'show']);
+        Route::patch('/{id}/read', [NotificationController::class, 'markRead']);
+        Route::patch('/{id}/unread', [NotificationController::class, 'markUnread']);
+        Route::delete('/{id}/dismiss', [NotificationController::class, 'dismiss']);
     });
 
     Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
         Route::get('/users', fn () => 'admin only');
     });
 
-    Route::prefix('settings')->middleware(['auth:sanctum'])->group(function () {
+    Route::middleware('auth:sanctum')->prefix('settings')->group(function () {
         Route::get('/profile', [SettingsController::class, 'profile']);
         Route::patch('/profile', [SettingsController::class, 'updateProfile']);
         Route::patch('/2fa', [SettingsController::class, 'toggleTwoFactor']);

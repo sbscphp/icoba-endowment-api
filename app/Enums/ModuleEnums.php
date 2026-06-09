@@ -24,7 +24,8 @@ enum ModuleEnums: string
     case reports = 'reports';
     case email_campaigns = 'email_campaigns';
     case audit_trail = 'audit_trail';
-    case notifications = 'notifications';
+
+    /** Personal account settings (not tied to CRUD permissions map). */
     case settings = 'settings';
 
     /** Admin sign-in and session (not tied to CRUD permissions map). */
@@ -48,7 +49,6 @@ enum ModuleEnums: string
             self::reports => 'Reports',
             self::email_campaigns => 'Email campaigns',
             self::audit_trail => 'Audit trail',
-            self::notifications => 'Notifications',
             self::settings => 'Settings',
             self::authentication => 'Authentication',
         };

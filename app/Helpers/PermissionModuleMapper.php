@@ -29,8 +29,6 @@ final class PermissionModuleMapper
             'reports',
             'email_campaigns',
             'audit_trail',
-            'notifications',
-            'settings',
         ];
     }
 
@@ -53,8 +51,6 @@ final class PermissionModuleMapper
             'reports' => 'reports',
             'email_campaigns' => 'email_campaigns',
             'audit_trail' => 'audit_trail',
-            'notifications' => 'notifications',
-            'settings' => 'settings',
             default => 'other',
         };
     }
