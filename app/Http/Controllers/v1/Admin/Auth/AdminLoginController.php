@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\v1\Admin\Auth;
 
 use App\Enums\eClientType;
+use App\Enums\OtpChannelEnum;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
@@ -58,9 +59,18 @@ class AdminLoginController extends Controller
     public function resendOtp(ResendOtpRequest $request)
     {
         try {
-            $payload = $this->authService->resendAdminLoginOtp((string) $request->input('challenge_token'), $request);
+            $channel = OtpChannelEnum::tryFromRequest($request->input('otp_channel'), null);
+            $payload = $this->authService->resendAdminLoginOtp(
+                (string) $request->input('challenge_token'),
+                $channel,
+                $request
+            );
 
-            return JsonResponser::send(false, 'Verification code sent.', $payload, 200);
+            $message = isset($payload['otp_channel'])
+                ? (OtpChannelEnum::tryFrom($payload['otp_channel']) ?? OtpChannelEnum::EMAIL)->deliveryMessage()
+                : 'Verification code sent.';
+
+            return JsonResponser::send(false, $message, $payload, 200);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'AdminLoginController@resendOtp');
         }

@@ -222,10 +222,7 @@ final class ListingFilterRules
     }
 
     /**
-     * Normalise list query params sent as empty strings, literal "null", or duplicated in a GET body.
-     *
-     * Laravel only reads the query string for GET requests, so clients that send filters in a
-     * multipart/form body need those values merged when the query placeholder is blank.
+     * Normalise list query params sent as empty strings or literal "null".
      */
     public static function prepareListingRequest(Request|FormRequest $request): void
     {

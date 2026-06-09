@@ -460,11 +460,12 @@ class AuthService
         return $payload;
     }
 
-    public function resendCustomerLoginOtp(string $challengeToken, Request $request): array
+    public function resendCustomerLoginOtp(string $challengeToken, ?OtpChannelEnum $channel, Request $request): array
     {
-        $payload = $this->otpService->resendLoginOtp($challengeToken);
+        $payload = $this->otpService->resendLoginOtp($challengeToken, $channel);
         GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, null, [
             'purpose' => 'LOGIN',
+            'otp_channel' => $payload['otp_channel'] ?? $channel?->value,
             'resend' => true,
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
         ], 'Customer login OTP was resent.', null, null, ModuleEnums::authentication, 200);
@@ -474,11 +475,12 @@ class AuthService
         );
     }
 
-    public function resendAdminLoginOtp(string $challengeToken, Request $request): array
+    public function resendAdminLoginOtp(string $challengeToken, ?OtpChannelEnum $channel, Request $request): array
     {
-        $payload = $this->otpService->resendLoginOtp($challengeToken);
+        $payload = $this->otpService->resendLoginOtp($challengeToken, $channel);
         GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_SENT, $request, null, [
             'purpose' => 'LOGIN',
+            'otp_channel' => $payload['otp_channel'] ?? $channel?->value,
             'resend' => true,
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
         ], 'Admin login OTP was resent.', null, null, ModuleEnums::authentication, 200);

@@ -203,14 +203,57 @@ final class EmailVerificationResendTest extends TestCase
         $this->assertNotNull($challenge->fresh()->used_at);
     }
 
-    private function issueTokenForUser(User $user, OtpPurposeEnum $purpose, int $ttlSeconds): string
+    public function test_login_resend_honours_requested_otp_channel(): void
     {
+        Mail::fake();
+
+        $user = User::factory()->create([
+            'phone_number' => '8012345678',
+            'country_code' => '+234',
+        ]);
+        $token = $this->issueTokenForUser($user, OtpPurposeEnum::LOGIN, ttlSeconds: 300, channel: OtpChannelEnum::EMAIL);
+
+        $this->travel(315)->seconds();
+
+        $result = $this->otpService->resendLoginOtp($token, OtpChannelEnum::SMS);
+
+        $this->assertSame(OtpChannelEnum::SMS->value, $result['otp_channel']);
+        $this->assertFalse($result['cooldown_active']);
+
+        $this->assertDatabaseHas('auth_challenges', [
+            'subject_id' => $user->uuid,
+            'purpose' => OtpPurposeEnum::LOGIN->value,
+            'channel' => OtpChannelEnum::SMS->value,
+            'used_at' => null,
+        ]);
+    }
+
+    public function test_login_resend_without_channel_reuses_challenge_channel_from_token(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->create();
+        $token = $this->issueTokenForUser($user, OtpPurposeEnum::LOGIN, ttlSeconds: 300, channel: OtpChannelEnum::EMAIL);
+
+        $this->travel(315)->seconds();
+
+        $result = $this->otpService->resendLoginOtp($token);
+
+        $this->assertSame(OtpChannelEnum::EMAIL->value, $result['otp_channel']);
+    }
+
+    private function issueTokenForUser(
+        User $user,
+        OtpPurposeEnum $purpose,
+        int $ttlSeconds,
+        OtpChannelEnum $channel = OtpChannelEnum::EMAIL,
+    ): string {
         $challenge = AuthChallenge::create([
             'uuid' => (string) Str::uuid(),
             'subject_type' => UserTypeEnum::CUSTOMER->value,
             'subject_id' => (string) $user->uuid,
             'purpose' => $purpose,
-            'channel' => OtpChannelEnum::EMAIL->value,
+            'channel' => $channel->value,
             'code_hash' => Hash::make('123456'),
             'expires_at' => now()->addSeconds($ttlSeconds),
         ]);
