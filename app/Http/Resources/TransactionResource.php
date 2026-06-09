@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
+use App\Models\GivingIdentity;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
 use App\Services\Bank\BankAccountRegistry;
@@ -40,9 +41,16 @@ class TransactionResource extends JsonResource
             'paid_at' => $this->paid_at,
             // 'created_at' => $this->created_at,
             // 'updated_at' => $this->updated_at,
-            'user_uuid' => $this->user_uuid ?? ($reconciliationDraft['user_uuid'] ?? null),
+            'user_uuid' => $this->user_uuid ?? $this->givingIdentity?->user_uuid ?? ($reconciliationDraft['user_uuid'] ?? null),
+            'giving_identity_uuid' => $this->giving_identity_uuid ?? ($reconciliationDraft['giving_identity_uuid'] ?? $reconciliationDraft['user_identity'] ?? null),
+            'user' => $this->resolveLinkedUser(),
+            'giving_identity' => $this->resolveGivingIdentityPayload(),
             'donor_name' => $this->resolveDonorName(),
-            'donor_email' => $this->donor_email ?? $this->donor?->email ?? ($reconciliationDraft['donor_email'] ?? null),
+            'donor_email' => $this->donor_email
+                ?? $this->donor?->email
+                ?? $this->givingIdentity?->user?->email
+                ?? $this->givingIdentity?->email_lower
+                ?? ($reconciliationDraft['donor_email'] ?? null),
             'donor_phone' => $this->donor_phone ?? $this->donor?->phone_number ?? ($reconciliationDraft['donor_phone'] ?? null),
             'donor_type' => $donorType?->slug ?? ($reconciliationDraft['donor_type'] ?? null),
             'donor_type_uuid' => $this->donor_type_uuid ?? ($reconciliationDraft['donor_type_uuid'] ?? null),
@@ -185,6 +193,55 @@ class TransactionResource extends JsonResource
         return $links;
     }
 
+    /**
+     * @return array{user_uuid: string, donor_name: string|null}|null
+     */
+    private function resolveLinkedUser(): ?array
+    {
+        $userUuid = $this->user_uuid
+            ?? $this->givingIdentity?->user_uuid
+            ?? $this->donor?->uuid;
+
+        if ($userUuid === null || $userUuid === '') {
+            return null;
+        }
+
+        return [
+            'user_uuid' => $userUuid,
+            'donor_name' => $this->resolveDonorName(),
+        ];
+    }
+
+    /**
+     * @return array{uuid: string, name: string|null, donor_name: string|null}|null
+     */
+    private function resolveGivingIdentityPayload(): ?array
+    {
+        $identity = $this->givingIdentity;
+        if (! $identity instanceof GivingIdentity) {
+            return null;
+        }
+
+        $donorName = $this->donorNameFromGivingIdentity($identity);
+
+        return [
+            'uuid' => $identity->uuid,
+            'name' => $donorName,
+            'donor_name' => $donorName,
+        ];
+    }
+
+    private function donorNameFromGivingIdentity(GivingIdentity $identity): ?string
+    {
+        if (filled($identity->organization_name)) {
+            return trim((string) $identity->organization_name);
+        }
+
+        $name = trim(trim((string) ($identity->firstname ?? '')).' '.trim((string) ($identity->lastname ?? '')));
+
+        return $name !== '' ? $name : null;
+    }
+
     private function resolveDonorName(): ?string
     {
         if ((bool) $this->is_anonymous) {
@@ -198,6 +255,13 @@ class TransactionResource extends JsonResource
             ])));
             if ($name !== '') {
                 return $name;
+            }
+        }
+
+        if ($this->givingIdentity instanceof GivingIdentity) {
+            $identityName = $this->donorNameFromGivingIdentity($this->givingIdentity);
+            if ($identityName !== null) {
+                return $identityName;
             }
         }
 
