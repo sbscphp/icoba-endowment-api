@@ -136,5 +136,40 @@ trait ValidatesGuestDonorProfileFields
                 );
             }
         });
+
+        $this->appendNewDonorUniquenessValidation($validator);
+    }
+
+    protected function appendNewDonorUniquenessValidation(Validator $validator): void
+    {
+        if ($this->filled('user_uuid')) {
+            return;
+        }
+
+        $validator->after(function (Validator $validator): void {
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
+
+            if (! $this->filled('donor_type') && ! $this->filled('donor_type_uuid')) {
+                return;
+            }
+
+            $email = strtolower(trim((string) $this->input('donor_email', '')));
+            if ($email !== '' && \App\Models\User::query()->where('email', $email)->exists()) {
+                $validator->errors()->add(
+                    'donor_email',
+                    'A donor with this email already exists. Please choose an existing donor instead.',
+                );
+            }
+
+            $phoneNumber = trim((string) $this->input('donor_phone', ''));
+            if ($phoneNumber !== '' && app(PhoneNumberService::class)->isRegistered($phoneNumber)) {
+                $validator->errors()->add(
+                    'donor_phone',
+                    'A donor with this phone number already exists. Please choose an existing donor instead.',
+                );
+            }
+        });
     }
 }

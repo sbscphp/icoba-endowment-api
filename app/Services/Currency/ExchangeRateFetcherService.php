@@ -78,7 +78,26 @@ final class ExchangeRateFetcherService
             );
         }
 
-        $ngnRate = (float) ($response->json('rates.NGN') ?? 0);
+        $payload = $response->json();
+        if (! is_array($payload)) {
+            throw new RuntimeException('Exchange rate API returned an invalid response for '.$currency->value.'.');
+        }
+
+        $result = $payload['result'] ?? null;
+        if (is_string($result) && $result !== 'success') {
+            $errorType = (string) ($payload['error-type'] ?? $payload['error_type'] ?? 'unknown');
+
+            throw new RuntimeException(
+                'Exchange rate API returned error for '.$currency->value.': '.$errorType
+            );
+        }
+
+        $rates = $payload['rates'] ?? $payload['conversion_rates'] ?? null;
+        if (! is_array($rates)) {
+            throw new RuntimeException('Exchange rate API response is missing rates for '.$currency->value.'.');
+        }
+
+        $ngnRate = (float) ($rates['NGN'] ?? 0);
 
         if ($ngnRate <= 0) {
             throw new RuntimeException('Exchange rate API response is missing NGN rate for '.$currency->value.'.');

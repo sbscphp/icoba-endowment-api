@@ -113,6 +113,8 @@ class CreateReconciliationQueueRequest extends ApiFormRequest
 
         if (! $this->filled('user_uuid') && ($this->filled('donor_type') || $this->filled('donor_type_uuid'))) {
             $this->appendGuestDonorProfileValidation($validator);
+        } elseif (! $this->filled('user_uuid') && $this->filled('donor_email')) {
+            $this->appendNewDonorUniquenessValidation($validator);
         }
     }
 

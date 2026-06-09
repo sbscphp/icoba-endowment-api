@@ -723,7 +723,7 @@ class CampaignService
             'modelField' => 'campaign_id',
             'prefix' => 'ICB-',
             'idLength' => 4,
-            'idType' => 'numalpha',
+            'idType' => 'numalpha_upper',
         ]);
 
         if (is_array($result) && isset($result['error'])) {

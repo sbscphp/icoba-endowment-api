@@ -16,19 +16,25 @@ class ExchangeRateFetcherServiceTest extends TestCase
 
     public function test_fetch_and_store_persists_usd_gbp_and_eur_rates_for_today(): void
     {
+        config(['endowment.exchange_rate.tier' => 'free']);
+
         Http::fake([
-            'https://open.er-api.com/v6/latest/USD' => Http::response([
-                'base_code' => 'USD',
-                'rates' => ['NGN' => 1600.0],
-            ]),
-            'https://open.er-api.com/v6/latest/GBP' => Http::response([
-                'base_code' => 'GBP',
-                'rates' => ['NGN' => 1823.92],
-            ]),
-            'https://open.er-api.com/v6/latest/EUR' => Http::response([
-                'base_code' => 'EUR',
-                'rates' => ['NGN' => 1577.92],
-            ]),
+            'https://open.er-api.com/v6/latest/*' => Http::sequence()
+                ->push([
+                    'result' => 'success',
+                    'base_code' => 'USD',
+                    'rates' => ['USD' => 1, 'NGN' => 1600.0],
+                ])
+                ->push([
+                    'result' => 'success',
+                    'base_code' => 'GBP',
+                    'rates' => ['GBP' => 1, 'NGN' => 1823.92],
+                ])
+                ->push([
+                    'result' => 'success',
+                    'base_code' => 'EUR',
+                    'rates' => ['EUR' => 1, 'NGN' => 1577.92],
+                ]),
         ]);
 
         Carbon::setTestNow('2026-05-30 10:00:00');
@@ -42,9 +48,12 @@ class ExchangeRateFetcherServiceTest extends TestCase
 
         $this->assertDatabaseHas('exchange_rates', [
             'currency' => 'USD',
-            'effective_date' => '2026-05-30',
             'source' => 'open.er-api.com',
         ]);
+        $this->assertSame(
+            '2026-05-30',
+            ExchangeRate::query()->where('currency', 'USD')->value('effective_date')?->toDateString()
+        );
         $this->assertDatabaseMissing('exchange_rates', [
             'currency' => 'GHS',
         ]);
@@ -62,8 +71,9 @@ class ExchangeRateFetcherServiceTest extends TestCase
 
         Http::fake([
             'https://v6.exchangerate-api.com/v6/test-api-key/latest/*' => Http::response([
+                'result' => 'success',
                 'base_code' => 'USD',
-                'rates' => ['NGN' => 1650.0],
+                'conversion_rates' => ['USD' => 1, 'NGN' => 1650.0],
             ]),
         ]);
 
@@ -95,8 +105,9 @@ class ExchangeRateFetcherServiceTest extends TestCase
 
         Http::fake([
             'https://v6.exchangerate-api.com/v6/latest/*' => Http::response([
+                'result' => 'success',
                 'base_code' => 'USD',
-                'rates' => ['NGN' => 1650.0],
+                'conversion_rates' => ['USD' => 1, 'NGN' => 1650.0],
             ]),
         ]);
 
@@ -113,6 +124,27 @@ class ExchangeRateFetcherServiceTest extends TestCase
         });
 
         Carbon::setTestNow();
+    }
+
+    public function test_paid_tier_surfaces_api_error_type(): void
+    {
+        config([
+            'endowment.exchange_rate.tier' => 'paid',
+            'endowment.exchange_rate.api_key' => 'invalid-key',
+            'endowment.exchange_rate.paid_auth' => 'url',
+        ]);
+
+        Http::fake([
+            'https://v6.exchangerate-api.com/v6/invalid-key/latest/*' => Http::response([
+                'result' => 'error',
+                'error-type' => 'invalid-key',
+            ]),
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('invalid-key');
+
+        (new ExchangeRateFetcherService)->fetchAndStore();
     }
 
     public function test_should_fetch_respects_cache_until_interval_expires(): void
