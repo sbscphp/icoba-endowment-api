@@ -42,6 +42,9 @@ class TransactionResource extends JsonResource
             // 'created_at' => $this->created_at,
             // 'updated_at' => $this->updated_at,
             'user_uuid' => $this->user_uuid ?? $this->givingIdentity?->user_uuid ?? ($reconciliationDraft['user_uuid'] ?? null),
+            'user_identity' => $this->giving_identity_uuid
+                ?? $this->givingIdentity?->uuid
+                ?? ($reconciliationDraft['user_identity'] ?? $reconciliationDraft['giving_identity_uuid'] ?? null),
             'giving_identity_uuid' => $this->giving_identity_uuid ?? ($reconciliationDraft['giving_identity_uuid'] ?? $reconciliationDraft['user_identity'] ?? null),
             'user' => $this->resolveLinkedUser(),
             'giving_identity' => $this->resolveGivingIdentityPayload(),

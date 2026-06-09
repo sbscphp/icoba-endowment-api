@@ -14,6 +14,8 @@ class CompleteReconciliationRequest extends ApiFormRequest
 
     protected function prepareForValidation(): void
     {
+        $this->prepareReconciliationUserIdentityForValidation();
+
         if (! $this->filled('user_uuid') && ! $this->filled('user_identity')) {
             $this->prepareGuestDonorProfileForValidation();
         }
@@ -63,6 +65,8 @@ class CompleteReconciliationRequest extends ApiFormRequest
             'donor_email.prohibited' => 'Provide either user_uuid or donor profile fields, not both.',
             'user_identity.prohibited' => 'Provide either user_identity, user_uuid, or donor profile fields, not more than one.',
             'user_identity.exists' => 'Selected giving identity does not exist.',
+            'user_identity.uuid' => 'user_identity must be a valid giving identity UUID.',
+            'user_uuid.exists' => 'Selected donor account does not exist. Use user_identity from donor search instead.',
             'user_uuid.prohibited' => 'Provide either user_identity or user_uuid, not both.',
         ]);
     }

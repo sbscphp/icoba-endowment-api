@@ -1161,6 +1161,9 @@ class DonationReconciliationService
     private function expandUserIdentityPayload(array $payload): array
     {
         $identityUuid = isset($payload['user_identity']) ? trim((string) $payload['user_identity']) : '';
+        if ($identityUuid === '' && isset($payload['giving_identity_uuid'])) {
+            $identityUuid = trim((string) $payload['giving_identity_uuid']);
+        }
         if ($identityUuid === '') {
             return $payload;
         }
