@@ -37,6 +37,7 @@ class ReconciliationQueueResource extends JsonResource
             'reconciliation_status' => $this->resolveReconciliationStatus(),
             'application_type' => $this->application_type instanceof \BackedEnum ? $this->application_type->value : $this->application_type,
             'user_uuid' => $this->user_uuid ?? $this->givingIdentity?->user_uuid,
+            'user_identity' => $this->giving_identity_uuid ?? $this->givingIdentity?->uuid,
             'giving_identity_uuid' => $this->giving_identity_uuid,
             'user' => $this->resolveLinkedUser(),
             'giving_identity' => $this->resolveGivingIdentityPayload(),
