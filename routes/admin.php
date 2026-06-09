@@ -255,6 +255,8 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:reconciliation.read']);
             Route::get('donors/search', [ReconciliationController::class, 'donorSearch'])
                 ->middleware(['permission:reconciliation.read']);
+            Route::get('pledges/search', [ReconciliationController::class, 'pledgeSearch'])
+                ->middleware(['permission:reconciliation.read']);
             Route::get('bank-accounts', [ReconciliationController::class, 'bankAccounts'])
                 ->middleware(['permission:reconciliation.read']);
             Route::get('queue/{uuid}/tier-preview', [ReconciliationController::class, 'tierPreview'])

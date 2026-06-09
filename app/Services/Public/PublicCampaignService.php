@@ -44,10 +44,10 @@ class PublicCampaignService
             ->get(['uuid', 'name']);
     }
 
-    public function find(string $uuid): Campaign
+    public function find(string $uuid, bool $forAuthenticatedCustomer = false): Campaign
     {
         $query = Campaign::query()->where('uuid', $uuid);
-        $this->applyPublicVisibilityConstraints($query);
+        $this->applyPublicVisibilityConstraints($query, $forAuthenticatedCustomer);
         $this->applyFinancialAggregates($query);
 
         return $query->firstOrFail();
@@ -56,10 +56,13 @@ class PublicCampaignService
     /**
      * @param  Builder<Campaign>  $query
      */
-    private function applyPublicVisibilityConstraints(Builder $query): void
+    private function applyPublicVisibilityConstraints(Builder $query, bool $forAuthenticatedCustomer = false): void
     {
-        $query->where('allow_public_donation', true)
-            ->where('status', '!=', CampaignStatus::DRAFT);
+        if (! $forAuthenticatedCustomer) {
+            $query->where('allow_public_donation', true);
+        }
+
+        $query->where('status', '!=', CampaignStatus::DRAFT);
     }
 
     /**
@@ -69,7 +72,8 @@ class PublicCampaignService
     private function baseQuery(array $filters): Builder
     {
         $query = Campaign::query();
-        $this->applyPublicVisibilityConstraints($query);
+        $forAuthenticatedCustomer = (bool) ($filters['for_authenticated_customer'] ?? false);
+        $this->applyPublicVisibilityConstraints($query, $forAuthenticatedCustomer);
 
         $filter = PublicCampaignVisibilityFilter::tryFrom((string) ($filters['filter'] ?? ''))
             ?? PublicCampaignVisibilityFilter::ALL;

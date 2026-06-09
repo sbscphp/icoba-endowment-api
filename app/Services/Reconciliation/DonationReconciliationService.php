@@ -5,6 +5,7 @@ namespace App\Services\Reconciliation;
 use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Enums\GivingIdentitySource;
 use App\Enums\PaymentGateway;
+use App\Enums\PledgeStatus;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
 use App\Exceptions\ApiException;
@@ -16,8 +17,11 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Bank\BankAccountRegistry;
 use App\Services\Donation\BankTransferReferenceService;
+use App\Services\Donation\CampaignAnonymousDonationValidator;
 use App\Services\Donation\DonorCumulativeTotalService;
 use App\Services\GivingIdentity\GivingIdentityResolver;
+use App\Services\Pledge\PledgeBalanceService;
+use App\Services\Pledge\PledgeScheduleService;
 use App\Services\Tier\TierResolutionService;
 use App\Services\Transaction\TransactionFinalizationService;
 use App\Services\Transaction\TransactionNgnSnapshotService;
@@ -42,6 +46,9 @@ class DonationReconciliationService
         private readonly DonorCumulativeTotalService $cumulativeTotal,
         private readonly ReconciliationDonorUserService $reconciliationDonorUser,
         private readonly GivingIdentityResolver $givingIdentityResolver,
+        private readonly PledgeBalanceService $pledgeBalanceService,
+        private readonly PledgeScheduleService $pledgeScheduleService,
+        private readonly CampaignAnonymousDonationValidator $anonymousDonationValidator,
     ) {}
 
     /**
@@ -365,6 +372,9 @@ class DonationReconciliationService
         $pledge = $pledgeUuid !== null
             ? Pledge::query()->where('uuid', $pledgeUuid)->first()
             : null;
+        if ($pledge !== null) {
+            $this->assertPledgeAcceptsReconciliationPayment($pledge, $account['currency'], $amount);
+        }
         $explicitGivingIdentityUuid = isset($payload['giving_identity_uuid']) && trim((string) $payload['giving_identity_uuid']) !== ''
             ? (string) $payload['giving_identity_uuid']
             : null;
@@ -376,6 +386,8 @@ class DonationReconciliationService
         $reconciliationNote = isset($payload['reconciliation_note']) && trim((string) $payload['reconciliation_note']) !== ''
             ? trim((string) $payload['reconciliation_note'])
             : null;
+
+        $this->assertAnonymousDonationAllowed($payload);
 
         $transaction = Transaction::query()->create([
             'transaction_id' => $transactionId,
@@ -677,6 +689,76 @@ class DonationReconciliationService
     }
 
     /**
+     * Active pledges with a remaining balance for the given giving identity.
+     *
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    public function searchPendingPledges(string $userIdentityUuid, ?string $currency = null): \Illuminate\Support\Collection
+    {
+        $identity = GivingIdentity::query()
+            ->where('uuid', trim($userIdentityUuid))
+            ->first(['uuid', 'user_uuid']);
+
+        if ($identity === null) {
+            return collect();
+        }
+
+        $query = Pledge::query()
+            ->with('campaign:uuid,name,campaign_id')
+            ->where('status', PledgeStatus::ACTIVE)
+            ->where(function (Builder $builder) use ($identity): void {
+                $builder->where('giving_identity_uuid', $identity->uuid);
+
+                if ($identity->user_uuid !== null && $identity->user_uuid !== '') {
+                    $builder->orWhere('user_uuid', $identity->user_uuid);
+                }
+            })
+            ->orderByDesc('created_at');
+
+        if ($currency !== null && $currency !== '') {
+            $query->where('currency', strtoupper($currency));
+        }
+
+        return $query
+            ->get()
+            ->map(fn (Pledge $pledge): ?array => $this->mapPendingPledgeSearchResult($pledge))
+            ->filter()
+            ->values();
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function mapPendingPledgeSearchResult(Pledge $pledge): ?array
+    {
+        $remaining = (float) $this->pledgeBalanceService->remainingAmount($pledge);
+        if ($remaining <= 0.00001) {
+            return null;
+        }
+
+        $fulfilled = $this->pledgeBalanceService->fulfilledAmount($pledge);
+
+        return [
+            'pledge_uuid' => $pledge->uuid,
+            'campaign_uuid' => $pledge->campaign_uuid,
+            'campaign' => $pledge->campaign !== null ? [
+                'campaign_uuid' => $pledge->campaign->uuid,
+                'public_campaign_code' => $pledge->campaign->campaign_id,
+                'name' => $pledge->campaign->name,
+            ] : null,
+            'committed_amount' => (string) $pledge->committed_amount,
+            'fulfilled_amount' => $fulfilled,
+            'remaining_amount' => number_format($remaining, 2, '.', ''),
+            'currency' => $pledge->currency,
+            'status' => $pledge->status instanceof \BackedEnum ? $pledge->status->value : $pledge->status,
+            'is_paused' => $this->pledgeScheduleService->isPledgePaused($pledge),
+            'payment_plan_type' => $pledge->payment_plan_type instanceof \BackedEnum
+                ? $pledge->payment_plan_type->value
+                : $pledge->payment_plan_type,
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function mapRegisteredUserSearchResult(User $user): array
@@ -799,6 +881,8 @@ class DonationReconciliationService
         $pledgeUuid = isset($payload['pledge_uuid']) && $payload['pledge_uuid'] !== '' ? (string) $payload['pledge_uuid'] : null;
         $note = isset($payload['reconciliation_note']) && $payload['reconciliation_note'] !== '' ? (string) $payload['reconciliation_note'] : null;
 
+        $this->assertAnonymousDonationAllowed($payload, $transaction);
+
         $user = null;
         if ($userUuid !== null) {
             $user = User::query()->where('uuid', $userUuid)->first();
@@ -815,11 +899,11 @@ class DonationReconciliationService
             if ($pledge === null) {
                 throw ValidationException::withMessages(['pledge_uuid' => ['Pledge not found.']]);
             }
-            if (strtoupper((string) $pledge->currency) !== strtoupper((string) $transaction->currency)) {
-                throw ValidationException::withMessages([
-                    'pledge_uuid' => ['Pledge currency does not match transaction currency.'],
-                ]);
-            }
+            $this->assertPledgeAcceptsReconciliationPayment(
+                $pledge,
+                (string) $transaction->currency,
+                (float) $transaction->amount,
+            );
         }
 
         return [
@@ -934,11 +1018,8 @@ class DonationReconciliationService
             if ($pledge === null) {
                 throw ValidationException::withMessages(['pledge_uuid' => ['Pledge not found.']]);
             }
-            if (strtoupper((string) $pledge->currency) !== strtoupper($currency)) {
-                throw ValidationException::withMessages([
-                    'pledge_uuid' => ['Pledge currency does not match transaction currency.'],
-                ]);
-            }
+            $paymentAmount = isset($payload['amount']) ? (float) $payload['amount'] : null;
+            $this->assertPledgeAcceptsReconciliationPayment($pledge, $currency, $paymentAmount);
             $campaignUuid = $campaignUuid ?? $pledge->campaign_uuid;
         }
 
@@ -949,6 +1030,92 @@ class DonationReconciliationService
         }
 
         return $campaignUuid;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function assertAnonymousDonationAllowed(array $payload, ?Transaction $transaction = null): void
+    {
+        $isAnonymous = array_key_exists('is_anonymous', $payload)
+            ? (bool) $payload['is_anonymous']
+            : ($transaction !== null ? (bool) $transaction->is_anonymous : false);
+
+        if (! $isAnonymous) {
+            return;
+        }
+
+        $campaignUuid = $this->resolveCampaignUuidForAnonymousCheck($payload, $transaction);
+        if ($campaignUuid === null || $campaignUuid === '') {
+            return;
+        }
+
+        $this->anonymousDonationValidator->assertAllowed($campaignUuid, true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function resolveCampaignUuidForAnonymousCheck(array $payload, ?Transaction $transaction = null): ?string
+    {
+        if (isset($payload['campaign_uuid']) && trim((string) $payload['campaign_uuid']) !== '') {
+            return (string) $payload['campaign_uuid'];
+        }
+
+        $pledgeUuid = isset($payload['pledge_uuid']) && trim((string) $payload['pledge_uuid']) !== ''
+            ? (string) $payload['pledge_uuid']
+            : null;
+
+        if ($pledgeUuid !== null) {
+            $fromPledge = Pledge::query()->where('uuid', $pledgeUuid)->value('campaign_uuid');
+
+            return is_string($fromPledge) && $fromPledge !== '' ? $fromPledge : null;
+        }
+
+        if ($transaction === null) {
+            return null;
+        }
+
+        if (filled($transaction->campaign_uuid)) {
+            return (string) $transaction->campaign_uuid;
+        }
+
+        if (filled($transaction->pledge_uuid)) {
+            $fromLinkedPledge = Pledge::query()->where('uuid', $transaction->pledge_uuid)->value('campaign_uuid');
+
+            return is_string($fromLinkedPledge) && $fromLinkedPledge !== '' ? $fromLinkedPledge : null;
+        }
+
+        return null;
+    }
+
+    private function assertPledgeAcceptsReconciliationPayment(
+        Pledge $pledge,
+        string $transactionCurrency,
+        ?float $paymentAmount = null,
+    ): void {
+        if (strtoupper((string) $pledge->currency) !== strtoupper($transactionCurrency)) {
+            throw ValidationException::withMessages([
+                'pledge_uuid' => ['Pledge currency does not match transaction currency.'],
+            ]);
+        }
+
+        if ($paymentAmount === null) {
+            return;
+        }
+
+        try {
+            $this->pledgeScheduleService->assertPaymentAllowed($pledge, $paymentAmount);
+        } catch (ValidationException $exception) {
+            $errors = $exception->errors();
+            if (isset($errors['amount'])) {
+                throw ValidationException::withMessages([
+                    'pledge_uuid' => $errors['amount'],
+                ]);
+            }
+
+            throw $exception;
+        }
     }
 
     private function paidAtFromMetadata(Transaction $transaction): ?Carbon

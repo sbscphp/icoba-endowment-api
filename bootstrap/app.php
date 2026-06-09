@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\ApiException;
+use App\Http\Middleware\AttemptSanctumAuthentication;
 use App\Http\Middleware\EnsureAccessToken;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -48,6 +49,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
             'last.active' => TrackLastActiveAt::class,
+            'auth.attempt' => AttemptSanctumAuthentication::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

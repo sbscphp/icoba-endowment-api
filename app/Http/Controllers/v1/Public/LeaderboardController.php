@@ -6,6 +6,7 @@ use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Public\LeaderboardRequest;
 use App\Http\Requests\Public\TopSetsRequest;
+use App\Models\User;
 use App\Responser\JsonResponser;
 use App\Services\Public\LeaderboardService;
 
@@ -64,7 +65,9 @@ class LeaderboardController extends Controller
     public function fundProgressList(LeaderboardRequest $request)
     {
         try {
-            $payload = $this->leaderboardService->campaignsFundProgressList($request->validated());
+            $payload = $this->leaderboardService->campaignsFundProgressList(
+                $this->filtersWithAuthContext($request->validated(), $request),
+            );
 
             return JsonResponser::send(false, 'Fund progress list retrieved.', $payload);
         } catch (\Throwable $th) {
@@ -75,11 +78,25 @@ class LeaderboardController extends Controller
     public function fundProgress(LeaderboardRequest $request, string $campaignUuid)
     {
         try {
-            $payload = $this->leaderboardService->campaignFundProgress($campaignUuid, $request->validated());
+            $payload = $this->leaderboardService->campaignFundProgress(
+                $campaignUuid,
+                $this->filtersWithAuthContext($request->validated(), $request),
+            );
 
             return JsonResponser::send(false, 'Fund progress retrieved.', $payload);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Public\LeaderboardController@fundProgress');
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    private function filtersWithAuthContext(array $validated, LeaderboardRequest $request): array
+    {
+        $validated['for_authenticated_customer'] = $request->user() instanceof User;
+
+        return $validated;
     }
 }
