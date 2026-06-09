@@ -787,11 +787,11 @@ class CampaignService
 
         $search = trim((string) ($validated['search'] ?? ''));
         if ($search !== '') {
-            $query->where(function (Builder $builder) use ($search): void {
-                $builder->where('name', 'like', '%'.$search.'%')
-                    // ->orWhere('uuid', 'like', '%'.$search.'%')
-                    // ->orWhere('campaign_id', 'like', '%'.$search.'%')
-                    ->orWhere('short_description', 'like', '%'.$search.'%');
+            $like = '%'.strtolower($search).'%';
+            $query->where(function (Builder $builder) use ($like): void {
+                $builder->whereRaw('LOWER(name) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(campaign_id) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(short_description) LIKE ?', [$like]);
             });
         }
 

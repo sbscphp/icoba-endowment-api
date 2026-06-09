@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthService
@@ -506,9 +507,21 @@ class AuthService
             return;
         }
 
-        $client = $this->clientFromTokenName((string) $token->name);
+        $tokenName = (string) $token->name;
+        $client = $this->clientFromTokenName($tokenName);
+        $sessionId = $this->sessionIdFromTokenName($tokenName);
 
-        $user->tokens()->whereIn('name', [$client, $this->refreshTokenName($client)])->delete();
+        $names = $sessionId !== null
+            ? [
+                $this->accessTokenName($client, $sessionId),
+                $this->refreshTokenName($client, $sessionId),
+            ]
+            : [
+                $client,
+                $this->legacyRefreshTokenName($client),
+            ];
+
+        $user->tokens()->whereIn('name', $names)->delete();
     }
 
     /**
@@ -525,13 +538,18 @@ class AuthService
             $this->revokeClientTokens($authenticatable, $client);
         }
 
+        $sessionId = (string) Str::uuid();
         $accessExpiresAt = now()->addMinutes($this->accessTokenMinutes());
         $refreshExpiresAt = now()->addDays($this->refreshTokenDays());
         $refreshAbility = $this->refreshAbilityFor($abilities);
 
-        $accessToken = $authenticatable->createToken($client, $abilities, $accessExpiresAt);
+        $accessToken = $authenticatable->createToken(
+            $this->accessTokenName($client, $sessionId),
+            $abilities,
+            $accessExpiresAt
+        );
         $refreshToken = $authenticatable->createToken(
-            $this->refreshTokenName($client),
+            $this->refreshTokenName($client, $sessionId),
             [$refreshAbility],
             $refreshExpiresAt
         );
@@ -584,7 +602,13 @@ class AuthService
             );
         }
 
-        $authenticatable->tokens()->where('name', $client)->delete();
+        $sessionId = $this->sessionIdFromTokenName((string) $token->name) ?? (string) Str::uuid();
+
+        if ($this->sessionIdFromTokenName((string) $token->name) !== null) {
+            $authenticatable->tokens()
+                ->where('name', $this->accessTokenName($client, $sessionId))
+                ->delete();
+        }
 
         if ($this->refreshTokenRotationEnabled()) {
             $token->delete();
@@ -593,7 +617,11 @@ class AuthService
         $accessExpiresAt = now()->addMinutes($this->accessTokenMinutes());
         $refreshExpiresAt = now()->addDays($this->refreshTokenDays());
 
-        $accessToken = $authenticatable->createToken($client, $accessAbilities, $accessExpiresAt);
+        $accessToken = $authenticatable->createToken(
+            $this->accessTokenName($client, $sessionId),
+            $accessAbilities,
+            $accessExpiresAt
+        );
 
         $payload = [
             'access_token' => $accessToken->plainTextToken,
@@ -604,7 +632,7 @@ class AuthService
 
         if ($this->refreshTokenRotationEnabled()) {
             $newRefreshToken = $authenticatable->createToken(
-                $this->refreshTokenName($client),
+                $this->refreshTokenName($client, $sessionId),
                 [$refreshAbility],
                 $refreshExpiresAt
             );
@@ -631,22 +659,66 @@ class AuthService
 
     private function revokeClientTokens(User|Admin $authenticatable, string $client): void
     {
-        $authenticatable->tokens()->whereIn('name', [
-            $client,
-            $this->refreshTokenName($client),
-        ])->delete();
+        $legacyRefresh = $this->legacyRefreshTokenName($client);
+
+        $authenticatable->tokens()
+            ->where(function ($query) use ($client, $legacyRefresh): void {
+                $query->where('name', $client)
+                    ->orWhere('name', $legacyRefresh)
+                    ->orWhere('name', 'like', $client.':%');
+            })
+            ->delete();
     }
 
-    private function refreshTokenName(string $client): string
+    private function accessTokenName(string $client, string $sessionId): string
+    {
+        return $client.':'.$sessionId;
+    }
+
+    private function refreshTokenName(string $client, ?string $sessionId = null): string
+    {
+        return $sessionId !== null
+            ? $client.':'.$sessionId.':refresh'
+            : $this->legacyRefreshTokenName($client);
+    }
+
+    private function legacyRefreshTokenName(string $client): string
     {
         return $client.':refresh';
     }
 
     private function clientFromTokenName(string $tokenName): string
     {
-        return str_ends_with($tokenName, ':refresh')
-            ? substr($tokenName, 0, -strlen(':refresh'))
-            : $tokenName;
+        if (str_ends_with($tokenName, ':refresh')) {
+            $withoutRefresh = substr($tokenName, 0, -strlen(':refresh'));
+
+            return explode(':', $withoutRefresh, 2)[0];
+        }
+
+        return explode(':', $tokenName, 2)[0];
+    }
+
+    private function sessionIdFromTokenName(string $tokenName): ?string
+    {
+        if (str_ends_with($tokenName, ':refresh')) {
+            $withoutRefresh = substr($tokenName, 0, -strlen(':refresh'));
+            $parts = explode(':', $withoutRefresh, 2);
+
+            return count($parts) === 2 ? $parts[1] : null;
+        }
+
+        $parts = explode(':', $tokenName, 2);
+
+        return count($parts) === 2 ? $parts[1] : null;
+    }
+
+    private function isRefreshTokenName(string $tokenName, string $client): bool
+    {
+        if ($tokenName === $this->legacyRefreshTokenName($client)) {
+            return true;
+        }
+
+        return (bool) preg_match('/^'.preg_quote($client, '/').':.+:refresh$/', $tokenName);
     }
 
     /**
@@ -663,7 +735,7 @@ class AuthService
             return false;
         }
 
-        if ((string) $token->name !== $this->refreshTokenName($client)) {
+        if (! $this->isRefreshTokenName((string) $token->name, $client)) {
             return false;
         }
 
