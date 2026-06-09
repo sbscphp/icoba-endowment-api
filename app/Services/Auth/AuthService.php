@@ -182,7 +182,7 @@ class AuthService
         }
 
         if (! $this->customerRequiresLoginOtp($user)) {
-            $payload = $this->issueToken($user, $client, ['customer']);
+            $payload = $this->issueToken($user, $client, ['customer'], $this->customerInvalidateTokensOnLogin());
             $user->forceFill(['last_login_at' => now()])->save();
             $this->sendLoginSuccessNotification($user, $request, $client, false);
             GeneralHelper::storeAuditLog(
@@ -251,7 +251,7 @@ class AuthService
         }
 
         if (! $this->adminRequiresLoginOtp($admin)) {
-            $payload = $this->issueToken($admin, $client, ['admin']);
+            $payload = $this->issueToken($admin, $client, ['admin'], $this->adminInvalidateTokensOnLogin());
             $admin->forceFill(['last_login_at' => now()])->save();
             $this->sendLoginSuccessNotification($admin, $request, $client, false);
             GeneralHelper::storeAuditLog(
@@ -301,7 +301,7 @@ class AuthService
         }
 
         $payload = $this->withRegistrationStep(
-            $this->issueToken($user, $client, ['customer']),
+            $this->issueToken($user, $client, ['customer'], $this->customerInvalidateTokensOnLogin()),
             CustomerRegistrationStepEnum::COMPLETED
         );
 
@@ -374,7 +374,7 @@ class AuthService
         }
 
         $payload = $this->withRegistrationStep(
-            $this->issueToken($user, $client, ['customer']),
+            $this->issueToken($user, $client, ['customer'], $this->customerInvalidateTokensOnLogin()),
             CustomerRegistrationStepEnum::COMPLETED
         );
         $user->forceFill(['last_login_at' => now()])->save();
@@ -437,7 +437,7 @@ class AuthService
             );
         }
 
-        $payload = $this->issueToken($admin, $client, ['admin']);
+        $payload = $this->issueToken($admin, $client, ['admin'], $this->adminInvalidateTokensOnLogin());
 
         $admin->forceFill(['last_login_at' => now()])->save();
         $this->sendLoginSuccessNotification($admin, $request, $client, true);
@@ -515,9 +515,15 @@ class AuthService
      * @param  array<int, string>  $abilities
      * @return array<string, mixed>
      */
-    private function issueToken(User|Admin $authenticatable, string $client, array $abilities): array
-    {
-        $this->revokeClientTokens($authenticatable, $client);
+    private function issueToken(
+        User|Admin $authenticatable,
+        string $client,
+        array $abilities,
+        bool $revokeExistingTokens = true,
+    ): array {
+        if ($revokeExistingTokens) {
+            $this->revokeClientTokens($authenticatable, $client);
+        }
 
         $accessExpiresAt = now()->addMinutes($this->accessTokenMinutes());
         $refreshExpiresAt = now()->addDays($this->refreshTokenDays());
@@ -711,6 +717,16 @@ class AuthService
     private function refreshTokenRotationEnabled(): bool
     {
         return (bool) config('security.refresh_token_rotation', true);
+    }
+
+    private function adminInvalidateTokensOnLogin(): bool
+    {
+        return (bool) config('security.admin_invalidate_tokens_on_login', true);
+    }
+
+    private function customerInvalidateTokensOnLogin(): bool
+    {
+        return (bool) config('security.customer_invalidate_tokens_on_login', true);
     }
 
     /**

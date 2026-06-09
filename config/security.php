@@ -135,6 +135,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Admin Single Session (token invalidation on login)
+    |--------------------------------------------------------------------------
+    |
+    | When true, a successful admin login revokes any existing access and refresh
+    | tokens for that account on the same client (e.g. web). Use this in production
+    | so only one active admin session exists per email. When false, concurrent
+    | sessions remain valid until they expire or are explicitly logged out.
+    |
+    */
+    'admin_invalidate_tokens_on_login' => filter_var(env('ADMIN_INVALIDATE_TOKENS_ON_LOGIN', true), FILTER_VALIDATE_BOOL),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Customer Single Session (token invalidation on login)
+    |--------------------------------------------------------------------------
+    |
+    | Same behaviour as admin_invalidate_tokens_on_login, but for customer
+    | accounts on the mobile client. When true, a new login signs out other
+    | devices using the same email.
+    |
+    */
+    'customer_invalidate_tokens_on_login' => filter_var(env('CUSTOMER_INVALIDATE_TOKENS_ON_LOGIN', true), FILTER_VALIDATE_BOOL),
+
+    /*
+    |--------------------------------------------------------------------------
     | Activity Tracking
     |--------------------------------------------------------------------------
     |
