@@ -3,20 +3,39 @@
 namespace App\Services\Settings;
 
 use App\Enums\DonorTypeSlug;
+use App\Enums\ModuleEnums;
 use App\Exceptions\ApiException;
 use App\Http\Resources\UserResource;
 use App\Models\Admin;
 use App\Models\GraduationSet;
 use App\Models\User;
+use App\Notifications\GenericDatabaseNotification;
 use App\Support\CustomerProfileUpdateFields;
 use App\Support\PasswordRules;
 use App\Services\GivingIdentity\GivingIdentityLockService;
+use App\Services\Notifications\NotificationDispatchService;
 use Illuminate\Support\Facades\Hash;
 
 class AccountSettingsService
 {
+    /** @var array<string, string> */
+    private const PROFILE_FIELD_LABELS = [
+        'phone_number' => 'Phone number',
+        'country_code' => 'Country code',
+        'firstname' => 'First name',
+        'lastname' => 'Last name',
+        'middlename' => 'Middle name',
+        'alumni_identifier' => 'Alumni identifier',
+        'graduation_set_uuid' => 'Graduation set',
+        'organization_name' => 'Organization name',
+        'rc_number' => 'RC number',
+        'tin' => 'TIN',
+        'corporate_category_uuid' => 'Corporate category',
+    ];
+
     public function __construct(
         private readonly GivingIdentityLockService $givingIdentityLock,
+        private readonly NotificationDispatchService $notificationDispatchService,
     ) {}
     /**
      * @return array<string, mixed>
@@ -71,6 +90,8 @@ class AccountSettingsService
         }
 
         $authenticatable->forceFill($updates)->save();
+
+        $this->sendPasswordChangedNotification($authenticatable);
     }
 
     /**
@@ -78,7 +99,14 @@ class AccountSettingsService
      */
     public function updateAdminProfile(Admin $admin, string $name): array
     {
-        $admin->forceFill(['name' => trim($name)])->save();
+        $previousName = (string) $admin->name;
+        $newName = trim($name);
+
+        $admin->forceFill(['name' => $newName])->save();
+
+        if ($previousName !== $newName) {
+            $this->sendAdminNameChangedNotification($admin, $previousName, $newName);
+        }
 
         return $this->adminProfile($admin->fresh() ?? $admin);
     }
@@ -117,7 +145,12 @@ class AccountSettingsService
         };
 
         if ($updates !== []) {
+            $changes = $this->resolveCustomerProfileChanges($user, $updates);
             $user->forceFill($updates)->save();
+
+            if ($changes !== []) {
+                $this->sendCustomerProfileUpdatedNotification($user, $changes);
+            }
         }
 
         return $this->customerProfile($user->fresh() ?? $user);
@@ -245,6 +278,166 @@ class AccountSettingsService
             ['password' => $password],
             ['password' => ['required', 'string', PasswordRules::make()]]
         )->validate();
+    }
+
+    private function sendAdminNameChangedNotification(Admin $admin, string $previousName, string $newName): void
+    {
+        $this->notificationDispatchService->notifyAdminsByUuids(
+            [$admin->uuid],
+            new GenericDatabaseNotification(
+                module: ModuleEnums::settings->value,
+                event: 'profile_name_updated',
+                title: 'Profile name updated',
+                message: sprintf(
+                    'Your name was changed from "%s" to "%s".',
+                    $previousName,
+                    $newName,
+                ),
+                meta: [
+                    'previous_name' => $previousName,
+                    'new_name' => $newName,
+                    'updated_at' => now()->toIso8601String(),
+                ],
+                actionUrl: null,
+                mailSubject: null,
+                icon: '/icons/profile-updated.png',
+                severity: 'info',
+                tags: ['settings', 'profile'],
+                sendMail: false,
+                sendPush: false,
+            ),
+        );
+    }
+
+    private function sendPasswordChangedNotification(User|Admin $authenticatable): void
+    {
+        $notification = new GenericDatabaseNotification(
+            module: ModuleEnums::settings->value,
+            event: 'password_changed',
+            title: 'Password changed',
+            message: 'Your password was changed successfully. If you did not make this change, contact support immediately.',
+            meta: [
+                'changed_at' => now()->toIso8601String(),
+            ],
+            actionUrl: null,
+            mailSubject: null,
+            icon: '/icons/password-changed.png',
+            severity: 'warning',
+            tags: ['settings', 'security', 'password'],
+            sendMail: false,
+            sendPush: false,
+        );
+
+        if ($authenticatable instanceof Admin) {
+            $this->notificationDispatchService->notifyAdminsByUuids([$authenticatable->uuid], $notification);
+
+            return;
+        }
+
+        $this->notificationDispatchService->notifyUsersByUuids([$authenticatable->uuid], $notification);
+    }
+
+    /**
+     * @param  list<array{field: string, label: string, from: string|null, to: string|null}>  $changes
+     */
+    private function sendCustomerProfileUpdatedNotification(User $user, array $changes): void
+    {
+        $this->notificationDispatchService->notifyUsersByUuids(
+            [$user->uuid],
+            new GenericDatabaseNotification(
+                module: ModuleEnums::settings->value,
+                event: 'profile_updated',
+                title: 'Profile updated',
+                message: $this->buildCustomerProfileUpdatedMessage($changes),
+                meta: [
+                    'changes' => $changes,
+                    'updated_at' => now()->toIso8601String(),
+                ],
+                actionUrl: null,
+                mailSubject: null,
+                icon: '/icons/profile-updated.png',
+                severity: 'info',
+                tags: ['settings', 'profile'],
+                sendMail: false,
+                sendPush: false,
+            ),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $updates
+     * @return list<array{field: string, label: string, from: string|null, to: string|null}>
+     */
+    private function resolveCustomerProfileChanges(User $user, array $updates): array
+    {
+        $changes = [];
+
+        foreach ($updates as $field => $newValue) {
+            $oldValue = $user->getAttribute($field);
+            $displayFrom = $this->formatProfileFieldValue($field, $oldValue);
+            $displayTo = $this->formatProfileFieldValue($field, $newValue);
+
+            if ($displayFrom === $displayTo) {
+                continue;
+            }
+
+            $changes[] = [
+                'field' => $field,
+                'label' => self::PROFILE_FIELD_LABELS[$field] ?? str_replace('_', ' ', ucfirst($field)),
+                'from' => $displayFrom,
+                'to' => $displayTo,
+            ];
+        }
+
+        return $changes;
+    }
+
+    private function formatProfileFieldValue(string $field, mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if ($field === 'graduation_set_uuid') {
+            $setNumber = GraduationSet::query()->where('uuid', $value)->value('set_number');
+
+            return $setNumber !== null ? (string) $setNumber : (string) $value;
+        }
+
+        return (string) $value;
+    }
+
+    /**
+     * @param  list<array{field: string, label: string, from: string|null, to: string|null}>  $changes
+     */
+    private function buildCustomerProfileUpdatedMessage(array $changes): string
+    {
+        if ($changes === []) {
+            return 'Your profile was updated.';
+        }
+
+        if (count($changes) === 1) {
+            $change = $changes[0];
+
+            return sprintf(
+                'Your %s was changed from "%s" to "%s".',
+                strtolower($change['label']),
+                $change['from'] ?? 'empty',
+                $change['to'] ?? 'empty',
+            );
+        }
+
+        $details = array_map(
+            fn (array $change): string => sprintf(
+                '%s changed from "%s" to "%s"',
+                $change['label'],
+                $change['from'] ?? 'empty',
+                $change['to'] ?? 'empty',
+            ),
+            $changes,
+        );
+
+        return 'Your profile was updated: '.implode('; ', $details).'.';
     }
 }
 
