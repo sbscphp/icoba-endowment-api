@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\TransactionStatus;
+use App\Models\GivingIdentity;
 use App\Models\Transaction;
 use App\Services\Bank\BankAccountRegistry;
 use Illuminate\Http\Request;
@@ -35,8 +36,12 @@ class ReconciliationQueueResource extends JsonResource
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
             'reconciliation_status' => $this->resolveReconciliationStatus(),
             'application_type' => $this->application_type instanceof \BackedEnum ? $this->application_type->value : $this->application_type,
+            'user_uuid' => $this->user_uuid ?? $this->givingIdentity?->user_uuid,
+            'giving_identity_uuid' => $this->giving_identity_uuid,
+            'user' => $this->resolveLinkedUser(),
+            'giving_identity' => $this->resolveGivingIdentityPayload(),
             'donor_name' => $this->resolveDonorName(),
-            'donor_email' => $this->donor_email ?? $this->donor?->email,
+            'donor_email' => $this->donor_email ?? $this->donor?->email ?? $this->givingIdentity?->user?->email ?? $this->givingIdentity?->email_lower,
             'campaign' => $this->campaign !== null ? [
                 'campaign_uuid' => $this->campaign->uuid,
                 'name' => $this->campaign->name,
@@ -103,6 +108,62 @@ class ReconciliationQueueResource extends JsonResource
             }
         }
 
+        if ($this->givingIdentity instanceof GivingIdentity) {
+            $identityName = $this->donorNameFromGivingIdentity($this->givingIdentity);
+            if ($identityName !== null) {
+                return $identityName;
+            }
+        }
+
         return $this->donor_name;
+    }
+
+    /**
+     * @return array{user_uuid: string, donor_name: string|null}|null
+     */
+    private function resolveLinkedUser(): ?array
+    {
+        $userUuid = $this->user_uuid
+            ?? $this->givingIdentity?->user_uuid
+            ?? $this->donor?->uuid;
+
+        if ($userUuid === null || $userUuid === '') {
+            return null;
+        }
+
+        return [
+            'user_uuid' => $userUuid,
+            'donor_name' => $this->resolveDonorName(),
+        ];
+    }
+
+    /**
+     * @return array{uuid: string, name: string|null, donor_name: string|null}|null
+     */
+    private function resolveGivingIdentityPayload(): ?array
+    {
+        $identity = $this->givingIdentity;
+        if (! $identity instanceof GivingIdentity) {
+            return null;
+        }
+
+        $donorName = $this->donorNameFromGivingIdentity($identity);
+
+        return [
+            'uuid' => $identity->uuid,
+            'name' => $donorName,
+            'donor_name' => $donorName,
+        ];
+    }
+
+    private function donorNameFromGivingIdentity(GivingIdentity $identity): ?string
+    {
+        if (filled($identity->organization_name)) {
+            return trim((string) $identity->organization_name);
+        }
+
+        $name = trim(trim((string) ($identity->firstname ?? '')).' '.trim((string) ($identity->lastname ?? '')));
+
+        return $name !== '' ? $name : null;
     }
 }

@@ -4,31 +4,39 @@ namespace App\Http\Requests\Admin\Reconciliation;
 
 use App\Http\Requests\ApiFormRequest;
 use App\Http\Requests\Concerns\ValidatesGuestDonorProfileFields;
+use App\Http\Requests\Concerns\ValidatesReconciliationUserIdentity;
 use Illuminate\Contracts\Validation\Validator;
 
 class CompleteReconciliationRequest extends ApiFormRequest
 {
     use ValidatesGuestDonorProfileFields;
+    use ValidatesReconciliationUserIdentity;
 
     protected function prepareForValidation(): void
     {
-        if (! $this->filled('user_uuid')) {
+        if (! $this->filled('user_uuid') && ! $this->filled('user_identity')) {
             $this->prepareGuestDonorProfileForValidation();
         }
     }
 
     public function rules(): array
     {
-        $shared = [
+        $shared = array_merge([
             'user_uuid' => ['nullable', 'uuid', 'exists:users,uuid'],
             'campaign_uuid' => ['nullable', 'uuid', 'exists:campaigns,uuid'],
             'pledge_uuid' => ['nullable', 'uuid', 'exists:pledges,uuid'],
             'reconciliation_note' => ['nullable', 'string', 'max:1000'],
             'is_anonymous' => ['sometimes', 'boolean'],
-        ];
+        ], $this->userIdentityFieldRules());
+
+        if ($this->filled('user_identity')) {
+            return array_merge($shared, $this->prohibitedWithUserIdentityRules());
+        }
 
         if ($this->filled('user_uuid')) {
-            return array_merge($shared, $this->prohibitedDonorProfileRules());
+            return array_merge($shared, $this->prohibitedDonorProfileRules(), [
+                'user_identity' => ['prohibited'],
+            ]);
         }
 
         if ($this->filled('donor_type') || $this->filled('donor_type_uuid')) {
@@ -53,11 +61,16 @@ class CompleteReconciliationRequest extends ApiFormRequest
             'set_number.exists' => 'I couldn\'t find that set. Please double-check the graduation year.',
             'donor_type.prohibited' => 'Provide either user_uuid or donor profile fields, not both.',
             'donor_email.prohibited' => 'Provide either user_uuid or donor profile fields, not both.',
+            'user_identity.prohibited' => 'Provide either user_identity, user_uuid, or donor profile fields, not more than one.',
+            'user_identity.exists' => 'Selected giving identity does not exist.',
+            'user_uuid.prohibited' => 'Provide either user_identity or user_uuid, not both.',
         ]);
     }
 
     public function withValidator(Validator $validator): void
     {
+        $this->appendUserIdentityExclusivityValidation($validator);
+
         $validator->after(function (Validator $validator): void {
             if ($validator->errors()->isNotEmpty()) {
                 return;
@@ -79,11 +92,22 @@ class CompleteReconciliationRequest extends ApiFormRequest
                     'Provide either user_uuid or donor profile fields, not both.',
                 );
             }
+
+            if ($this->filled('user_uuid') && $this->filled('user_identity')) {
+                $validator->errors()->add(
+                    'user_uuid',
+                    'Provide either user_identity or user_uuid, not both.',
+                );
+            }
         });
 
-        if (! $this->filled('user_uuid') && ($this->filled('donor_type') || $this->filled('donor_type_uuid'))) {
+        if (
+            ! $this->filled('user_uuid')
+            && ! $this->filled('user_identity')
+            && ($this->filled('donor_type') || $this->filled('donor_type_uuid'))
+        ) {
             $this->appendGuestDonorProfileValidation($validator);
-        } elseif (! $this->filled('user_uuid') && $this->filled('donor_email')) {
+        } elseif (! $this->filled('user_uuid') && ! $this->filled('user_identity') && $this->filled('donor_email')) {
             $this->appendNewDonorUniquenessValidation($validator);
         }
     }

@@ -10,6 +10,7 @@ use App\Enums\TransactionStatus;
 use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
 use App\Models\DonorType;
+use App\Models\GivingIdentity;
 use App\Models\Pledge;
 use App\Models\Transaction;
 use App\Models\User;
@@ -146,7 +147,7 @@ class DonationReconciliationService
 
         $query = Transaction::query()
             ->where('application_type', TransactionApplicationType::BANK_TRANSFER->value)
-            ->with(['campaign', 'pledge', 'donor', 'reconciledByAdmin']);
+            ->with(['campaign', 'pledge', 'donor', 'givingIdentity.user', 'reconciledByAdmin']);
 
         if ($status === 'reconciled') {
             $query->where('status', TransactionStatus::SUCCESSFUL)
@@ -206,7 +207,17 @@ class DonationReconciliationService
     {
         $tx = Transaction::query()
             ->where('uuid', $uuid)
-            ->with(['campaign', 'pledge', 'donor.graduationSet', 'donor.donorType', 'donorType', 'reconciledByAdmin', 'certificates'])
+            ->with([
+                'campaign',
+                'pledge',
+                'donor.graduationSet',
+                'donor.donorType',
+                'donorType',
+                'givingIdentity.user',
+                'givingIdentity.donorType',
+                'reconciledByAdmin',
+                'certificates',
+            ])
             ->first();
 
         if ($tx === null) {
@@ -279,6 +290,8 @@ class DonationReconciliationService
      */
     private function createManualWithinTransaction(array $payload, string $adminUuid): Transaction
     {
+        $payload = $this->expandUserIdentityPayload($payload);
+
         $amount = (float) $payload['amount'];
         $referenceId = trim((string) $payload['reference_id']);
         $narration = trim((string) $payload['narration']);
@@ -352,8 +365,14 @@ class DonationReconciliationService
         $pledge = $pledgeUuid !== null
             ? Pledge::query()->where('uuid', $pledgeUuid)->first()
             : null;
-        $givingIdentityUuid = $this->resolveGivingIdentityUuid($linkedUser, $pledge);
-        $profileSnapshot = $this->resolveDonorProfileSnapshot($payload, $linkedUser);
+        $explicitGivingIdentityUuid = isset($payload['giving_identity_uuid']) && trim((string) $payload['giving_identity_uuid']) !== ''
+            ? (string) $payload['giving_identity_uuid']
+            : null;
+        $givingIdentityUuid = $this->resolveGivingIdentityUuid($linkedUser, $pledge, $explicitGivingIdentityUuid);
+        $givingIdentity = $explicitGivingIdentityUuid !== null
+            ? GivingIdentity::query()->with('user')->where('uuid', $explicitGivingIdentityUuid)->first()
+            : null;
+        $profileSnapshot = $this->resolveDonorProfileSnapshot($payload, $linkedUser, $givingIdentity);
         $reconciliationNote = isset($payload['reconciliation_note']) && trim((string) $payload['reconciliation_note']) !== ''
             ? trim((string) $payload['reconciliation_note'])
             : null;
@@ -380,11 +399,12 @@ class DonationReconciliationService
             'fcmb_statement_reference' => $referenceId,
             'narration' => $narration,
             'bank_transfer_reference' => $bankTransferReference,
-            'awaiting_bank_verification_at' => $paidAt,
+            'paid_at' => $paidAt,
             'is_anonymous' => array_key_exists('is_anonymous', $payload) ? (bool) $payload['is_anonymous'] : false,
             'metadata' => $metadata,
         ]);
 
+        $linkageNote = $reconciliationNote;
         if ($this->hasReconciliationLinkageInput($payload)) {
             $linkage = $this->resolveReconciliationLinkage($payload, $transaction);
             $this->persistReconciliationLinkage(
@@ -394,19 +414,21 @@ class DonationReconciliationService
                 $linkage['pledge'],
                 $linkage['note'],
                 $linkage['is_anonymous'],
+                $explicitGivingIdentityUuid,
             );
             $transaction = $transaction->refresh();
+            $linkageNote = $linkage['note'] ?? $linkageNote;
+        }
 
-            if ($linkage['campaign_uuid'] !== null || $linkage['pledge'] !== null) {
-                $this->finalizationService->finalizeSuccessful($transaction, [
-                    'reconciled_by_admin_uuid' => $adminUuid,
-                    'reconciliation_note' => $linkage['note'],
-                    'metadata' => [
-                        'reconciliation_completed_at' => now()->toIso8601String(),
-                    ],
-                    'tax_receipt_email_meta_key' => 'bank_transfer_tax_receipt_email_queued',
-                ]);
-            }
+        if ($campaignUuid !== null || $pledgeUuid !== null) {
+            $this->finalizationService->finalizeSuccessful($transaction, [
+                'reconciled_by_admin_uuid' => $adminUuid,
+                'reconciliation_note' => $linkageNote,
+                'metadata' => [
+                    'reconciliation_completed_at' => now()->toIso8601String(),
+                ],
+                'tax_receipt_email_meta_key' => 'bank_transfer_tax_receipt_email_queued',
+            ]);
         }
 
         return $this->findQueueItem($transaction->uuid);
@@ -556,10 +578,15 @@ class DonationReconciliationService
 
         try {
             return DB::transaction(function () use ($transaction, $payload, $adminUuid): Transaction {
+                $payload = $this->expandUserIdentityPayload($payload);
                 $this->persistDraftReconciliationProfile($transaction, $payload);
                 $transaction = $transaction->refresh();
 
                 $linkage = $this->resolveReconciliationLinkage($payload, $transaction);
+                $explicitGivingIdentityUuid = isset($payload['giving_identity_uuid']) && trim((string) $payload['giving_identity_uuid']) !== ''
+                    ? (string) $payload['giving_identity_uuid']
+                    : null;
+
                 $this->persistReconciliationLinkage(
                     $transaction,
                     $linkage['user'],
@@ -567,6 +594,7 @@ class DonationReconciliationService
                     $linkage['pledge'],
                     $linkage['note'],
                     $linkage['is_anonymous'],
+                    $explicitGivingIdentityUuid,
                 );
 
                 $transaction = $transaction->refresh();
@@ -599,8 +627,9 @@ class DonationReconciliationService
         }
 
         $like = '%'.$query.'%';
+        $emailLike = '%'.strtolower($query).'%';
 
-        return User::query()
+        $registeredUsers = User::query()
             ->with('donorType:uuid,slug')
             ->where(function (Builder $b) use ($like): void {
                 $b->where('firstname', 'like', $like)
@@ -611,17 +640,94 @@ class DonationReconciliationService
                     ->orWhere('organization_name', 'like', $like);
             })
             ->limit(15)
-            ->get(['uuid', 'firstname', 'lastname', 'email', 'phone_number', 'alumni_identifier', 'organization_name', 'donor_type_uuid'])
-            ->map(fn (User $user): array => [
-                'uuid' => $user->uuid,
-                'firstname' => $user->firstname,
-                'lastname' => $user->lastname,
-                'organization_name' => $user->organization_name,
-                'email' => $user->email,
-                'phone_number' => $user->phone_number,
-                'alumni_identifier' => $user->alumni_identifier,
-                'donor_type' => $user->donorType?->slug,
-            ]);
+            ->get(['uuid', 'firstname', 'lastname', 'email', 'phone_number', 'alumni_identifier', 'organization_name', 'donor_type_uuid']);
+
+        $results = $registeredUsers
+            ->map(fn (User $user): array => $this->mapRegisteredUserSearchResult($user))
+            ->values();
+
+        $seenIdentityUuids = $results
+            ->pluck('user_identity')
+            ->filter(fn (mixed $value): bool => is_string($value) && $value !== '')
+            ->values()
+            ->all();
+
+        $remaining = max(0, 15 - $results->count());
+        if ($remaining > 0) {
+            $guestIdentities = GivingIdentity::query()
+                ->with('donorType:uuid,slug')
+                ->whereNull('user_uuid')
+                ->when($seenIdentityUuids !== [], fn (Builder $builder) => $builder->whereNotIn('uuid', $seenIdentityUuids))
+                ->where(function (Builder $b) use ($like, $emailLike): void {
+                    $b->where('email_lower', 'like', $emailLike)
+                        ->orWhere('firstname', 'like', $like)
+                        ->orWhere('lastname', 'like', $like)
+                        ->orWhere('organization_name', 'like', $like)
+                        ->orWhere('alumni_identifier', 'like', $like);
+                })
+                ->limit($remaining)
+                ->get();
+
+            $results = $results->concat(
+                $guestIdentities->map(fn (GivingIdentity $identity): array => $this->mapGivingIdentitySearchResult($identity))
+            )->values();
+        }
+
+        return $results->take(15)->values();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function mapRegisteredUserSearchResult(User $user): array
+    {
+        $identity = GivingIdentity::query()
+            ->where('user_uuid', $user->uuid)
+            ->first();
+
+        if ($identity === null) {
+            $identity = $this->givingIdentityResolver->resolveForUser($user, GivingIdentitySource::RECONCILIATION);
+        }
+
+        $donorName = filled($user->organization_name)
+            ? trim((string) $user->organization_name)
+            : trim(trim((string) ($user->firstname ?? '')).' '.trim((string) ($user->lastname ?? '')));
+
+        return [
+            'user_identity' => $identity->uuid,
+            'uuid' => $user->uuid,
+            'user_uuid' => $user->uuid,
+            'donor_name' => $donorName !== '' ? $donorName : null,
+            'firstname' => $user->firstname,
+            'lastname' => $user->lastname,
+            'organization_name' => $user->organization_name,
+            'email' => $user->email,
+            'phone_number' => $user->phone_number,
+            'alumni_identifier' => $user->alumni_identifier,
+            'donor_type' => $user->donorType?->slug,
+            'is_registered' => true,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function mapGivingIdentitySearchResult(GivingIdentity $identity): array
+    {
+        return [
+            'user_identity' => $identity->uuid,
+            'uuid' => null,
+            'user_uuid' => null,
+            'donor_name' => $this->donorNameFromGivingIdentity($identity),
+            'firstname' => $identity->firstname,
+            'lastname' => $identity->lastname,
+            'organization_name' => $identity->organization_name,
+            'email' => $identity->email_lower,
+            'phone_number' => null,
+            'alumni_identifier' => $identity->alumni_identifier,
+            'donor_type' => $identity->donorType?->slug,
+            'is_registered' => false,
+        ];
     }
 
     private function applyCreatedAtRange(Builder $query, Carbon|SupportCarbon|null $start, Carbon|SupportCarbon|null $end): void
@@ -649,6 +755,8 @@ class DonationReconciliationService
     private function hasReconciliationLinkageInput(array $payload): bool
     {
         foreach ([
+            'user_identity',
+            'giving_identity_uuid',
             'user_uuid',
             'donor_type',
             'donor_type_uuid',
@@ -730,8 +838,9 @@ class DonationReconciliationService
         ?Pledge $pledge,
         ?string $note = null,
         ?bool $isAnonymous = null,
+        ?string $explicitGivingIdentityUuid = null,
     ): void {
-        DB::transaction(function () use ($transaction, $user, $campaignUuid, $pledge, $note, $isAnonymous): void {
+        DB::transaction(function () use ($transaction, $user, $campaignUuid, $pledge, $note, $isAnonymous, $explicitGivingIdentityUuid): void {
             /** @var Transaction|null $locked */
             $locked = Transaction::query()
                 ->whereKey($transaction->getKey())
@@ -767,7 +876,7 @@ class DonationReconciliationService
                 }
             }
 
-            $givingIdentityUuid = $this->resolveGivingIdentityUuid($user, $pledge);
+            $givingIdentityUuid = $this->resolveGivingIdentityUuid($user, $pledge, $explicitGivingIdentityUuid);
             if ($givingIdentityUuid !== null) {
                 $locked->giving_identity_uuid = $givingIdentityUuid;
             }
@@ -784,8 +893,12 @@ class DonationReconciliationService
         });
     }
 
-    private function resolveGivingIdentityUuid(?User $user, ?Pledge $pledge): ?string
+    private function resolveGivingIdentityUuid(?User $user, ?Pledge $pledge, ?string $explicitGivingIdentityUuid = null): ?string
     {
+        if ($explicitGivingIdentityUuid !== null && $explicitGivingIdentityUuid !== '') {
+            return $explicitGivingIdentityUuid;
+        }
+
         if ($pledge !== null && filled($pledge->giving_identity_uuid)) {
             return (string) $pledge->giving_identity_uuid;
         }
@@ -870,6 +983,8 @@ class DonationReconciliationService
         $draft = [];
 
         foreach ([
+            'user_identity',
+            'giving_identity_uuid',
             'user_uuid',
             'donor_type',
             'donor_type_uuid',
@@ -914,7 +1029,7 @@ class DonationReconciliationService
      *     donor_type_uuid: ?string,
      * }
      */
-    private function resolveDonorProfileSnapshot(array $payload, ?User $linkedUser): array
+    private function resolveDonorProfileSnapshot(array $payload, ?User $linkedUser, ?GivingIdentity $givingIdentity = null): array
     {
         if ($linkedUser !== null) {
             return [
@@ -923,6 +1038,10 @@ class DonationReconciliationService
                 'donor_name' => trim(($linkedUser->firstname ?? '').' '.($linkedUser->lastname ?? '')) ?: null,
                 'donor_type_uuid' => $linkedUser->donor_type_uuid,
             ];
+        }
+
+        if ($givingIdentity !== null) {
+            return $this->profileSnapshotFromGivingIdentity($givingIdentity);
         }
 
         return [
@@ -958,7 +1077,10 @@ class DonationReconciliationService
                 ->where('uuid', (string) $payload['user_uuid'])
                 ->first(['uuid', 'donor_type_uuid', 'email', 'firstname', 'lastname', 'phone_number'])
             : null;
-        $profileSnapshot = $this->resolveDonorProfileSnapshot($payload, $linkedUser);
+        $givingIdentity = isset($payload['giving_identity_uuid']) && trim((string) $payload['giving_identity_uuid']) !== ''
+            ? GivingIdentity::query()->with('user')->where('uuid', (string) $payload['giving_identity_uuid'])->first()
+            : null;
+        $profileSnapshot = $this->resolveDonorProfileSnapshot($payload, $linkedUser, $givingIdentity);
 
         $updates = [
             'metadata' => $metadata,
@@ -986,6 +1108,10 @@ class DonationReconciliationService
 
         if ($linkedUser !== null) {
             $updates['user_uuid'] = $linkedUser->uuid;
+        }
+
+        if (isset($payload['giving_identity_uuid']) && trim((string) $payload['giving_identity_uuid']) !== '') {
+            $updates['giving_identity_uuid'] = (string) $payload['giving_identity_uuid'];
         }
 
         $transaction->forceFill($updates)->save();
@@ -1028,6 +1154,102 @@ class DonationReconciliationService
     /**
      * @param  array<string, mixed>  $payload
      */
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function expandUserIdentityPayload(array $payload): array
+    {
+        $identityUuid = isset($payload['user_identity']) ? trim((string) $payload['user_identity']) : '';
+        if ($identityUuid === '') {
+            return $payload;
+        }
+
+        $identity = GivingIdentity::query()
+            ->with(['user', 'donorType'])
+            ->where('uuid', $identityUuid)
+            ->first();
+
+        if ($identity === null) {
+            throw ValidationException::withMessages([
+                'user_identity' => ['Selected giving identity does not exist.'],
+            ]);
+        }
+
+        $payload['giving_identity_uuid'] = $identity->uuid;
+        $snapshot = $this->profileSnapshotFromGivingIdentity($identity);
+
+        if ($identity->user_uuid !== null && $identity->user_uuid !== '') {
+            $payload['user_uuid'] = (string) $identity->user_uuid;
+        }
+
+        $payload['donor_email'] = $snapshot['donor_email'];
+        $payload['donor_phone'] = $snapshot['donor_phone'];
+        $payload['donor_type_uuid'] = $snapshot['donor_type_uuid'];
+
+        if ($snapshot['donor_name'] !== null) {
+            if (filled($identity->organization_name)) {
+                $payload['organization_name'] = $identity->organization_name;
+            } else {
+                $payload['firstname'] = $identity->firstname;
+                $payload['lastname'] = $identity->lastname;
+            }
+        }
+
+        if ($identity->alumni_identifier !== null && $identity->alumni_identifier !== '') {
+            $payload['alumni_identifier'] = $identity->alumni_identifier;
+        }
+
+        if ($identity->corporate_category_uuid !== null && $identity->corporate_category_uuid !== '') {
+            $payload['corporate_category_uuid'] = $identity->corporate_category_uuid;
+        }
+
+        if ($identity->rc_number !== null && $identity->rc_number !== '') {
+            $payload['rc_number'] = $identity->rc_number;
+        }
+
+        if ($identity->tin !== null && $identity->tin !== '') {
+            $payload['tin'] = $identity->tin;
+        }
+
+        if ($identity->donorType?->slug !== null) {
+            $payload['donor_type'] = $identity->donorType->slug;
+        }
+
+        return $payload;
+    }
+
+    /**
+     * @return array{
+     *     donor_email: ?string,
+     *     donor_phone: ?string,
+     *     donor_name: ?string,
+     *     donor_type_uuid: ?string,
+     * }
+     */
+    private function profileSnapshotFromGivingIdentity(GivingIdentity $identity): array
+    {
+        $identity->loadMissing('user');
+
+        return [
+            'donor_email' => $identity->user?->email ?? $identity->email_lower,
+            'donor_phone' => $identity->user?->phone_number,
+            'donor_name' => $this->donorNameFromGivingIdentity($identity),
+            'donor_type_uuid' => $identity->donor_type_uuid,
+        ];
+    }
+
+    private function donorNameFromGivingIdentity(GivingIdentity $identity): ?string
+    {
+        if (filled($identity->organization_name)) {
+            return trim((string) $identity->organization_name);
+        }
+
+        $name = trim(trim((string) ($identity->firstname ?? '')).' '.trim((string) ($identity->lastname ?? '')));
+
+        return $name !== '' ? $name : null;
+    }
+
     private function resolveDonorTypeUuidFromPayload(array $payload): ?string
     {
         if (isset($payload['donor_type_uuid']) && trim((string) $payload['donor_type_uuid']) !== '') {
