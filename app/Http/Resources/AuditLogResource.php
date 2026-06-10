@@ -37,7 +37,7 @@ class AuditLogResource extends JsonResource
                 $this->user_type === UserTypeEnum::CUSTOMER
                     && $this->relationLoaded('customerUser')
                     && $this->customerUser !== null,
-                fn (): array => ['user' => UserResource::make($this->customerUser)]
+                fn (): array => ['user' => $this->customerSummary()]
             ),
             $this->mergeWhen(
                 $this->user_type === UserTypeEnum::ADMIN
@@ -61,5 +61,20 @@ class AuditLogResource extends JsonResource
         }
 
         return $code >= 200 && $code < 300 ? 'success' : 'error';
+    }
+
+    /**
+     * @return array{uuid: string, name: string|null, email: string|null}
+     */
+    private function customerSummary(): array
+    {
+        $user = $this->customerUser;
+        $name = trim(implode(' ', array_filter([$user->firstname ?? '', $user->lastname ?? ''])));
+
+        return [
+            'uuid' => $user->uuid,
+            'name' => $name !== '' ? $name : null,
+            'email' => $user->email,
+        ];
     }
 }

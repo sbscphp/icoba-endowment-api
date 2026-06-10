@@ -175,7 +175,28 @@ class ReportService
     {
         $data = $this->transformRow($type, $row);
 
+        foreach ($data as $key => $value) {
+            $data[$key] = $this->formatExportField($key, $value);
+        }
+
         return array_values($data);
+    }
+
+    private function formatExportField(string $key, mixed $value): mixed
+    {
+        if (in_array($key, ['active', 'is_active'], true) && is_bool($value)) {
+            return $value ? 'Active' : 'Inactive';
+        }
+
+        if ($key === 'is_anonymous' && is_bool($value)) {
+            return $value ? 'Yes' : 'No';
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d H:i:s');
+        }
+
+        return $value;
     }
 
     /**
