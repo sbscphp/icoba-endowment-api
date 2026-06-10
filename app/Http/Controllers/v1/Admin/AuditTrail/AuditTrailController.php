@@ -80,7 +80,6 @@ class AuditTrailController extends Controller
                 'Description',
                 'IP address',
                 'HTTP status',
-                'User agent',
             ]);
 
             foreach ($collection as $log) {
@@ -115,7 +114,6 @@ class AuditTrailController extends Controller
             'Description',
             'IP',
             'HTTP',
-            'User agent',
         ];
 
         $rows = $collection->map(fn (AuditLog $log): array => [
@@ -129,7 +127,6 @@ class AuditTrailController extends Controller
             $this->truncatePdfCell((string) ($log->description ?? '')),
             (string) ($log->ip_address ?? ''),
             $log->http_status !== null ? (string) $log->http_status : '',
-            $this->truncatePdfCell((string) ($log->user_agent ?? ''), 80),
         ]);
 
         return $this->pdfReportHelper->download(
@@ -166,7 +163,6 @@ class AuditTrailController extends Controller
             $log->description ?? '',
             $log->ip_address ?? '',
             $log->http_status,
-            $log->user_agent ?? '',
         ];
     }
 

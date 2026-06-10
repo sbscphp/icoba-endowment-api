@@ -36,8 +36,8 @@ class TransactionResource extends JsonResource
         return [
             'transaction_uuid' => $this->uuid,
             'transaction_id' => $this->transaction_id,
-            'transaction_date' => $this->paid_at?->toDateString() ?? $this->created_at?->toDateString(),
-            'transaction_time' => $this->paid_at?->toTimeString() ?? $this->created_at?->toTimeString(),
+            'transaction_date' => ($this->paid_at ?? $this->created_at)?->copy()->utc()->toDateString(),
+            'transaction_time' => ($this->paid_at ?? $this->created_at)?->copy()->utc()->format('H:i:s\Z'),
             'paid_at' => $this->paid_at,
             // 'created_at' => $this->created_at,
             // 'updated_at' => $this->updated_at,

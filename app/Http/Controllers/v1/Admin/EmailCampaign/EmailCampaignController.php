@@ -204,6 +204,32 @@ class EmailCampaignController extends Controller
     }
 
     /**
+     * @return list<string>
+     */
+    private function exportHeadings(): array
+    {
+        return ['UUID', 'Title', 'Campaign', 'Audience', 'Status', 'Active', 'Sent At'];
+    }
+
+    /**
+     * @return list<int|string|null>
+     */
+    private function exportRow(CampaignEmail $row): array
+    {
+        $row->loadMissing('campaign:uuid,name');
+
+        return [
+            $row->uuid,
+            $row->title,
+            $row->campaign?->name ?? '',
+            implode(', ', is_array($row->recipient_audience) ? $row->recipient_audience : []),
+            $row->status->value,
+            $row->is_active ? 'Yes' : 'No',
+            $row->sent_at?->format('Y-m-d H:i:s') ?? '',
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $listing
      */
     private function respondListCsv(array $listing): StreamedResponse
@@ -217,19 +243,10 @@ class EmailCampaignController extends Controller
                 return;
             }
             fwrite($out, "\xEF\xBB\xBF");
-            fputcsv($out, ['UUID', 'Title', 'Campaign', 'Audience', 'Status', 'Active', 'Sent at']);
+            fputcsv($out, $this->exportHeadings());
             foreach ($collection as $row) {
                 /** @var CampaignEmail $row */
-                $row->loadMissing('campaign:uuid,name');
-                fputcsv($out, [
-                    $row->uuid,
-                    $row->title,
-                    $row->campaign?->name ?? '',
-                    implode(', ', is_array($row->recipient_audience) ? $row->recipient_audience : []),
-                    $row->status->value,
-                    $row->is_active ? '1' : '0',
-                    $row->sent_at?->toIso8601String() ?? '',
-                ]);
+                fputcsv($out, $this->exportRow($row));
             }
             fclose($out);
         }, $filename, [
@@ -244,24 +261,15 @@ class EmailCampaignController extends Controller
     private function respondListPdf(array $listing)
     {
         [$collection, $truncated] = $this->bulkEmailService->exportCollection($listing);
-        $collection->loadMissing('campaign:uuid,name');
         $filename = 'email-campaigns-'.now()->format('Y-m-d-His').'.pdf';
         $periodStart = ! empty($listing['start_date']) ? (string) $listing['start_date'] : 'All dates';
         $periodEnd = ! empty($listing['end_date']) ? (string) $listing['end_date'] : 'All dates';
 
-        $headings = ['UUID', 'Title', 'Campaign', 'Audience', 'Status', 'Active'];
-        $rows = $collection->map(fn (CampaignEmail $row): array => [
-            $row->uuid,
-            $row->title,
-            $row->campaign?->name ?? '',
-            implode(', ', is_array($row->recipient_audience) ? $row->recipient_audience : []),
-            $row->status->value,
-            $row->is_active ? 'Yes' : 'No',
-        ]);
+        $rows = $collection->map(fn (CampaignEmail $row): array => $this->exportRow($row));
 
         return $this->pdfReportHelper->download(
             rows: $rows,
-            headings: $headings,
+            headings: $this->exportHeadings(),
             title: 'Email campaigns',
             filename: $filename,
             orientation: 'landscape',

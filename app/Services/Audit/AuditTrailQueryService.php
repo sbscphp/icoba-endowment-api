@@ -23,11 +23,8 @@ class AuditTrailQueryService
     {
         return AuditLog::query()
             ->with([
-                'customerUser.roles',
-                'customerUser.donorType',
-                'customerUser.graduationSet',
-                'customerUser.corporateCategory',
-                'adminUser',
+                'customerUser:uuid,firstname,lastname,email',
+                'adminUser:uuid,name,email',
             ]);
     }
 
