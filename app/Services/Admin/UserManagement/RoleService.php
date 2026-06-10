@@ -14,6 +14,8 @@ use Illuminate\Pagination\LengthAwarePaginator;
 
 class RoleService
 {
+    private const MAX_EXPORT_ROWS = 5000;
+
     /**
      * @param  array<string, mixed>  $payload
      */
@@ -57,9 +59,33 @@ class RoleService
      */
     public function list(array $validated): LengthAwarePaginator
     {
+        $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
+
+        return $this->baseListQuery($validated)->paginate($perPage);
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array{0: Collection<int, Role>, 1: bool}
+     */
+    public function exportCollection(array $validated): array
+    {
+        $query = $this->baseListQuery($validated);
+        $total = (clone $query)->count();
+        $truncated = $total > self::MAX_EXPORT_ROWS;
+        /** @var Collection<int, Role> $rows */
+        $rows = $query->limit(self::MAX_EXPORT_ROWS)->get();
+
+        return [$rows, $truncated];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function baseListQuery(array $validated): Builder
+    {
         $sortBy = (string) ($validated['sort_by'] ?? 'updated_at');
         $sortDirection = strtolower((string) ($validated['sort_direction'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
-        $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
 
         $query = Role::query()
             ->where('guard_name', 'api')
@@ -89,9 +115,7 @@ class RoleService
             $sortBy = 'updated_at';
         }
 
-        return $query
-            ->orderBy($sortBy, $sortDirection)
-            ->paginate($perPage);
+        return $query->orderBy($sortBy, $sortDirection);
     }
 
     public function findRole(string $roleId): Role

@@ -8,15 +8,15 @@ use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\Admin;
 use App\Models\AuditLog;
 use App\Models\Role;
-use App\Notifications\Auth\AdminInviteSetPasswordMail;
-use App\Services\Auth\PasswordResetService;
+use App\Jobs\SendAdminInviteSetPasswordEmailJob;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 
 class AdminUserService
 {
-    public function __construct(private readonly PasswordResetService $passwordResetService) {}
+    private const MAX_EXPORT_ROWS = 5000;
 
     /**
      * @param  array<string, mixed>  $payload
@@ -30,23 +30,27 @@ class AdminUserService
             ->where('uuid', $roleUuid)
             ->firstOrFail();
 
-        $admin = Admin::query()->create([
-            'name' => (string) $payload['name'],
-            'email' => (string) $payload['email'],
-            // Random placeholder; admin sets real password via emailed invite link.
-            'password' => bin2hex(random_bytes(16)),
-            'is_active' => (bool) ($payload['is_active'] ?? true),
-            'can_login' => (bool) ($payload['can_login'] ?? true),
-            'must_reset_password' => true,
-        ]);
-
-        $admin->syncRoles([$role->name]);
-
         $frontendUrl = isset($payload['frontend_url']) && is_string($payload['frontend_url'])
             ? $payload['frontend_url']
             : null;
 
-        $this->dispatchInviteResetLink($admin, $frontendUrl);
+        $admin = DB::transaction(function () use ($payload, $role): Admin {
+            $admin = Admin::query()->create([
+                'name' => (string) $payload['name'],
+                'email' => (string) $payload['email'],
+                // Random placeholder; admin sets real password via emailed invite link.
+                'password' => bin2hex(random_bytes(16)),
+                'is_active' => (bool) ($payload['is_active'] ?? true),
+                'can_login' => (bool) ($payload['can_login'] ?? true),
+                'must_reset_password' => true,
+            ]);
+
+            $admin->syncRoles([$role->name]);
+
+            return $admin;
+        });
+
+        $this->queueInviteResetLink($admin, $frontendUrl);
 
         return $admin->fresh() ?? $admin;
     }
@@ -59,7 +63,7 @@ class AdminUserService
             throw new ApiException('Reset link can only be resent for admins pending first-time password setup.', 422);
         }
 
-        $this->dispatchInviteResetLink($admin);
+        $this->queueInviteResetLink($admin);
 
         return $admin;
     }
@@ -85,9 +89,33 @@ class AdminUserService
      */
     public function list(array $validated): LengthAwarePaginator
     {
+        $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
+
+        return $this->baseListQuery($validated)->paginate($perPage);
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array{0: Collection<int, Admin>, 1: bool}
+     */
+    public function exportCollection(array $validated): array
+    {
+        $query = $this->baseListQuery($validated);
+        $total = (clone $query)->count();
+        $truncated = $total > self::MAX_EXPORT_ROWS;
+        /** @var Collection<int, Admin> $rows */
+        $rows = $query->limit(self::MAX_EXPORT_ROWS)->get();
+
+        return [$rows, $truncated];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function baseListQuery(array $validated): Builder
+    {
         $sortBy = (string) ($validated['sort_by'] ?? 'created_at');
         $sortDirection = strtolower((string) ($validated['sort_direction'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
-        $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
 
         $query = Admin::query()->with('roles:id,name');
         ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
@@ -113,9 +141,7 @@ class AdminUserService
             $sortBy = 'created_at';
         }
 
-        return $query
-            ->orderBy($sortBy, $sortDirection)
-            ->paginate($perPage);
+        return $query->orderBy($sortBy, $sortDirection);
     }
 
     public function findAdmin(string $adminId): Admin
@@ -206,30 +232,8 @@ class AdminUserService
             ->firstOrFail();
     }
 
-    private function adminSetPasswordUrl(string $resetToken, ?string $frontendUrl = null): string
+    private function queueInviteResetLink(Admin $admin, ?string $frontendUrl = null): void
     {
-        $override = config('app.admin_frontend_set_password_url');
-        if (is_string($override) && $override !== '') {
-            $base = $override;
-        } else {
-            $adminFrontend = rtrim((string) ($frontendUrl ?? config('app.admin_frontend_url')), '/');
-            if ($adminFrontend === '') {
-                $adminFrontend = rtrim((string) config('app.frontend_url'), '/');
-            }
-            $base = $adminFrontend !== '' ? $adminFrontend.'/create-new-password' : url('/');
-        }
-
-        $sep = str_contains($base, '?') ? '&' : '?';
-
-        return $base.$sep.'token='.urlencode($resetToken);
-    }
-
-    private function dispatchInviteResetLink(Admin $admin, ?string $frontendUrl = null): void
-    {
-        $resetToken = $this->passwordResetService->issueResetTokenFor($admin);
-        $admin->notify(new AdminInviteSetPasswordMail(
-            token: $resetToken,
-            resetUrl: $this->adminSetPasswordUrl($resetToken, $frontendUrl),
-        ));
+        SendAdminInviteSetPasswordEmailJob::dispatch($admin->uuid, $frontendUrl);
     }
 }
