@@ -464,9 +464,12 @@ class DashboardService
             ];
         }
 
-        $seconds = max(1, $period['end']->diffInSeconds($period['start']) + 1);
-        $previousEnd = $period['start']->copy()->subSecond();
-        $previousStart = $previousEnd->copy()->subSeconds($seconds - 1);
+        $inclusiveDays = max(
+            1,
+            $period['start']->copy()->startOfDay()->diffInDays($period['end']->copy()->startOfDay()) + 1
+        );
+        $previousEnd = $period['start']->copy()->subDay()->endOfDay();
+        $previousStart = $period['start']->copy()->subDays($inclusiveDays)->startOfDay();
 
         $previousFilters = $filters;
         $previousFilters['start_date'] = $previousStart->toDateString();
