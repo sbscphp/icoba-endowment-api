@@ -40,16 +40,13 @@ class DashboardService
         $period = ListingFilterRules::resolveDateWindow($filters);
         $amountColumn = $this->amountColumn($filters);
         $current = $this->overviewMetrics($query, $amountColumn, $filters);
-        $previous = $this->previousOverviewMetrics($filters, $period, $amountColumn);
+        $comparisonPeriod = $this->resolvePreviousEquivalentPeriod($period);
+        $previous = $this->previousOverviewMetrics($filters, $comparisonPeriod, $amountColumn);
 
-        return [
+        return array_merge($this->responseContext($filters), [
             'currency' => $this->responseCurrency($filters),
             // Lets the UI distinguish naira rollup (false) from currency-specific totals (true).
             'currency_filter_applied' => $this->currencyFilterActive($filters),
-            'period' => $period['period'],
-            'start_date' => $period['start']?->toDateString(),
-            'end_date' => $period['end']?->toDateString(),
-            'comparison' => 'previous_equivalent_period',
             'total_fund_raised' => $current['total_fund_raised'],
             'total_transactions' => $current['total_transactions'],
             'total_pledges' => $current['total_pledges'],
@@ -62,7 +59,7 @@ class DashboardService
             'total_pledges_change_direction' => $this->changeDirection($current['total_pledges_numeric'], $previous['total_pledges_numeric']),
             'total_donors_change_percentage' => $this->changePercent($current['total_donors_numeric'], $previous['total_donors_numeric']),
             'total_donors_change_direction' => $this->changeDirection($current['total_donors_numeric'], $previous['total_donors_numeric']),
-        ];
+        ]);
     }
 
     /**
@@ -95,12 +92,12 @@ class DashboardService
                 ];
             }
 
-            return [
+            return array_merge($this->responseContext($filters, includeComparison: false), [
                 'currency' => $this->responseCurrency($filters),
                 'currency_filter_applied' => $this->currencyFilterActive($filters),
                 'year' => $resolvedYear,
                 'series' => $series,
-            ];
+            ]);
         }
 
         $period = ListingFilterRules::resolveDateWindow($filters);
@@ -113,7 +110,7 @@ class DashboardService
             ->orderBy('bucket')
             ->get();
 
-        return [
+        return array_merge($this->responseContext($filters), [
             'currency' => $this->responseCurrency($filters),
             'currency_filter_applied' => $this->currencyFilterActive($filters),
             'year' => null,
@@ -121,12 +118,12 @@ class DashboardService
                 'label' => (string) $row->bucket,
                 'value' => (string) $row->total,
             ])->values()->all(),
-        ];
+        ]);
     }
 
     /**
      * @param  array<string, mixed>  $filters
-     * @return list<array<string, mixed>>
+     * @return array<string, mixed>
      */
     public function donationByUserType(array $filters): array
     {
@@ -149,16 +146,18 @@ class DashboardService
             ->orderByDesc('total_amount')
             ->get();
 
-        return $rows->map(fn ($row): array => [
-            'user_type' => (string) $row->user_type,
-            'transactions_count' => (int) $row->transactions_count,
-            'total_amount' => (string) $row->total_amount,
-        ])->values()->all();
+        return array_merge($this->responseContext($filters), [
+            'items' => $rows->map(fn ($row): array => [
+                'user_type' => (string) $row->user_type,
+                'transactions_count' => (int) $row->transactions_count,
+                'total_amount' => (string) $row->total_amount,
+            ])->values()->all(),
+        ]);
     }
 
     /**
      * @param  array<string, mixed>  $filters
-     * @return list<array<string, mixed>>
+     * @return array<string, mixed>
      */
     public function donationByDonationType(array $filters): array
     {
@@ -175,16 +174,18 @@ class DashboardService
             ->orderByDesc('total_amount')
             ->get();
 
-        return $rows->map(fn ($row): array => [
-            'donation_type' => (string) $row->donation_type,
-            'transactions_count' => (int) $row->transactions_count,
-            'total_amount' => (string) $row->total_amount,
-        ])->values()->all();
+        return array_merge($this->responseContext($filters), [
+            'items' => $rows->map(fn ($row): array => [
+                'donation_type' => (string) $row->donation_type,
+                'transactions_count' => (int) $row->transactions_count,
+                'total_amount' => (string) $row->total_amount,
+            ])->values()->all(),
+        ]);
     }
 
     /**
      * @param  array<string, mixed>  $filters
-     * @return list<array<string, mixed>>
+     * @return array<string, mixed>
      */
     public function donationByContributionTier(array $filters): array
     {
@@ -209,12 +210,14 @@ class DashboardService
             ];
         }
 
-        return $result;
+        return array_merge($this->responseContext($filters), [
+            'items' => $result,
+        ]);
     }
 
     /**
      * @param  array<string, mixed>  $filters
-     * @return list<array<string, mixed>>
+     * @return array<string, mixed>
      */
     public function activeCampaigns(array $filters): array
     {
@@ -239,7 +242,7 @@ class DashboardService
             'base_currency',
         ]);
 
-        return $campaigns->map(function (Campaign $campaign) use ($filters, $currency): array {
+        $campaignRows = $campaigns->map(function (Campaign $campaign) use ($filters, $currency): array {
             $tx = $this->successfulTransactionsQuery($filters)
                 ->where('campaign_uuid', $campaign->uuid);
             // Reference totals ignore currency filter so clients can show naira/base breakdowns.
@@ -269,6 +272,32 @@ class DashboardService
                 'progress_status' => $hasTarget ? 'tracked' : 'no_target',
             ];
         })->values()->all();
+
+        return array_merge($this->responseContext($filters), [
+            'campaigns' => $campaignRows,
+        ]);
+    }
+
+    /**
+     * Period and comparison metadata shared across dashboard endpoints.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    private function responseContext(array $filters, bool $includeComparison = true): array
+    {
+        $period = ListingFilterRules::resolveDateWindow($filters);
+        $comparisonPeriod = $includeComparison ? $this->resolvePreviousEquivalentPeriod($period) : null;
+
+        return [
+            'period' => $period['period'],
+            'start_date' => $period['start']?->toDateString(),
+            'end_date' => $period['end']?->toDateString(),
+            'comparison' => $comparisonPeriod !== null ? 'previous_equivalent_period' : null,
+            'comparison_days' => $comparisonPeriod !== null ? $comparisonPeriod['days'] : null,
+            'comparison_start_date' => $comparisonPeriod !== null ? $comparisonPeriod['start']->toDateString() : null,
+            'comparison_end_date' => $comparisonPeriod !== null ? $comparisonPeriod['end']->toDateString() : null,
+        ];
     }
 
     /**
@@ -449,13 +478,37 @@ class DashboardService
     }
 
     /**
-     * @param  array<string, mixed>  $filters
      * @param  array{start: Carbon|null, end: Carbon|null, period: string|null}  $period
-     * @return array<string, int|float|string>
+     * @return array{days: int, start: Carbon, end: Carbon}|null
      */
-    private function previousOverviewMetrics(array $filters, array $period, string $amountColumn): array
+    private function resolvePreviousEquivalentPeriod(array $period): ?array
     {
         if ($period['start'] === null || $period['end'] === null) {
+            return null;
+        }
+
+        $inclusiveDays = (int) max(
+            1,
+            $period['start']->copy()->startOfDay()->diffInDays($period['end']->copy()->startOfDay()) + 1
+        );
+        $previousEnd = $period['start']->copy()->subDay()->endOfDay();
+        $previousStart = $period['start']->copy()->subDays($inclusiveDays)->startOfDay();
+
+        return [
+            'days' => $inclusiveDays,
+            'start' => $previousStart,
+            'end' => $previousEnd,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @param  array{days: int, start: Carbon, end: Carbon}|null  $comparisonPeriod
+     * @return array<string, int|float|string>
+     */
+    private function previousOverviewMetrics(array $filters, ?array $comparisonPeriod, string $amountColumn): array
+    {
+        if ($comparisonPeriod === null) {
             return [
                 'total_fund_raised_numeric' => 0.0,
                 'total_transactions_numeric' => 0,
@@ -464,16 +517,9 @@ class DashboardService
             ];
         }
 
-        $inclusiveDays = max(
-            1,
-            $period['start']->copy()->startOfDay()->diffInDays($period['end']->copy()->startOfDay()) + 1
-        );
-        $previousEnd = $period['start']->copy()->subDay()->endOfDay();
-        $previousStart = $period['start']->copy()->subDays($inclusiveDays)->startOfDay();
-
         $previousFilters = $filters;
-        $previousFilters['start_date'] = $previousStart->toDateString();
-        $previousFilters['end_date'] = $previousEnd->toDateString();
+        $previousFilters['start_date'] = $comparisonPeriod['start']->toDateString();
+        $previousFilters['end_date'] = $comparisonPeriod['end']->toDateString();
         $previousFilters['period'] = 'custom';
 
         return $this->overviewMetrics($this->successfulTransactionsQuery($previousFilters), $amountColumn, $previousFilters);
