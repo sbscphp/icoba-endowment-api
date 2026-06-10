@@ -19,6 +19,7 @@ class PublicCampaignContextResource extends JsonResource
         return [
             'uuid' => $this->uuid,
             'name' => $this->name,
+            'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
             'allow_anonymous_donation' => (bool) $this->allow_anonymous_donation,
         ];
     }

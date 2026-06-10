@@ -12,7 +12,7 @@ class PublicCampaignContextService
     {
         if (is_string($pledgeUuid) && $pledgeUuid !== '') {
             $pledge = Pledge::query()
-                ->with(['campaign' => fn ($query) => $query->select('uuid', 'name', 'allow_anonymous_donation')])
+                ->with(['campaign' => fn ($query) => $query->select('uuid', 'name', 'status', 'allow_anonymous_donation')])
                 ->where('uuid', $pledgeUuid)
                 ->firstOrFail();
 
@@ -25,6 +25,6 @@ class PublicCampaignContextService
 
         return Campaign::query()
             ->where('uuid', $campaignUuid)
-            ->firstOrFail(['uuid', 'name', 'allow_anonymous_donation']);
+            ->firstOrFail(['uuid', 'name', 'status', 'allow_anonymous_donation']);
     }
 }
