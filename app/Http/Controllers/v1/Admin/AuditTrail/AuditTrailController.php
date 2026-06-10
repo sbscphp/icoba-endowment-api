@@ -68,7 +68,7 @@ class AuditTrailController extends Controller
             fwrite($out, "\xEF\xBB\xBF");
 
             fputcsv($out, [
-                'UUID',
+                'ID',
                 'Created at',
                 'User type',
                 'Actor email',
@@ -82,8 +82,10 @@ class AuditTrailController extends Controller
                 'HTTP status',
             ]);
 
+            $rowNumber = 0;
             foreach ($collection as $log) {
-                fputcsv($out, $this->tabularRow($log));
+                $rowNumber++;
+                fputcsv($out, $this->tabularRow($log, $rowNumber));
             }
 
             fclose($out);
@@ -104,7 +106,7 @@ class AuditTrailController extends Controller
         $periodEnd = $listing->endDate?->toDateString() ?? 'All dates';
 
         $headings = [
-            'UUID',
+            'ID',
             'Created',
             'User type',
             'Actor',
@@ -116,8 +118,8 @@ class AuditTrailController extends Controller
             'HTTP',
         ];
 
-        $rows = $collection->map(fn (AuditLog $log): array => [
-            (string) $log->uuid,
+        $rows = $collection->values()->map(fn (AuditLog $log, int $index): array => [
+            (string) ($index + 1),
             $log->created_at?->format('Y-m-d H:i') ?? '',
             $log->user_type->value,
             $this->actorSummary($log),
@@ -146,12 +148,12 @@ class AuditTrailController extends Controller
     /**
      * @return list<int|string|null>
      */
-    private function tabularRow(AuditLog $log): array
+    private function tabularRow(AuditLog $log, int $rowNumber): array
     {
         [$email, $name] = $this->actorEmailAndName($log);
 
         return [
-            $log->uuid,
+            $rowNumber,
             $log->created_at?->toIso8601String() ?? '',
             $log->user_type->value,
             $email,

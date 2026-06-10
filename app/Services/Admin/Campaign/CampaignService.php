@@ -69,7 +69,7 @@ class CampaignService
                 'allow_anonymous_donation' => (bool) ($data['allow_anonymous_donation'] ?? false),
                 'allow_public_donation' => (bool) ($data['allow_public_donation'] ?? false),
                 'applies_to_all_graduation_sets' => $appliesToAll,
-                'status' => CampaignStatus::DRAFT,
+                'status' => CampaignStatus::ACTIVE,
                 'created_by_admin_uuid' => $actor->uuid,
             ]);
 

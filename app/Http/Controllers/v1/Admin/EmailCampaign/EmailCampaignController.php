@@ -208,18 +208,18 @@ class EmailCampaignController extends Controller
      */
     private function exportHeadings(): array
     {
-        return ['UUID', 'Title', 'Campaign', 'Audience', 'Status', 'Active', 'Sent At'];
+        return ['ID', 'Title', 'Campaign', 'Audience', 'Status', 'Active', 'Sent At'];
     }
 
     /**
      * @return list<int|string|null>
      */
-    private function exportRow(CampaignEmail $row): array
+    private function exportRow(CampaignEmail $row, int $rowNumber): array
     {
         $row->loadMissing('campaign:uuid,name');
 
         return [
-            $row->uuid,
+            $rowNumber,
             $row->title,
             $row->campaign?->name ?? '',
             implode(', ', is_array($row->recipient_audience) ? $row->recipient_audience : []),
@@ -244,9 +244,11 @@ class EmailCampaignController extends Controller
             }
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, $this->exportHeadings());
+            $rowNumber = 0;
             foreach ($collection as $row) {
                 /** @var CampaignEmail $row */
-                fputcsv($out, $this->exportRow($row));
+                $rowNumber++;
+                fputcsv($out, $this->exportRow($row, $rowNumber));
             }
             fclose($out);
         }, $filename, [
@@ -265,7 +267,9 @@ class EmailCampaignController extends Controller
         $periodStart = ! empty($listing['start_date']) ? (string) $listing['start_date'] : 'All dates';
         $periodEnd = ! empty($listing['end_date']) ? (string) $listing['end_date'] : 'All dates';
 
-        $rows = $collection->map(fn (CampaignEmail $row): array => $this->exportRow($row));
+        $rows = $collection->values()->map(
+            fn (CampaignEmail $row, int $index): array => $this->exportRow($row, $index + 1)
+        );
 
         return $this->pdfReportHelper->download(
             rows: $rows,

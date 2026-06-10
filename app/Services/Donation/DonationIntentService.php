@@ -27,6 +27,7 @@ class DonationIntentService
         private readonly TransactionNgnSnapshotService $transactionNgnSnapshot,
         private readonly GuestDonorProfileSnapshotService $guestDonorProfileSnapshot,
         private readonly DonationCurrencyValidator $donationCurrencyValidator,
+        private readonly CampaignContributionValidator $campaignContributionValidator,
         private readonly CampaignAnonymousDonationValidator $anonymousDonationValidator,
         private readonly DonorNameRequirement $donorNameRequirement,
         private readonly BankTransferReferenceService $bankTransferReference,
@@ -183,6 +184,7 @@ class DonationIntentService
             ]);
         }
 
+        $this->campaignContributionValidator->assertAcceptingContributions($campaignUuid);
         $this->donationCurrencyValidator->assertAllowed($currency, $campaignUuid);
         $this->anonymousDonationValidator->assertAllowed($campaignUuid, (bool) ($clean['is_anonymous'] ?? false));
 

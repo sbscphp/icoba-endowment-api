@@ -35,6 +35,7 @@ class TierConfigurationListResource extends JsonResource
             'templates_count' => (int) ($this->templates_count ?? 0),
             'sort_order' => (int) $this->sort_order,
             'status' => $this->is_active ? 'active' : 'inactive',
+            'created_at' => $this->created_at,
             'last_updated' => $this->updated_at,
         ];
     }

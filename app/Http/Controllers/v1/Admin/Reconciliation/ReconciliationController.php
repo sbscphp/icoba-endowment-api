@@ -101,7 +101,7 @@ class ReconciliationController extends Controller
 
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, [
-                'Transaction UUID',
+                'ID',
                 'Transaction ID',
                 'Bank transfer reference',
                 'Amount',
@@ -121,10 +121,12 @@ class ReconciliationController extends Controller
                 'Paid at',
             ]);
 
+            $rowNumber = 0;
             foreach ($collection as $transaction) {
+                $rowNumber++;
                 $row = ReconciliationQueueResource::make($transaction)->resolve();
                 fputcsv($out, [
-                    $row['transaction_uuid'] ?? '',
+                    $rowNumber,
                     $row['transaction_id'] ?? '',
                     $row['bank_transfer_reference'] ?? '',
                     $row['amount'] ?? '',

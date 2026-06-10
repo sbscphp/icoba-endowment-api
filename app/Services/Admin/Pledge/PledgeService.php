@@ -10,6 +10,7 @@ use App\Helpers\GeneralHelper;
 use App\Models\Pledge;
 use App\Models\Transaction;
 use App\Services\Donation\CampaignAnonymousDonationValidator;
+use App\Services\Donation\CampaignContributionValidator;
 use App\Services\Pledge\PledgeBalanceService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -21,6 +22,7 @@ class PledgeService
     public function __construct(
         private readonly PledgeBalanceService $balanceService,
         private readonly CampaignAnonymousDonationValidator $anonymousDonationValidator,
+        private readonly CampaignContributionValidator $campaignContributionValidator,
     ) {}
 
     /**
@@ -239,8 +241,10 @@ class PledgeService
      */
     public function createPledge(array $data): Pledge
     {
+        $campaignUuid = (string) ($data['campaign_uuid'] ?? '');
+        $this->campaignContributionValidator->assertAcceptingContributions($campaignUuid);
         $this->anonymousDonationValidator->assertAllowed(
-            (string) ($data['campaign_uuid'] ?? ''),
+            $campaignUuid,
             (bool) ($data['is_anonymous'] ?? false),
         );
 
