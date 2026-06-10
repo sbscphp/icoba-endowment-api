@@ -203,8 +203,8 @@ class CampaignService
     {
         $campaign = $this->resolveCampaign($campaignId);
 
-        if ($campaign->status !== CampaignStatus::DRAFT) {
-            throw new ApiException('Only draft campaigns can be activated.', 422);
+        if (! in_array($campaign->status, [CampaignStatus::DRAFT, CampaignStatus::DEACTIVATED], true)) {
+            throw new ApiException('Only draft or deactivated campaigns can be activated.', 422);
         }
 
         return DB::transaction(function () use ($campaign, $reason, $actor, $request): Campaign {
@@ -212,6 +212,9 @@ class CampaignService
             $campaign->status = CampaignStatus::ACTIVE;
             if ($campaign->actual_start_date === null) {
                 $campaign->actual_start_date = now();
+            }
+            if ($from === CampaignStatus::DEACTIVATED) {
+                $campaign->actual_end_date = null;
             }
             $campaign->save();
 

@@ -18,7 +18,7 @@ class PublicCampaignService
     private const CLOSED_STATUSES = [
         CampaignStatus::COMPLETED,
         // CampaignStatus::DEACTIVATED, //Public should not see deactivated admin campaigns
-        CampaignStatus::PAUSED,
+        // CampaignStatus::PAUSED, //Public should not see paused campaigns
     ];
 
     /**

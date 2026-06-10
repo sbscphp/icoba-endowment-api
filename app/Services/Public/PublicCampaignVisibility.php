@@ -29,6 +29,7 @@ final class PublicCampaignVisibility
         $query
             ->where($column('status'), '!=', CampaignStatus::DRAFT)
             ->where($column('status'), '!=', CampaignStatus::DEACTIVATED)
+            ->where($column('status'), '!=', CampaignStatus::PAUSED)
             ->whereDate($column('start_date'), '<=', $today)
             ->whereDate($column('end_date'), '>=', $today);
     }
@@ -45,6 +46,7 @@ final class PublicCampaignVisibility
         $query
             ->where($column('status'), '!=', CampaignStatus::DRAFT->value)
             ->where($column('status'), '!=', CampaignStatus::DEACTIVATED->value)
+            ->where($column('status'), '!=', CampaignStatus::PAUSED->value)
             ->whereDate($column('start_date'), '<=', $today)
             ->whereDate($column('end_date'), '>=', $today);
     }
