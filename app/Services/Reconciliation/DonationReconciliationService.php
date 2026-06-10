@@ -432,7 +432,9 @@ class DonationReconciliationService
             $linkageNote = $linkage['note'] ?? $linkageNote;
         }
 
-        if ($campaignUuid !== null || $pledgeUuid !== null) {
+        $transaction = $transaction->refresh();
+
+        if ($transaction->campaign_uuid !== null || $transaction->pledge_uuid !== null) {
             $this->finalizationService->finalizeSuccessful($transaction, [
                 'reconciled_by_admin_uuid' => $adminUuid,
                 'reconciliation_note' => $linkageNote,

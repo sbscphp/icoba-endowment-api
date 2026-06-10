@@ -9,27 +9,24 @@ class BackfillAdminManualReconciliationCommand extends Command
 {
     protected $signature = 'reconciliation:backfill-admin-manual
                             {--dry-run : Preview fixes without writing changes}
-                            {--finalize-linked : Finalize pending admin records that already have a campaign or pledge}
+                            {--skip-finalize : Leave pending admin records with a campaign or pledge in the queue}
                             {--no-email : Suppress confirmation and tax receipt emails when finalizing}
                             {--chunk=100 : Records per batch}
                             {--transaction= : Process a single transaction UUID only}
                             {--preview=50 : Max rows to show in dry-run output}';
 
-    protected $description = 'Backfill donor details and clear incorrect awaiting-verification flags on admin-manual reconciliation records.';
+    protected $description = 'Backfill donor details, clear incorrect awaiting-verification flags, and finalize stuck admin-manual reconciliation records.';
 
-    // # Preview affected records
+    // # Preview affected records (includes pending rows that would be finalized)
     // php artisan reconciliation:backfill-admin-manual --dry-run
 
-    // # Apply donor + status fixes
-    // php artisan reconciliation:backfill-admin-manual
-
-    // # Also finalize pending rows that already have campaign_uuid or pledge_uuid
-    // php artisan reconciliation:backfill-admin-manual --finalize-linked --no-email
+    // # Apply fixes and finalize pending admin rows with campaign_uuid or pledge_uuid
+    // php artisan reconciliation:backfill-admin-manual --no-email
 
     public function handle(AdminManualReconciliationBackfillService $backfillService): int
     {
         $dryRun = (bool) $this->option('dry-run');
-        $finalizeLinked = (bool) $this->option('finalize-linked');
+        $finalizeLinked = ! (bool) $this->option('skip-finalize');
         $suppressEmails = (bool) $this->option('no-email');
         $chunkSize = max(1, (int) $this->option('chunk'));
         $previewLimit = max(0, (int) $this->option('preview'));
@@ -43,8 +40,8 @@ class BackfillAdminManualReconciliationCommand extends Command
             $this->info('Dry run — no records will be updated.');
         }
 
-        if ($finalizeLinked && $dryRun) {
-            $this->warn('--finalize-linked is ignored during --dry-run.');
+        if (! $finalizeLinked) {
+            $this->warn('Finalization is disabled. Pending admin records with a campaign or pledge will remain in the queue.');
         }
 
         $result = $backfillService->run(
@@ -56,7 +53,7 @@ class BackfillAdminManualReconciliationCommand extends Command
             previewLimit: $previewLimit,
         );
 
-        if ($dryRun && $previewLimit > 0 && $result['preview'] !== []) {
+        if ($previewLimit > 0 && $result['preview'] !== []) {
             $this->table(
                 ['transaction_id', 'uuid', 'changes'],
                 array_map(static fn (array $row): array => [
@@ -74,10 +71,11 @@ class BackfillAdminManualReconciliationCommand extends Command
 
         $this->newLine();
         $this->line(sprintf(
-            'Scanned: %d | Cleared awaiting verification: %d | Donor backfilled: %d | Finalized: %d | Unchanged: %d',
+            'Scanned: %d | Cleared awaiting verification: %d | Donor backfilled: %d | %s: %d | Unchanged: %d',
             $result['scanned'],
             $result['cleared_awaiting_verification'],
             $result['donor_backfilled'],
+            $dryRun ? 'Would finalize' : 'Finalized',
             $result['finalized'],
             $result['unchanged'],
         ));
