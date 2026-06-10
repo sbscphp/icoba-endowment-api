@@ -98,7 +98,7 @@ class CampaignUpdateReportService
             'details' => (string) $payload['details'],
             'banner_url' => $this->uploadBanner($payload['banner']),
             'youtube_link' => $payload['youtube_link'] ?? null,
-            'is_active' => (bool) ($payload['is_active'] ?? false),
+            'is_active' => (bool) ($payload['is_active'] ?? true),
             'created_by_admin_uuid' => $adminUuid,
         ]);
 
