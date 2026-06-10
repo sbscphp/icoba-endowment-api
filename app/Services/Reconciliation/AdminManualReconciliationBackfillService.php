@@ -4,9 +4,12 @@ namespace App\Services\Reconciliation;
 
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
-use App\Models\GivingIdentity;
+use App\Models\DonorRecognition;
+use App\Models\Pledge;
 use App\Models\Transaction;
-use App\Models\User;
+use App\Models\TransactionReceipt;
+use App\Services\Pledge\PledgeBalanceService;
+use App\Services\Public\PublicEndowmentStatsService;
 use App\Services\Transaction\TransactionFinalizationService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -16,6 +19,8 @@ final class AdminManualReconciliationBackfillService
 {
     public function __construct(
         private readonly TransactionFinalizationService $finalizer,
+        private readonly AdminManualReconciliationDonorResolver $donorResolver,
+        private readonly PledgeBalanceService $pledgeBalance,
     ) {}
 
     /**
@@ -24,6 +29,7 @@ final class AdminManualReconciliationBackfillService
      *     cleared_awaiting_verification: int,
      *     donor_backfilled: int,
      *     finalized: int,
+     *     deleted: int,
      *     unchanged: int,
      *     preview: list<array{transaction_id: string, uuid: string, changes: list<string>}>,
      * }
@@ -41,6 +47,7 @@ final class AdminManualReconciliationBackfillService
             'cleared_awaiting_verification' => 0,
             'donor_backfilled' => 0,
             'finalized' => 0,
+            'deleted' => 0,
             'unchanged' => 0,
             'preview' => [],
         ];
@@ -62,14 +69,34 @@ final class AdminManualReconciliationBackfillService
                         ? $metadata['reconciliation_draft']
                         : [];
 
+                    $donorUpdates = $this->donorResolver->resolveDonorUpdates($transaction, $draft);
+                    $traceable = $this->donorResolver->canTraceDonor($transaction, $draft, $donorUpdates);
                     $changes = [];
+
+                    if (! $traceable) {
+                        $changes[] = 'delete';
+                        $stats['deleted']++;
+
+                        if (count($stats['preview']) < $previewLimit) {
+                            $stats['preview'][] = [
+                                'transaction_id' => (string) $transaction->transaction_id,
+                                'uuid' => (string) $transaction->uuid,
+                                'changes' => $changes,
+                            ];
+                        }
+
+                        if (! $dryRun) {
+                            $this->purgeTransaction($transaction);
+                        }
+
+                        continue;
+                    }
 
                     if ($transaction->awaiting_bank_verification_at !== null) {
                         $changes[] = 'awaiting_bank_verification_at';
                         $stats['cleared_awaiting_verification']++;
                     }
 
-                    $donorUpdates = $this->resolveDonorUpdates($transaction, $draft);
                     if ($donorUpdates !== []) {
                         $changes = array_merge($changes, array_keys($donorUpdates));
                         $stats['donor_backfilled']++;
@@ -156,6 +183,32 @@ final class AdminManualReconciliationBackfillService
             && (filled($transaction->campaign_uuid) || filled($transaction->pledge_uuid));
     }
 
+    private function purgeTransaction(Transaction $transaction): void
+    {
+        DB::transaction(function () use ($transaction): void {
+            $pledgeUuid = $transaction->pledge_uuid;
+
+            TransactionReceipt::query()
+                ->where('transaction_uuid', $transaction->uuid)
+                ->delete();
+
+            DonorRecognition::query()
+                ->where('trigger_transaction_uuid', $transaction->uuid)
+                ->delete();
+
+            $transaction->delete();
+
+            if ($pledgeUuid !== null) {
+                $pledge = Pledge::query()->where('uuid', $pledgeUuid)->first();
+                if ($pledge !== null) {
+                    $this->pledgeBalance->syncPledgeStatus($pledge);
+                }
+            }
+        });
+
+        PublicEndowmentStatsService::forgetCache();
+    }
+
     private function paidAtFromMetadata(Transaction $transaction): ?Carbon
     {
         $metadata = is_array($transaction->metadata) ? $transaction->metadata : [];
@@ -176,78 +229,5 @@ final class AdminManualReconciliationBackfillService
         }
 
         return null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $draft
-     * @return array<string, mixed>
-     */
-    private function resolveDonorUpdates(Transaction $transaction, array $draft): array
-    {
-        if ($draft === []) {
-            return [];
-        }
-
-        $resolved = [];
-
-        $identityUuid = trim((string) ($draft['user_identity'] ?? $draft['giving_identity_uuid'] ?? ''));
-        $userUuid = trim((string) ($draft['user_uuid'] ?? ''));
-        $user = $userUuid !== ''
-            ? User::query()->where('uuid', $userUuid)->first()
-            : null;
-        $identity = $identityUuid !== ''
-            ? GivingIdentity::query()->with('user')->where('uuid', $identityUuid)->first()
-            : null;
-
-        if ($user !== null) {
-            $resolved = [
-                'user_uuid' => $user->uuid,
-                'donor_email' => $user->email,
-                'donor_phone' => $user->phone_number,
-                'donor_name' => trim(($user->firstname ?? '').' '.($user->lastname ?? '')) ?: null,
-                'donor_type_uuid' => $user->donor_type_uuid,
-            ];
-        } elseif ($identity !== null) {
-            $resolved = [
-                'giving_identity_uuid' => $identity->uuid,
-                'user_uuid' => $identity->user_uuid,
-                'donor_email' => $identity->user?->email ?? $identity->email_lower,
-                'donor_phone' => $identity->user?->phone_number,
-                'donor_name' => filled($identity->organization_name)
-                    ? trim((string) $identity->organization_name)
-                    : (trim(trim((string) ($identity->firstname ?? '')).' '.trim((string) ($identity->lastname ?? ''))) ?: null),
-                'donor_type_uuid' => $identity->donor_type_uuid,
-            ];
-        } else {
-            $organizationName = trim((string) ($draft['organization_name'] ?? ''));
-            $personName = trim(trim((string) ($draft['firstname'] ?? '')).' '.trim((string) ($draft['lastname'] ?? '')));
-
-            $resolved = [
-                'donor_email' => isset($draft['donor_email']) ? strtolower(trim((string) $draft['donor_email'])) : null,
-                'donor_phone' => isset($draft['donor_phone']) ? trim((string) $draft['donor_phone']) : null,
-                'donor_name' => $organizationName !== '' ? $organizationName : ($personName !== '' ? $personName : null),
-            ];
-        }
-
-        if (filled($draft['campaign_uuid'] ?? null)) {
-            $resolved['campaign_uuid'] = (string) $draft['campaign_uuid'];
-        }
-        if (filled($draft['pledge_uuid'] ?? null)) {
-            $resolved['pledge_uuid'] = (string) $draft['pledge_uuid'];
-        }
-
-        $updates = [];
-        foreach ($resolved as $field => $value) {
-            if ($value === null || $value === '') {
-                continue;
-            }
-
-            $current = $transaction->{$field};
-            if ($current === null || $current === '') {
-                $updates[$field] = $value;
-            }
-        }
-
-        return $updates;
     }
 }

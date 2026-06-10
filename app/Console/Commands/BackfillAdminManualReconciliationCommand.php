@@ -15,12 +15,12 @@ class BackfillAdminManualReconciliationCommand extends Command
                             {--transaction= : Process a single transaction UUID only}
                             {--preview=50 : Max rows to show in dry-run output}';
 
-    protected $description = 'Backfill donor details, clear incorrect awaiting-verification flags, and finalize stuck admin-manual reconciliation records.';
+    protected $description = 'Backfill donor details, finalize traceable admin-manual reconciliations, and delete records without a resolvable donor.';
 
-    // # Preview affected records (includes pending rows that would be finalized)
+    // # Preview — rows without a traceable donor show "delete"
     // php artisan reconciliation:backfill-admin-manual --dry-run
 
-    // # Apply fixes and finalize pending admin rows with campaign_uuid or pledge_uuid
+    // # Apply — backfill donors, finalize traceable pending rows, delete unsalvageable rows
     // php artisan reconciliation:backfill-admin-manual --no-email
 
     public function handle(AdminManualReconciliationBackfillService $backfillService): int
@@ -71,12 +71,13 @@ class BackfillAdminManualReconciliationCommand extends Command
 
         $this->newLine();
         $this->line(sprintf(
-            'Scanned: %d | Cleared awaiting verification: %d | Donor backfilled: %d | %s: %d | Unchanged: %d',
+            'Scanned: %d | Cleared awaiting verification: %d | Donor backfilled: %d | %s: %d | Deleted: %d | Unchanged: %d',
             $result['scanned'],
             $result['cleared_awaiting_verification'],
             $result['donor_backfilled'],
             $dryRun ? 'Would finalize' : 'Finalized',
             $result['finalized'],
+            $result['deleted'],
             $result['unchanged'],
         ));
 

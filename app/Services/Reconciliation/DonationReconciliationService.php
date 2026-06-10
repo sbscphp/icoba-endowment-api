@@ -49,6 +49,7 @@ class DonationReconciliationService
         private readonly PledgeBalanceService $pledgeBalanceService,
         private readonly PledgeScheduleService $pledgeScheduleService,
         private readonly CampaignAnonymousDonationValidator $anonymousDonationValidator,
+        private readonly AdminManualReconciliationDonorResolver $adminManualDonorResolver,
     ) {}
 
     /**
@@ -433,8 +434,14 @@ class DonationReconciliationService
         }
 
         $transaction = $transaction->refresh();
+        $reconciliationDraft = is_array($transaction->metadata['reconciliation_draft'] ?? null)
+            ? $transaction->metadata['reconciliation_draft']
+            : [];
 
-        if ($transaction->campaign_uuid !== null || $transaction->pledge_uuid !== null) {
+        if (
+            ($transaction->campaign_uuid !== null || $transaction->pledge_uuid !== null)
+            && $this->adminManualDonorResolver->canTraceDonor($transaction, $reconciliationDraft)
+        ) {
             $this->finalizationService->finalizeSuccessful($transaction, [
                 'reconciled_by_admin_uuid' => $adminUuid,
                 'reconciliation_note' => $linkageNote,

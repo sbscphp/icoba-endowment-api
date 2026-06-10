@@ -52,15 +52,28 @@ class PledgeBalanceService
 
     public function refreshPledgeStatus(Pledge $pledge): void
     {
-        if ($pledge->status !== PledgeStatus::ACTIVE) {
+        $this->syncPledgeStatus($pledge);
+    }
+
+    public function syncPledgeStatus(Pledge $pledge): void
+    {
+        $remaining = (float) $this->remainingAmount($pledge);
+
+        if ($remaining <= 0.00001) {
+            if ($pledge->status === PledgeStatus::ACTIVE) {
+                $pledge->update([
+                    'status' => PledgeStatus::FULFILLED,
+                    'fulfilled_at' => now(),
+                ]);
+            }
+
             return;
         }
 
-        $remaining = (float) $this->remainingAmount($pledge);
-        if ($remaining <= 0.00001) {
+        if ($pledge->status === PledgeStatus::FULFILLED) {
             $pledge->update([
-                'status' => PledgeStatus::FULFILLED,
-                'fulfilled_at' => now(),
+                'status' => PledgeStatus::ACTIVE,
+                'fulfilled_at' => null,
             ]);
         }
     }
