@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Resources;
+namespace App\Http\Resources\Admin;
 
 use App\Enums\TransactionStatus;
 use App\Models\GivingIdentity;

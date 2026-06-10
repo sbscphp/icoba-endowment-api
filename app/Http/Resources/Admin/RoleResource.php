@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Resources;
+namespace App\Http\Resources\Admin;
 
 use App\Helpers\PermissionModuleMapper;
 use App\Models\Role;

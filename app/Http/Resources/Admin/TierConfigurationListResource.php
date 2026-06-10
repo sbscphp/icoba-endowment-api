@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Resources;
+namespace App\Http\Resources\Admin;
 
 use App\Models\TierConfiguration;
 use Illuminate\Http\Request;
@@ -9,7 +9,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /**
  * @mixin TierConfiguration
  */
-class TierConfigurationResource extends JsonResource
+class TierConfigurationListResource extends JsonResource
 {
     /**
      * @return array<string, mixed>
@@ -31,12 +31,12 @@ class TierConfigurationResource extends JsonResource
             'contribution_by_tier' => $this->contribution_by_tier !== null
                 ? (string) round((float) $this->contribution_by_tier, 2)
                 : '0.00',
-            'benefits' => $this->benefits ?? [],
+            'benefits_count' => is_array($this->benefits) ? count($this->benefits) : 0,
+            'templates_count' => (int) ($this->templates_count ?? 0),
             'sort_order' => (int) $this->sort_order,
             'status' => $this->is_active ? 'active' : 'inactive',
-            'templates_count' => (int) ($this->templates_count ?? 0),
             'created_at' => $this->created_at,
-            'updated_at' => $this->updated_at,
+            'last_updated' => $this->updated_at,
         ];
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Resources;
+namespace App\Http\Resources\Developer;
 
 use App\Enums\Api\ApiEncryptionMode;
 use App\Models\ApiUser;

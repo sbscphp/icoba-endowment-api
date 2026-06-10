@@ -1,45 +1,42 @@
 <?php
 
-namespace App\Http\Resources;
+namespace App\Http\Resources\Admin;
 
 use App\Enums\DonorTypeSlug;
 use App\Models\DonorType;
 use App\Models\GraduationSet;
-use App\Models\Transaction;
-use App\Services\Tier\TierResolutionService;
+use App\Models\Pledge;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * @mixin Transaction
+ * @mixin Pledge
  */
-class CampaignDonorListResource extends JsonResource
+class CampaignPledgeListResource extends JsonResource
 {
     /**
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
     {
-        $tier = app(TierResolutionService::class)->resolveTierForAmount(
-            $this->amount_in_naira !== null ? (float) $this->amount_in_naira : null
-        );
-
         return [
-            'transaction_id' => $this->transaction_id,
+            'pledge_uuid' => $this->uuid,
             'donor_name' => $this->resolveDonorName(),
             'is_anonymous' => (bool) $this->is_anonymous,
-            'donation_value' => (string) $this->amount,
-            'donation_currency' => $this->currency,
-            'transaction_date' => $this->paid_at ?? $this->created_at,
+            'donor_email' => (bool) $this->is_anonymous ? null : ($this->donor_email ?? $this->donor?->email),
+            'donor_phone' => (bool) $this->is_anonymous ? null : ($this->donor_phone ?? $this->donor?->phone_number),
             'donor_type' => $this->resolveDonorTypePayload(),
             'graduation_set' => $this->resolveGraduationSetPayload(),
-            'transaction_status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
-            'donor_tier' => $tier !== null ? [
-                'tier_id' => $tier->uuid,
-                'name' => $tier->name,
-            ] : null,
-            'payment_gateway' => $this->gateway,
-            'amount_in_naira' => $this->amount_in_naira !== null ? (string) $this->amount_in_naira : null,
+            'committed_amount' => (string) $this->committed_amount,
+            'currency' => $this->currency,
+            'committed_amount_ngn' => $this->committed_amount_ngn !== null ? (string) $this->committed_amount_ngn : null,
+            'fulfilled_amount' => $this->resource->getAttribute('fulfilled_amount'),
+            'remaining_amount' => $this->resource->getAttribute('remaining_amount'),
+            'payment_plan_type' => $this->payment_plan_type instanceof \BackedEnum ? $this->payment_plan_type->value : $this->payment_plan_type,
+            'installment_count' => $this->installment_count,
+            'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
         ];
     }
 
@@ -116,24 +113,12 @@ class CampaignDonorListResource extends JsonResource
 
     private function resolveGraduationSetModel(): ?GraduationSet
     {
+        if ($this->relationLoaded('graduationSet') && $this->graduationSet !== null) {
+            return $this->graduationSet;
+        }
+
         if ($this->donor !== null && $this->donor->relationLoaded('graduationSet') && $this->donor->graduationSet !== null) {
             return $this->donor->graduationSet;
-        }
-
-        if ($this->pledge !== null && $this->pledge->relationLoaded('graduationSet') && $this->pledge->graduationSet !== null) {
-            return $this->pledge->graduationSet;
-        }
-
-        $metadata = is_array($this->metadata) ? $this->metadata : [];
-        $guestProfile = is_array($metadata['guest_donor_profile'] ?? null) ? $metadata['guest_donor_profile'] : [];
-        $setUuid = $guestProfile['graduation_set_uuid'] ?? null;
-        $setName = $guestProfile['graduation_set_name'] ?? null;
-        if (is_string($setUuid) && $setUuid !== '') {
-            return new GraduationSet([
-                'uuid' => $setUuid,
-                'name' => is_string($setName) ? $setName : '',
-                'set_number' => (string) ($guestProfile['set_number'] ?? ''),
-            ]);
         }
 
         return null;

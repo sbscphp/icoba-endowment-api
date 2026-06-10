@@ -2,7 +2,7 @@
 
 namespace App\Repositories\ApiUser;
 
-use App\Http\Resources\ApiUserResource;
+use App\Http\Resources\Developer\ApiUserResource;
 use App\Models\ApiUser;
 use App\Repositories\Contracts\ApiUser\ApiUserRepositoryInterface;
 
