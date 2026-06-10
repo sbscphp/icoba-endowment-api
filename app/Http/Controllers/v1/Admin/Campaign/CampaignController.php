@@ -458,7 +458,7 @@ class CampaignController extends Controller
             }
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, [
-                'Pledge ID',
+                'ID',
                 'Donor name',
                 'Anonymous',
                 'Email',
@@ -474,12 +474,14 @@ class CampaignController extends Controller
                 'Status',
                 'Created',
             ]);
+            $rowNumber = 0;
             foreach ($collection as $pledge) {
                 /** @var Pledge $pledge */
+                $rowNumber++;
                 $row = CampaignPledgeListResource::make($pledge)->resolve();
 
                 fputcsv($out, [
-                    $row['pledge_uuid'],
+                    $rowNumber,
                     $row['donor_name'] ?? '',
                     ($row['is_anonymous'] ?? false) ? '1' : '0',
                     $row['donor_email'] ?? '',
@@ -514,12 +516,12 @@ class CampaignController extends Controller
         $periodStart = ! empty($listing['start_date']) ? (string) $listing['start_date'] : 'All dates';
         $periodEnd = ! empty($listing['end_date']) ? (string) $listing['end_date'] : 'All dates';
 
-        $headings = ['Pledge ID', 'Donor', 'Anonymous', 'Committed', 'Currency', 'Fulfilled', 'Remaining', 'Plan', 'Status', 'Created'];
-        $rows = $collection->map(function (Pledge $pledge): array {
+        $headings = ['ID', 'Donor', 'Anonymous', 'Committed', 'Currency', 'Fulfilled', 'Remaining', 'Plan', 'Status', 'Created'];
+        $rows = $collection->values()->map(function (Pledge $pledge, int $index): array {
             $row = CampaignPledgeListResource::make($pledge)->resolve();
 
             return [
-                $row['pledge_uuid'],
+                $index + 1,
                 $row['donor_name'] ?? '',
                 ($row['is_anonymous'] ?? false) ? '1' : '0',
                 $row['committed_amount'],
@@ -574,11 +576,13 @@ class CampaignController extends Controller
                 return;
             }
             fwrite($out, "\xEF\xBB\xBF");
-            fputcsv($out, ['UUID', 'Public code', 'Name', 'Status', 'Start', 'End', 'Target', 'Base currency', $raisedHeader]);
+            fputcsv($out, ['ID', 'Public code', 'Name', 'Status', 'Start', 'End', 'Target', 'Base currency', $raisedHeader]);
+            $rowNumber = 0;
             foreach ($collection as $campaign) {
                 /** @var Campaign $campaign */
+                $rowNumber++;
                 fputcsv($out, [
-                    $campaign->uuid,
+                    $rowNumber,
                     $campaign->campaign_id,
                     $campaign->name,
                     $campaign->status->value,
@@ -611,9 +615,9 @@ class CampaignController extends Controller
         }
         $raisedHeading = $raisedCurrency === 'NGN' ? 'Raised NGN' : 'Raised ('.$raisedCurrency.')';
 
-        $headings = ['UUID', 'Code', 'Name', 'Status', 'Start', 'End', 'Target', 'Currency', $raisedHeading];
-        $rows = $collection->map(fn (Campaign $c): array => [
-            $c->uuid,
+        $headings = ['ID', 'Code', 'Name', 'Status', 'Start', 'End', 'Target', 'Currency', $raisedHeading];
+        $rows = $collection->values()->map(fn (Campaign $c, int $index): array => [
+            $index + 1,
             $c->campaign_id,
             $c->name,
             $c->status->value,

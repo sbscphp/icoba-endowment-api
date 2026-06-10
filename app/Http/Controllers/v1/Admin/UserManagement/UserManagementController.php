@@ -304,17 +304,19 @@ class UserManagementController extends Controller
 
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, [
-                'Role ID',
+                'ID',
                 'Name',
                 'Number of users',
                 'Status',
                 'Last updated',
             ]);
 
+            $rowNumber = 0;
             foreach ($collection as $role) {
                 /** @var Role $role */
+                $rowNumber++;
                 fputcsv($out, [
-                    $role->uuid,
+                    $rowNumber,
                     $role->name,
                     (int) ($role->users_count ?? 0),
                     $role->is_active ? 'active' : 'inactive',
@@ -340,15 +342,15 @@ class UserManagementController extends Controller
         $periodEnd = ! empty($listing['end_date']) ? (string) $listing['end_date'] : 'All dates';
 
         $headings = [
-            'Role ID',
+            'ID',
             'Name',
             'Number of users',
             'Status',
             'Last updated',
         ];
 
-        $rows = $collection->map(fn (Role $role): array => [
-            $role->uuid,
+        $rows = $collection->values()->map(fn (Role $role, int $index): array => [
+            $index + 1,
             $role->name,
             (string) (int) ($role->users_count ?? 0),
             $role->is_active ? 'active' : 'inactive',
@@ -385,7 +387,7 @@ class UserManagementController extends Controller
 
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, [
-                'Admin ID',
+                'ID',
                 'Name',
                 'Role',
                 'Email',
@@ -393,10 +395,12 @@ class UserManagementController extends Controller
                 'Status',
             ]);
 
+            $rowNumber = 0;
             foreach ($collection as $admin) {
                 /** @var Admin $admin */
+                $rowNumber++;
                 fputcsv($out, [
-                    $admin->uuid,
+                    $rowNumber,
                     $admin->name,
                     $admin->roles->first()?->name ?? '',
                     $admin->email,
@@ -423,7 +427,7 @@ class UserManagementController extends Controller
         $periodEnd = ! empty($listing['end_date']) ? (string) $listing['end_date'] : 'All dates';
 
         $headings = [
-            'Admin ID',
+            'ID',
             'Name',
             'Role',
             'Email',
@@ -431,8 +435,8 @@ class UserManagementController extends Controller
             'Status',
         ];
 
-        $rows = $collection->map(fn (Admin $admin): array => [
-            $admin->uuid,
+        $rows = $collection->values()->map(fn (Admin $admin, int $index): array => [
+            $index + 1,
             $admin->name,
             $admin->roles->first()?->name ?? '',
             $admin->email,

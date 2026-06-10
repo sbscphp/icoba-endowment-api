@@ -37,7 +37,7 @@ class AuditLogResource extends JsonResource
                 $this->user_type === UserTypeEnum::CUSTOMER
                     && $this->relationLoaded('customerUser')
                     && $this->customerUser !== null,
-                fn (): array => ['user' => $this->customerSummary()]
+                fn (): array => ['admin' => $this->customerSummary()] //user //used admin for ease of FE integration
             ),
             $this->mergeWhen(
                 $this->user_type === UserTypeEnum::ADMIN

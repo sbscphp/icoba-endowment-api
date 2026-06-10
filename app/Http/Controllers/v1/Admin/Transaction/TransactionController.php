@@ -110,7 +110,7 @@ class TransactionController extends Controller
             }
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, [
-                'UUID',
+                'ID',
                 'Transaction ID',
                 'Date',
                 'Donor name',
@@ -126,11 +126,13 @@ class TransactionController extends Controller
                 'Status',
                 'Paid at',
             ]);
+            $rowNumber = 0;
             foreach ($collection as $tx) {
                 /** @var Transaction $tx */
+                $rowNumber++;
                 $tx->loadMissing('campaign:uuid,name,campaign_id', 'donor:uuid,firstname,lastname,email');
                 fputcsv($out, [
-                    $tx->uuid,
+                    $rowNumber,
                     $tx->transaction_id,
                     $tx->created_at?->toIso8601String() ?? '',
                     $this->donorNameForRow($tx),

@@ -169,7 +169,7 @@ class TierConfigurationController extends Controller
 
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, [
-                'Tier ID',
+                'ID',
                 'Name',
                 'Min amount',
                 'Max amount',
@@ -177,12 +177,15 @@ class TierConfigurationController extends Controller
                 'Templates count',
                 'Sort order',
                 'Status',
+                'Date created',
                 'Last updated',
             ]);
 
+            $rowNumber = 0;
             foreach ($collection as $tier) {
                 /** @var TierConfiguration $tier */
-                fputcsv($out, $this->tabularRow($tier));
+                $rowNumber++;
+                fputcsv($out, $this->tabularRow($tier, $rowNumber));
             }
 
             fclose($out);
@@ -203,7 +206,7 @@ class TierConfigurationController extends Controller
         $periodEnd = ! empty($listing['end_date']) ? (string) $listing['end_date'] : 'All dates';
 
         $headings = [
-            'Tier ID',
+            'ID',
             'Name',
             'Min amount',
             'Max amount',
@@ -211,11 +214,12 @@ class TierConfigurationController extends Controller
             'Templates',
             'Sort',
             'Status',
-            'Updated',
+            'Date created',
+            'Last updated',
         ];
 
-        $rows = $collection->map(fn (TierConfiguration $tier): array => [
-            $tier->uuid,
+        $rows = $collection->values()->map(fn (TierConfiguration $tier, int $index): array => [
+            $index + 1,
             $tier->name,
             $tier->min_amount !== null ? (string) $tier->min_amount : '',
             $tier->max_amount !== null ? (string) $tier->max_amount : '',
@@ -223,6 +227,7 @@ class TierConfigurationController extends Controller
             (string) (int) ($tier->templates_count ?? 0),
             (string) (int) $tier->sort_order,
             $tier->is_active ? 'active' : 'inactive',
+            $tier->created_at?->format('Y-m-d H:i') ?? '',
             $tier->updated_at?->format('Y-m-d H:i') ?? '',
         ]);
 
@@ -243,10 +248,10 @@ class TierConfigurationController extends Controller
     /**
      * @return list<int|string|null>
      */
-    private function tabularRow(TierConfiguration $tier): array
+    private function tabularRow(TierConfiguration $tier, int $rowNumber): array
     {
         return [
-            $tier->uuid,
+            $rowNumber,
             $tier->name,
             $tier->min_amount !== null ? (string) $tier->min_amount : '',
             $tier->max_amount !== null ? (string) $tier->max_amount : '',
@@ -254,6 +259,7 @@ class TierConfigurationController extends Controller
             (int) ($tier->templates_count ?? 0),
             (int) $tier->sort_order,
             $tier->is_active ? 'active' : 'inactive',
+            $tier->created_at?->toIso8601String() ?? '',
             $tier->updated_at?->toIso8601String() ?? '',
         ];
     }

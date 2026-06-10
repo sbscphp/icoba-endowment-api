@@ -66,7 +66,10 @@ class ReportService
 
         return [
             'headers' => $this->headersFor($type),
-            'rows' => $rows->map(fn ($row): array => $this->rowValuesForExport($type, $row))->values()->all(),
+            'rows' => $rows->values()
+                ->map(fn ($row, int $index): array => $this->rowValuesForExport($type, $row, $index + 1))
+                ->values()
+                ->all(),
             'truncated' => $truncated,
         ];
     }
@@ -171,9 +174,13 @@ class ReportService
     /**
      * @return list<mixed>
      */
-    private function rowValuesForExport(ReportType $type, mixed $row): array
+    private function rowValuesForExport(ReportType $type, mixed $row, int $rowNumber): array
     {
         $data = $this->transformRow($type, $row);
+
+        if ($type === ReportType::PLEDGES) {
+            $data['uuid'] = $rowNumber;
+        }
 
         foreach ($data as $key => $value) {
             $data[$key] = $this->formatExportField($key, $value);
@@ -211,7 +218,7 @@ class ReportService
             ReportType::ROLES => ['Name', 'Description', 'Users Count', 'Active', 'Created At'],
             ReportType::CAMPAIGNS => ['Campaign ID', 'Name', 'Status', 'Target Amount', 'Base Currency', 'Created At'],
             ReportType::EMAIL_CAMPAIGNS => ['Title', 'Campaign', 'Status', 'Is Active', 'Recipients', 'Created At'],
-            ReportType::PLEDGES => ['UUID', 'Donor Name', 'Donor Email', 'Donor Phone', 'Campaign', 'Committed Amount', 'Currency', 'Committed Amount (NGN)', 'FX to NGN', 'Payment Plan', 'Installments', 'Status', 'Anonymous', 'Created At'],
+            ReportType::PLEDGES => ['ID', 'Donor Name', 'Donor Email', 'Donor Phone', 'Campaign', 'Committed Amount', 'Currency', 'Committed Amount (NGN)', 'FX to NGN', 'Payment Plan', 'Installments', 'Status', 'Anonymous', 'Created At'],
         };
     }
 

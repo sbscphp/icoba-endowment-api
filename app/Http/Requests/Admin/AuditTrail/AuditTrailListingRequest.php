@@ -52,16 +52,16 @@ class AuditTrailListingRequest extends FormRequest
     {
         ListingFilterRules::applyPeriodDateRangeToRequest($this);
 
-        $filters = $this->input('filters', []);
-        if (! is_array($filters)) {
-            $filters = [];
-        }
+        // $filters = $this->input('filters', []);
+        // if (! is_array($filters)) {
+        //     $filters = [];
+        // }
 
-        if (! array_key_exists('user_type', $filters) || $filters['user_type'] === null || $filters['user_type'] === '') {
-            $filters['user_type'] = UserTypeEnum::ADMIN->value;
-        }
+        // if (! array_key_exists('user_type', $filters) || $filters['user_type'] === null || $filters['user_type'] === '') {
+        //     $filters['user_type'] = UserTypeEnum::ADMIN->value;
+        // }
 
-        $this->merge(['filters' => $filters]);
+        // $this->merge(['filters' => $filters]);
 
         if ($this->has('sort_direction') && is_string($this->input('sort_direction'))) {
             $this->merge([
