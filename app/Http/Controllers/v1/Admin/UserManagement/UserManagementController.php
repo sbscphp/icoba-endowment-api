@@ -22,6 +22,7 @@ use App\Models\Role;
 use App\Responser\JsonResponser;
 use App\Services\Admin\UserManagement\AdminUserService;
 use App\Services\Admin\UserManagement\RoleService;
+use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -54,7 +55,8 @@ class UserManagementController extends Controller
     public function createRole(CreateRoleRequest $request)
     {
         try {
-            $role = $this->roleService->create($request->validated());
+            $admin = $this->requireAdmin($request);
+            $role = $this->roleService->create($request->validated(), $admin, $request);
 
             return JsonResponser::send(false, 'Role created successfully.', RoleResource::make($role)->resolve());
         } catch (\Throwable $th) {
@@ -154,10 +156,11 @@ class UserManagementController extends Controller
     public function createAdmin(CreateAdminRequest $request)
     {
         try {
+            $admin = $this->requireAdmin($request);
             $this->assertCanAssignSuperAdminRole($request->validated('role_id'));
-            $admin = $this->adminUserService->create($request->validated());
+            $created = $this->adminUserService->create($request->validated(), $admin, $request);
 
-            return JsonResponser::send(false, 'Admin user created successfully.', AdminFullResource::make($admin)->resolve());
+            return JsonResponser::send(false, 'Admin user created successfully.', AdminFullResource::make($created)->resolve());
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\UserManagement\UserManagementController@createAdmin');
         }
@@ -177,11 +180,12 @@ class UserManagementController extends Controller
     public function updateAdmin(UpdateAdminRequest $request, string $adminId)
     {
         try {
+            $actor = $this->requireAdmin($request);
             $roleUuid = $request->validated('role_id');
             if (is_string($roleUuid) && $roleUuid !== '') {
                 $this->assertCanAssignSuperAdminRole($roleUuid);
             }
-            $admin = $this->adminUserService->update($adminId, $request->validated());
+            $admin = $this->adminUserService->update($adminId, $request->validated(), $actor, $request);
 
             return JsonResponser::send(false, 'Admin user updated.', AdminFullResource::make($admin)->resolve());
         } catch (\Throwable $th) {
@@ -189,18 +193,16 @@ class UserManagementController extends Controller
         }
     }
 
-    public function setAdminActiveStatus(string $adminId)
+    public function setAdminActiveStatus(Request $request, string $adminId)
     {
         try {
-            $authAdmin = request()->user();
-            if ($authAdmin instanceof Admin) {
-                $targetAdmin = $this->adminUserService->findAdmin($adminId);
-                if ((string) $authAdmin->id === (string) $targetAdmin->id) {
-                    return JsonResponser::send(true, 'You cannot toggle your own status as an admin.', null, 422);
-                }
+            $actor = $this->requireAdmin($request);
+            $targetAdmin = $this->adminUserService->findAdmin($adminId);
+            if ((string) $actor->id === (string) $targetAdmin->id) {
+                return JsonResponser::send(true, 'You cannot toggle your own status as an admin.', null, 422);
             }
 
-            $admin = $this->adminUserService->toggleActiveStatus($adminId);
+            $admin = $this->adminUserService->toggleActiveStatus($adminId, $actor, $request);
             $message = (bool) $admin->is_active ? 'Admin user activated.' : 'Admin user deactivated.';
 
             return JsonResponser::send(false, $message, AdminFullResource::make($admin)->resolve());
@@ -209,10 +211,11 @@ class UserManagementController extends Controller
         }
     }
 
-    public function resendAdminInviteLink(string $adminId)
+    public function resendAdminInviteLink(Request $request, string $adminId)
     {
         try {
-            $admin = $this->adminUserService->resendInviteResetLink($adminId);
+            $actor = $this->requireAdmin($request);
+            $admin = $this->adminUserService->resendInviteResetLink($adminId, $actor, $request);
 
             return JsonResponser::send(false, 'Password setup link resent successfully.', AdminFullResource::make($admin)->resolve());
         } catch (\Throwable $th) {
@@ -220,10 +223,11 @@ class UserManagementController extends Controller
         }
     }
 
-    public function deleteAdmin(string $adminId)
+    public function deleteAdmin(Request $request, string $adminId)
     {
         try {
-            $result = $this->adminUserService->delete($adminId);
+            $actor = $this->requireAdmin($request);
+            $result = $this->adminUserService->delete($adminId, $actor, $request);
             $auditLogsCount = $result['audit_logs_count'];
             if ($auditLogsCount > 0) {
                 return JsonResponser::send(true, 'Admin cannot be deleted because of audit logs tied to them.', [
@@ -251,7 +255,8 @@ class UserManagementController extends Controller
     public function updateRole(UpdateRoleRequest $request, string $roleId)
     {
         try {
-            $role = $this->roleService->update($roleId, $request->validated());
+            $admin = $this->requireAdmin($request);
+            $role = $this->roleService->update($roleId, $request->validated(), $admin, $request);
 
             return JsonResponser::send(false, 'Role updated.', RoleResource::make($role)->resolve());
         } catch (\Throwable $th) {
@@ -259,10 +264,11 @@ class UserManagementController extends Controller
         }
     }
 
-    public function setRoleActiveStatus(string $roleId)
+    public function setRoleActiveStatus(Request $request, string $roleId)
     {
         try {
-            $role = $this->roleService->toggleActiveStatus($roleId);
+            $admin = $this->requireAdmin($request);
+            $role = $this->roleService->toggleActiveStatus($roleId, $admin, $request);
             $message = (bool) $role->is_active ? 'Role activated.' : 'Role deactivated.';
 
             return JsonResponser::send(false, $message, RoleResource::make($role)->resolve());
@@ -271,10 +277,11 @@ class UserManagementController extends Controller
         }
     }
 
-    public function deleteRole(string $roleId)
+    public function deleteRole(Request $request, string $roleId)
     {
         try {
-            $result = $this->roleService->delete($roleId);
+            $admin = $this->requireAdmin($request);
+            $result = $this->roleService->delete($roleId, $admin, $request);
             $adminUsersCount = $result['admin_users_count'];
             if ($adminUsersCount > 0) {
                 return JsonResponser::send(true, 'Role cannot be deleted because it is assigned to one or more admin users.', [
@@ -487,5 +494,15 @@ class UserManagementController extends Controller
         if (! ($authAdmin instanceof Admin) || ! $authAdmin->hasRole(eRole::SUPER_ADMIN->value)) {
             abort(403, 'Only a Super Admin can assign the Super Admin role.');
         }
+    }
+
+    private function requireAdmin(Request $request): Admin
+    {
+        $admin = $request->user();
+        if (! $admin instanceof Admin) {
+            abort(403, 'Forbidden.');
+        }
+
+        return $admin;
     }
 }
