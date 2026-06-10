@@ -8,6 +8,7 @@ use App\Models\GivingIdentity;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Transaction\TransactionFinalizationService;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -29,7 +30,7 @@ final class AdminManualReconciliationBackfillService
      */
     public function run(
         bool $dryRun = true,
-        bool $finalizeLinked = false,
+        bool $finalizeLinked = true,
         bool $suppressEmails = false,
         int $chunkSize = 100,
         ?string $transactionUuid = null,
@@ -61,20 +62,27 @@ final class AdminManualReconciliationBackfillService
                         ? $metadata['reconciliation_draft']
                         : [];
 
-                    $updates = [];
+                    $changes = [];
 
                     if ($transaction->awaiting_bank_verification_at !== null) {
-                        $updates['awaiting_bank_verification_at'] = null;
+                        $changes[] = 'awaiting_bank_verification_at';
                         $stats['cleared_awaiting_verification']++;
                     }
 
                     $donorUpdates = $this->resolveDonorUpdates($transaction, $draft);
                     if ($donorUpdates !== []) {
-                        $updates = array_merge($updates, $donorUpdates);
+                        $changes = array_merge($changes, array_keys($donorUpdates));
                         $stats['donor_backfilled']++;
                     }
 
-                    if ($updates === []) {
+                    $shouldFinalize = $finalizeLinked && $this->shouldFinalizeLinked($transaction);
+
+                    if ($shouldFinalize) {
+                        $changes[] = 'finalize';
+                        $stats['finalized']++;
+                    }
+
+                    if ($changes === []) {
                         $stats['unchanged']++;
 
                         continue;
@@ -84,7 +92,7 @@ final class AdminManualReconciliationBackfillService
                         $stats['preview'][] = [
                             'transaction_id' => (string) $transaction->transaction_id,
                             'uuid' => (string) $transaction->uuid,
-                            'changes' => array_keys($updates),
+                            'changes' => $changes,
                         ];
                     }
 
@@ -92,24 +100,24 @@ final class AdminManualReconciliationBackfillService
                         continue;
                     }
 
-                    DB::transaction(function () use ($transaction, $updates): void {
-                        $transaction->forceFill($updates)->save();
-                    });
-                }
-            });
+                    if ($transaction->awaiting_bank_verification_at !== null || $donorUpdates !== []) {
+                        DB::transaction(function () use ($transaction, $donorUpdates): void {
+                            $updates = $donorUpdates;
+                            if ($transaction->awaiting_bank_verification_at !== null) {
+                                $updates['awaiting_bank_verification_at'] = null;
+                            }
 
-        if (! $dryRun && $finalizeLinked) {
-            $this->baseQuery($transactionUuid)
-                ->where('status', TransactionStatus::PENDING)
-                ->whereNull('reconciled_at')
-                ->where(function (Builder $query): void {
-                    $query->whereNotNull('campaign_uuid')
-                        ->orWhereNotNull('pledge_uuid');
-                })
-                ->orderBy('id')
-                ->chunkById($chunkSize, function ($rows) use ($suppressEmails, &$stats): void {
-                    foreach ($rows as $transaction) {
-                        $finalized = $this->finalizer->finalizeSuccessful($transaction->refresh(), [
+                            $transaction->forceFill($updates)->save();
+                        });
+
+                        $transaction = $transaction->refresh();
+                    }
+
+                    if ($shouldFinalize) {
+                        $paidAt = $this->paidAtFromMetadata($transaction) ?? $transaction->created_at;
+
+                        $finalized = $this->finalizer->finalizeSuccessful($transaction, [
+                            'paid_at' => $paidAt,
                             'reconciliation_note' => $transaction->reconciliation_note,
                             'metadata' => [
                                 'reconciliation_backfill_at' => now()->toIso8601String(),
@@ -118,12 +126,12 @@ final class AdminManualReconciliationBackfillService
                             'suppress_emails' => $suppressEmails,
                         ]);
 
-                        if ($finalized) {
-                            $stats['finalized']++;
+                        if (! $finalized) {
+                            $stats['finalized']--;
                         }
                     }
-                });
-        }
+                }
+            });
 
         return $stats;
     }
@@ -139,6 +147,35 @@ final class AdminManualReconciliationBackfillService
         }
 
         return $query;
+    }
+
+    private function shouldFinalizeLinked(Transaction $transaction): bool
+    {
+        return $transaction->status === TransactionStatus::PENDING
+            && $transaction->reconciled_at === null
+            && (filled($transaction->campaign_uuid) || filled($transaction->pledge_uuid));
+    }
+
+    private function paidAtFromMetadata(Transaction $transaction): ?Carbon
+    {
+        $metadata = is_array($transaction->metadata) ? $transaction->metadata : [];
+
+        foreach ([
+            $metadata['bank_transaction_date'] ?? null,
+            $metadata['fcmb_transaction_date'] ?? null,
+        ] as $candidate) {
+            if (! is_string($candidate) || $candidate === '') {
+                continue;
+            }
+
+            try {
+                return Carbon::parse($candidate);
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        return null;
     }
 
     /**
