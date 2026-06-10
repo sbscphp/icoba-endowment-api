@@ -4,7 +4,7 @@ namespace Tests\Unit\Middleware;
 
 use App\Enums\Api\ApiEncryptionMode;
 use App\Http\Middleware\RequestResponseEncryptionMiddleware;
-use App\Http\Resources\ApiUserResource;
+use App\Http\Resources\Developer\ApiUserResource;
 use App\Repositories\Contracts\ApiUser\ApiUserRepositoryInterface;
 use App\Services\CryptoService;
 use Illuminate\Http\JsonResponse;

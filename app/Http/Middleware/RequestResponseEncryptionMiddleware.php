@@ -3,8 +3,8 @@
 namespace App\Http\Middleware;
 
 use App\Enums\Api\ApiEncryptionMode;
-use App\Http\Resources\ApiUserResource;
-use App\Http\Resources\EncryptedPayloadResource;
+use App\Http\Resources\Developer\ApiUserResource;
+use App\Http\Resources\Developer\EncryptedPayloadResource;
 use App\Repositories\Contracts\ApiUser\ApiUserRepositoryInterface;
 use App\Responser\JsonResponser;
 use App\Services\CryptoService;

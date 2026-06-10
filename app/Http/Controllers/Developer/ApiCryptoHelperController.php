@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Developer;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Developer\CryptoHelperDecryptRequest;
 use App\Http\Requests\Developer\CryptoHelperEncryptRequest;
-use App\Http\Resources\EncryptedPayloadResource;
+use App\Http\Resources\Developer\EncryptedPayloadResource;
 use App\Repositories\Contracts\ApiUser\ApiUserRepositoryInterface;
 use App\Responser\JsonResponser;
 use App\Services\CryptoService;

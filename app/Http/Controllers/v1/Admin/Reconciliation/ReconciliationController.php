@@ -12,7 +12,7 @@ use App\Http\Requests\Admin\Reconciliation\LinkDonationToPledgeRequest;
 use App\Http\Requests\Admin\Reconciliation\ReconciliationPledgeSearchRequest;
 use App\Http\Requests\Admin\Reconciliation\ReconciliationQueueListRequest;
 use App\Http\Requests\Admin\Reconciliation\UpdateReconciliationBankRequest;
-use App\Http\Resources\ReconciliationQueueResource;
+use App\Http\Resources\Admin\ReconciliationQueueResource;
 use App\Http\Resources\TransactionResource;
 use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Enums\TransactionStatus;

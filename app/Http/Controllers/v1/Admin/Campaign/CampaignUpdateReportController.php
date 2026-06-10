@@ -9,7 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Campaign\CampaignUpdateReportListRequest;
 use App\Http\Requests\Admin\Campaign\CreateCampaignUpdateReportRequest;
 use App\Http\Requests\Admin\Campaign\UpdateCampaignUpdateReportRequest;
-use App\Http\Resources\CampaignUpdateReportListResource;
+use App\Http\Resources\Admin\CampaignUpdateReportListResource;
 use App\Http\Resources\CampaignUpdateReportResource;
 use App\Models\CampaignUpdateReport;
 use App\Responser\JsonResponser;

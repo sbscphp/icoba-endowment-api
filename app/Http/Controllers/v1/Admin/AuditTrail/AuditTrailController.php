@@ -7,7 +7,7 @@ use App\Helpers\GeneralHelper;
 use App\Helpers\PDFReportHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AuditTrail\AuditTrailListingRequest;
-use App\Http\Resources\AuditLogResource;
+use App\Http\Resources\Admin\AuditLogResource;
 use App\Models\AuditLog;
 use App\Responser\JsonResponser;
 use App\Services\Audit\AuditTrailQueryService;

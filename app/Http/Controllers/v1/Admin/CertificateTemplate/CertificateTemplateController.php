@@ -10,8 +10,8 @@ use App\Http\Requests\Admin\CertificateTemplate\CreateCertificateTemplateRequest
 use App\Http\Requests\Admin\CertificateTemplate\PreviewCertificateTemplateRequest;
 use App\Http\Requests\Admin\CertificateTemplate\UpdateCertificateTemplateRequest;
 use App\Http\Requests\Admin\DateRangeStatsRequest;
-use App\Http\Resources\CertificateTemplateListResource;
-use App\Http\Resources\CertificateTemplateResource;
+use App\Http\Resources\Admin\CertificateTemplateListResource;
+use App\Http\Resources\Admin\CertificateTemplateResource;
 use App\Responser\JsonResponser;
 use App\Services\Admin\CertificateTemplate\CertificateTemplateService;
 use App\Services\Recognition\CertificatePdfService;

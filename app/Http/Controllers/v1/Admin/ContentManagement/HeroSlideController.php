@@ -6,7 +6,7 @@ use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ContentManagement\CreateHeroSlideRequest;
 use App\Http\Requests\Admin\ContentManagement\UpdateHeroSlideRequest;
-use App\Http\Resources\HeroSlideResource;
+use App\Http\Resources\Admin\HeroSlideResource;
 use App\Responser\JsonResponser;
 use App\Services\Admin\ContentManagement\HeroSlideService;
 
