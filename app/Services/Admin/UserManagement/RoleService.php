@@ -2,14 +2,20 @@
 
 namespace App\Services\Admin\UserManagement;
 
+use App\Enums\AuditActionEnum;
 use App\Enums\eRole;
+use App\Enums\ModuleEnums;
+use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
+use App\Helpers\GeneralHelper;
 use App\Helpers\PermissionModuleMapper;
 use App\Http\Requests\Concerns\ListingFilterRules;
+use App\Models\Admin;
 use App\Models\Role;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class RoleService
@@ -19,7 +25,7 @@ class RoleService
     /**
      * @param  array<string, mixed>  $payload
      */
-    public function create(array $payload): Role
+    public function create(array $payload, Admin $actor, Request $request): Role
     {
         $role = Role::query()->create([
             'name' => (string) $payload['name'],
@@ -33,7 +39,26 @@ class RoleService
             $role->syncPermissions($permissions);
         }
 
-        return $role->fresh() ?? $role;
+        $role = $role->fresh() ?? $role;
+
+        GeneralHelper::storeAuditLog(
+            UserTypeEnum::ADMIN,
+            AuditActionEnum::ROLE_CREATED,
+            $request,
+            $actor->uuid,
+            [
+                'role_uuid' => $role->uuid,
+                'role_name' => $role->name,
+                'permissions_count' => is_array($permissions) ? count($permissions) : 0,
+            ],
+            'Role created.',
+            Role::class,
+            $role->uuid,
+            ModuleEnums::user_management,
+            200,
+        );
+
+        return $role;
     }
 
     /**
@@ -203,9 +228,17 @@ class RoleService
     /**
      * @param  array<string, mixed>  $payload
      */
-    public function update(string $roleId, array $payload): Role
+    public function update(string $roleId, array $payload, Admin $actor, Request $request): Role
     {
         $role = $this->resolveRole($roleId);
+        $role->loadMissing('permissions:id,name');
+        $previous = [
+            'name' => $role->name,
+            'description' => $role->description,
+            'is_active' => (bool) $role->is_active,
+            'permissions' => $role->permissions->pluck('name')->sort()->values()->all(),
+        ];
+
         $permissions = $payload['permissions'] ?? null;
         unset($payload['permissions']);
 
@@ -226,13 +259,55 @@ class RoleService
             $role->syncPermissions($permissions);
         }
 
-        return $role->fresh() ?? $role;
+        $role = $role->fresh() ?? $role;
+        $role->loadMissing('permissions:id,name');
+
+        $changedFields = [];
+        foreach (['name', 'description', 'is_active'] as $field) {
+            if (array_key_exists($field, $payload) && $previous[$field] !== $role->{$field}) {
+                $changedFields[] = $field;
+            }
+        }
+        if (is_array($permissions)) {
+            $newPermissions = $role->permissions->pluck('name')->sort()->values()->all();
+            if ($previous['permissions'] !== $newPermissions) {
+                $changedFields[] = 'permissions';
+            }
+        }
+
+        if ($changedFields !== []) {
+            $metadata = [
+                'role_uuid' => $role->uuid,
+                'role_name' => $role->name,
+                'fields' => $changedFields,
+            ];
+            if (in_array('permissions', $changedFields, true)) {
+                $metadata['previous_permissions_count'] = count($previous['permissions']);
+                $metadata['new_permissions_count'] = $role->permissions->count();
+            }
+
+            GeneralHelper::storeAuditLog(
+                UserTypeEnum::ADMIN,
+                AuditActionEnum::ROLE_UPDATED,
+                $request,
+                $actor->uuid,
+                $metadata,
+                'Role updated.',
+                Role::class,
+                $role->uuid,
+                ModuleEnums::user_management,
+                200,
+            );
+        }
+
+        return $role;
     }
 
-    public function toggleActiveStatus(string $roleId): Role
+    public function toggleActiveStatus(string $roleId, Admin $actor, Request $request): Role
     {
         $role = $this->resolveRole($roleId);
-        $isActive = ! ((bool) $role->is_active);
+        $previousStatus = (bool) $role->is_active;
+        $isActive = ! $previousStatus;
 
         if (! $isActive && $role->admins()->exists()) {
             throw new ApiException('Role cannot be deactivated because it is assigned to one or more admin users.', 422);
@@ -240,13 +315,33 @@ class RoleService
 
         $role->forceFill(['is_active' => $isActive])->save();
 
-        return $role->fresh() ?? $role;
+        $role = $role->fresh() ?? $role;
+
+        GeneralHelper::storeAuditLog(
+            UserTypeEnum::ADMIN,
+            AuditActionEnum::ROLE_STATUS_TOGGLED,
+            $request,
+            $actor->uuid,
+            [
+                'role_uuid' => $role->uuid,
+                'role_name' => $role->name,
+                'previous_status' => $previousStatus ? 'active' : 'inactive',
+                'new_status' => $isActive ? 'active' : 'inactive',
+            ],
+            $isActive ? 'Role activated.' : 'Role deactivated.',
+            Role::class,
+            $role->uuid,
+            ModuleEnums::user_management,
+            200,
+        );
+
+        return $role;
     }
 
     /**
-     * @return array{admin_users_count:int}
+     * @return array{admin_users_count:int, uuid?:string, name?:string}
      */
-    public function delete(string $roleId): array
+    public function delete(string $roleId, Admin $actor, Request $request): array
     {
         $role = $this->resolveRole($roleId);
         $adminUsersCount = $role->admins()->count();
@@ -255,9 +350,24 @@ class RoleService
             return ['admin_users_count' => $adminUsersCount];
         }
 
+        $roleUuid = $role->uuid;
+        $roleName = $role->name;
         $role->delete();
 
-        return ['admin_users_count' => 0];
+        GeneralHelper::storeAuditLog(
+            UserTypeEnum::ADMIN,
+            AuditActionEnum::ROLE_DELETED,
+            $request,
+            $actor->uuid,
+            ['role_uuid' => $roleUuid, 'role_name' => $roleName],
+            'Role deleted.',
+            Role::class,
+            $roleUuid,
+            ModuleEnums::user_management,
+            200,
+        );
+
+        return ['admin_users_count' => 0, 'uuid' => $roleUuid, 'name' => $roleName];
     }
 
     private function resolveRole(string $roleId): Role
