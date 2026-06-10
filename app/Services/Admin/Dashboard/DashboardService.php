@@ -40,7 +40,8 @@ class DashboardService
         $period = ListingFilterRules::resolveDateWindow($filters);
         $amountColumn = $this->amountColumn($filters);
         $current = $this->overviewMetrics($query, $amountColumn, $filters);
-        $previous = $this->previousOverviewMetrics($filters, $period, $amountColumn);
+        $comparisonPeriod = $this->resolvePreviousEquivalentPeriod($period);
+        $previous = $this->previousOverviewMetrics($filters, $comparisonPeriod, $amountColumn);
 
         return [
             'currency' => $this->responseCurrency($filters),
@@ -50,6 +51,9 @@ class DashboardService
             'start_date' => $period['start']?->toDateString(),
             'end_date' => $period['end']?->toDateString(),
             'comparison' => 'previous_equivalent_period',
+            'comparison_days' => $comparisonPeriod !== null ? $comparisonPeriod['days'] : null,
+            'comparison_start_date' => $comparisonPeriod !== null ? $comparisonPeriod['start']->toDateString() : null,
+            'comparison_end_date' => $comparisonPeriod !== null ? $comparisonPeriod['end']->toDateString() : null,
             'total_fund_raised' => $current['total_fund_raised'],
             'total_transactions' => $current['total_transactions'],
             'total_pledges' => $current['total_pledges'],
@@ -449,13 +453,37 @@ class DashboardService
     }
 
     /**
-     * @param  array<string, mixed>  $filters
      * @param  array{start: Carbon|null, end: Carbon|null, period: string|null}  $period
-     * @return array<string, int|float|string>
+     * @return array{days: int, start: Carbon, end: Carbon}|null
      */
-    private function previousOverviewMetrics(array $filters, array $period, string $amountColumn): array
+    private function resolvePreviousEquivalentPeriod(array $period): ?array
     {
         if ($period['start'] === null || $period['end'] === null) {
+            return null;
+        }
+
+        $inclusiveDays = (int) max(
+            1,
+            $period['start']->copy()->startOfDay()->diffInDays($period['end']->copy()->startOfDay()) + 1
+        );
+        $previousEnd = $period['start']->copy()->subDay()->endOfDay();
+        $previousStart = $period['start']->copy()->subDays($inclusiveDays)->startOfDay();
+
+        return [
+            'days' => $inclusiveDays,
+            'start' => $previousStart,
+            'end' => $previousEnd,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @param  array{days: int, start: Carbon, end: Carbon}|null  $comparisonPeriod
+     * @return array<string, int|float|string>
+     */
+    private function previousOverviewMetrics(array $filters, ?array $comparisonPeriod, string $amountColumn): array
+    {
+        if ($comparisonPeriod === null) {
             return [
                 'total_fund_raised_numeric' => 0.0,
                 'total_transactions_numeric' => 0,
@@ -464,16 +492,9 @@ class DashboardService
             ];
         }
 
-        $inclusiveDays = max(
-            1,
-            $period['start']->copy()->startOfDay()->diffInDays($period['end']->copy()->startOfDay()) + 1
-        );
-        $previousEnd = $period['start']->copy()->subDay()->endOfDay();
-        $previousStart = $period['start']->copy()->subDays($inclusiveDays)->startOfDay();
-
         $previousFilters = $filters;
-        $previousFilters['start_date'] = $previousStart->toDateString();
-        $previousFilters['end_date'] = $previousEnd->toDateString();
+        $previousFilters['start_date'] = $comparisonPeriod['start']->toDateString();
+        $previousFilters['end_date'] = $comparisonPeriod['end']->toDateString();
         $previousFilters['period'] = 'custom';
 
         return $this->overviewMetrics($this->successfulTransactionsQuery($previousFilters), $amountColumn, $previousFilters);
