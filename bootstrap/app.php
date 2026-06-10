@@ -56,7 +56,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(function (ApiException $e, $request) {
             if ($request->expectsJson()) {
-                return JsonResponser::send(true, $e->getMessage(), null, $e->status);
+                return JsonResponser::send(true, $e->getMessage(), $e->payload, $e->status);
             }
         });
 

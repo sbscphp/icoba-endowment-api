@@ -19,6 +19,8 @@ class TierConfigurationService
 
     private const MAX_EXPORT_ROWS = 5000;
 
+    private const RANGE_GAP = 0.01;
+
     public function __construct(
         private readonly TierConfigurationMemberStatsService $memberStats,
     ) {}
@@ -264,18 +266,52 @@ class TierConfigurationService
 
     private function assertNoRangeOverlap(float $minAmount, ?float $maxAmount, ?int $ignoreTierId = null): void
     {
-        $overlappingTier = TierConfiguration::query()
+        $result = $this->findRangeOverlaps($minAmount, $maxAmount, $ignoreTierId);
+
+        if ($result['overlapping'] === []) {
+            return;
+        }
+
+        $names = array_column($result['overlapping'], 'name');
+        $message = count($names) === 1
+            ? sprintf(
+                'Tier range overlaps with existing tier "%s". Please adjust min/max amount or update neighboring tiers first.',
+                $names[0]
+            )
+            : sprintf(
+                'Tier range overlaps with %d existing tiers: %s. Please adjust min/max amount or update neighboring tiers first.',
+                count($names),
+                implode(', ', $names)
+            );
+
+        throw new ApiException($message, 422, [
+            'overlapping_tiers' => $result['overlapping'],
+            'suggested_adjustments' => $result['suggestions'],
+            'requested_range' => [
+                'min_amount' => $minAmount,
+                'max_amount' => $maxAmount,
+            ],
+        ]);
+    }
+
+    /**
+     * @return array{
+     *     overlapping: list<array{id: int, uuid: string, name: string, min_amount: float, max_amount: float|null}>,
+     *     suggestions: list<array{tier_id: string, tier_name: string, field: string, suggested_value: bool|float|null, reason: string}>
+     * }
+     */
+    private function findRangeOverlaps(float $minAmount, ?float $maxAmount, ?int $ignoreTierId = null): array
+    {
+        $overlapping = TierConfiguration::query()
             ->when($ignoreTierId !== null, fn (Builder $q) => $q->where('id', '!=', $ignoreTierId))
             ->where(function (Builder $query) use ($minAmount, $maxAmount): void {
                 if ($maxAmount === null) {
-                    // New range is [min, +inf): overlap if existing max is null OR existing max >= new min.
                     $query->whereNull('max_amount')
                         ->orWhere('max_amount', '>=', $minAmount);
 
                     return;
                 }
 
-                // General intersection check between [newMin, newMax] and [oldMin, oldMax|null=+inf]
                 $query->where('min_amount', '<=', $maxAmount)
                     ->where(function (Builder $inner) use ($minAmount): void {
                         $inner->whereNull('max_amount')
@@ -283,19 +319,96 @@ class TierConfigurationService
                     });
             })
             ->orderBy('min_amount')
-            ->first();
+            ->get(['id', 'uuid', 'name', 'min_amount', 'max_amount']);
 
-        if ($overlappingTier === null) {
-            return;
+        $rows = $overlapping->map(fn (TierConfiguration $tier): array => [
+            'id' => (int) $tier->id,
+            'uuid' => (string) $tier->uuid,
+            'name' => (string) $tier->name,
+            'min_amount' => (float) $tier->min_amount,
+            'max_amount' => $tier->max_amount !== null ? (float) $tier->max_amount : null,
+        ])->values()->all();
+
+        return [
+            'overlapping' => $rows,
+            'suggestions' => $this->buildOverlapSuggestions($minAmount, $maxAmount, $rows),
+        ];
+    }
+
+    /**
+     * @param  list<array{id: int, uuid: string, name: string, min_amount: float, max_amount: float|null}>  $overlapping
+     * @return list<array{tier_id: string, tier_name: string, field: string, suggested_value: bool|float|null, reason: string}>
+     */
+    private function buildOverlapSuggestions(float $newMin, ?float $newMax, array $overlapping): array
+    {
+        $suggestions = [];
+
+        foreach ($overlapping as $tier) {
+            $otherMin = $tier['min_amount'];
+            $otherMax = $tier['max_amount'];
+
+            if ($otherMin < $newMin && ($otherMax === null || $otherMax >= $newMin)) {
+                $suggestedMax = round($newMin - self::RANGE_GAP, 2);
+                if ($suggestedMax >= $otherMin) {
+                    $suggestions[] = [
+                        'tier_id' => $tier['uuid'],
+                        'tier_name' => $tier['name'],
+                        'field' => 'max_amount',
+                        'suggested_value' => $suggestedMax,
+                        'reason' => sprintf(
+                            'Reduce max so it ends before your new minimum (₦%s).',
+                            number_format($newMin, 2, '.', ',')
+                        ),
+                    ];
+                }
+            }
+
+            if ($newMax !== null && $otherMin <= $newMax && ($otherMax === null || $otherMax > $newMax)) {
+                $suggestedMin = round($newMax + self::RANGE_GAP, 2);
+                if ($otherMax === null || $suggestedMin <= $otherMax) {
+                    $suggestions[] = [
+                        'tier_id' => $tier['uuid'],
+                        'tier_name' => $tier['name'],
+                        'field' => 'min_amount',
+                        'suggested_value' => $suggestedMin,
+                        'reason' => sprintf(
+                            'Raise min so it starts after your new maximum (₦%s).',
+                            number_format($newMax, 2, '.', ',')
+                        ),
+                    ];
+
+                    continue;
+                }
+            }
+
+            if ($newMax !== null
+                && $otherMin >= $newMin
+                && ($otherMax === null || $otherMax <= $newMax)) {
+                $suggestions[] = [
+                    'tier_id' => $tier['uuid'],
+                    'tier_name' => $tier['name'],
+                    'field' => 'is_active',
+                    'suggested_value' => false,
+                    'reason' => 'This tier falls entirely within your requested range; deactivate or delete it first.',
+                ];
+            }
         }
 
-        throw new ApiException(
-            sprintf(
-                'Tier range overlaps with existing tier "%s". Please adjust min/max amount.',
-                $overlappingTier->name
-            ),
-            422
-        );
+        $seen = [];
+
+        return array_values(array_filter(
+            $suggestions,
+            function (array $suggestion) use (&$seen): bool {
+                $key = $suggestion['tier_id'].'|'.$suggestion['field'];
+                if (isset($seen[$key])) {
+                    return false;
+                }
+
+                $seen[$key] = true;
+
+                return true;
+            }
+        ));
     }
 
     /**
