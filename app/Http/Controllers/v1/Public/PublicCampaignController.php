@@ -5,12 +5,15 @@ namespace App\Http\Controllers\v1\Public;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Concerns\ResolvesAuthenticatedCustomer;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Public\PublicCampaignContextRequest;
 use App\Http\Requests\Public\PublicCampaignDropdownRequest;
 use App\Http\Requests\Public\PublicCampaignListRequest;
+use App\Http\Resources\PublicCampaignContextResource;
 use App\Http\Resources\PublicCampaignDetailResource;
 use App\Http\Resources\PublicCampaignDropdownResource;
 use App\Http\Resources\PublicCampaignListResource;
 use App\Responser\JsonResponser;
+use App\Services\Public\PublicCampaignContextService;
 use App\Services\Public\PublicCampaignService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -23,6 +26,7 @@ class PublicCampaignController extends Controller
 
     public function __construct(
         private readonly PublicCampaignService $publicCampaignService,
+        private readonly PublicCampaignContextService $publicCampaignContextService,
     ) {}
 
     public function index(PublicCampaignListRequest $request)
@@ -56,6 +60,25 @@ class PublicCampaignController extends Controller
             );
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Public\PublicCampaignController@dropdown');
+        }
+    }
+
+    public function context(PublicCampaignContextRequest $request)
+    {
+        try {
+            $validated = $request->validated();
+            $campaign = $this->publicCampaignContextService->resolve(
+                $validated['campaign_uuid'] ?? null,
+                $validated['pledge_uuid'] ?? null,
+            );
+
+            return JsonResponser::send(
+                false,
+                'Campaign context retrieved.',
+                PublicCampaignContextResource::make($campaign)->resolve()
+            );
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Public\PublicCampaignController@context');
         }
     }
 

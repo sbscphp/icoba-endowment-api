@@ -21,6 +21,8 @@ Route::prefix('v1')->group(function () {
         Route::get('leaderboard/top-sets', [LeaderboardController::class, 'topSets']);
         Route::get('leaderboard/recent-donations', [LeaderboardController::class, 'recentDonations']);
 
+        Route::get('campaigns/context', [PublicCampaignController::class, 'context']);
+
         Route::middleware('auth.attempt')->group(function (): void {
             Route::get('campaigns', [PublicCampaignController::class, 'index']);
             Route::get('campaigns/dropdown', [PublicCampaignController::class, 'dropdown']);

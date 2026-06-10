@@ -18,6 +18,7 @@ class RoleListRequest extends ApiFormRequest
         return array_merge(
             ListingFilterRules::rules(['id', 'name', 'users_count', 'updated_at', 'is_active']),
             [
+                'export' => ['sometimes', 'nullable', Rule::in(['csv', 'pdf'])],
                 'filters.status' => ['sometimes', 'nullable', Rule::in(['active', 'inactive'])],
             ]
         );
@@ -26,6 +27,7 @@ class RoleListRequest extends ApiFormRequest
     public function messages(): array
     {
         return array_merge(parent::messages(), ListingFilterRules::listingMessages(), [
+            'export.in' => "Export format must be either 'csv' or 'pdf'.",
             'filters.status.in' => "Status filter must be either 'active' or 'inactive'.",
         ]);
     }

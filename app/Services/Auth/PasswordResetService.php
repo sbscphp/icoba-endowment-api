@@ -232,6 +232,24 @@ class PasswordResetService
         ]);
     }
 
+    public function adminSetPasswordUrl(string $resetToken, ?string $frontendUrl = null): string
+    {
+        $override = config('app.admin_frontend_set_password_url');
+        if (is_string($override) && $override !== '') {
+            $base = $override;
+        } else {
+            $adminFrontend = rtrim((string) ($frontendUrl ?? config('app.admin_frontend_url')), '/');
+            if ($adminFrontend === '') {
+                $adminFrontend = rtrim((string) config('app.frontend_url'), '/');
+            }
+            $base = $adminFrontend !== '' ? $adminFrontend.'/create-new-password' : url('/');
+        }
+
+        $sep = str_contains($base, '?') ? '&' : '?';
+
+        return $base.$sep.'token='.urlencode($resetToken);
+    }
+
     /**
      * @return array<string, mixed>
      */
