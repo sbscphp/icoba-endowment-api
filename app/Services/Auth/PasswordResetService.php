@@ -5,6 +5,7 @@ namespace App\Services\Auth;
 use App\Enums\AuditActionEnum;
 use App\Enums\ModuleEnums;
 use App\Enums\OtpChannelEnum;
+use App\Enums\OtpPurposeEnum;
 use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
@@ -22,6 +23,7 @@ class PasswordResetService
 
     public function __construct(
         private readonly OtpService $otpService,
+        private readonly ChallengeTokenService $challengeTokenService,
     ) {}
 
     public function requestReset(string $email, OtpChannelEnum $channel, Request $request): array
@@ -121,25 +123,27 @@ class PasswordResetService
 
     public function resendResetOtp(string $challengeToken, ?OtpChannelEnum $channel, Request $request): array
     {
+        $target = $this->challengeTokenService->auditTarget($challengeToken, OtpPurposeEnum::PASSWORD_RESET);
         $payload = $this->otpService->resendPasswordResetOtp($challengeToken, $channel);
-        GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, null, [
+        GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, $target['subject_id'], [
             'purpose' => 'PASSWORD_RESET',
             'otp_channel' => $payload['otp_channel'] ?? $channel?->value,
             'resend' => true,
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
-        ], 'Password reset OTP was resent.', null, null, ModuleEnums::authentication, 200);
+        ], 'Password reset OTP was resent.', $target['model'], $target['subject_id'], ModuleEnums::authentication, 200);
 
         return $payload;
     }
 
     public function resendAdminResetOtp(string $challengeToken, Request $request): array
     {
+        $target = $this->challengeTokenService->auditTarget($challengeToken, OtpPurposeEnum::PASSWORD_RESET);
         $payload = $this->otpService->resendPasswordResetOtp($challengeToken);
-        GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_SENT, $request, null, [
+        GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_SENT, $request, $target['subject_id'], [
             'purpose' => 'PASSWORD_RESET',
             'resend' => true,
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
-        ], 'Password reset OTP was resent.', null, null, ModuleEnums::authentication, 200);
+        ], 'Password reset OTP was resent.', $target['model'], $target['subject_id'], ModuleEnums::authentication, 200);
 
         return $payload;
     }
@@ -149,16 +153,18 @@ class PasswordResetService
         try {
             $payload = $this->otpService->verifyPasswordResetOtp($challengeToken, $otp);
         } catch (\Throwable $th) {
-            GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_FAILED, $request, null, [
+            $target = $this->challengeTokenService->auditTarget($challengeToken, OtpPurposeEnum::PASSWORD_RESET);
+            GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_FAILED, $request, $target['subject_id'], [
                 'purpose' => 'PASSWORD_RESET',
-            ], 'Password reset OTP verification failed.', null, null, ModuleEnums::authentication, 422);
+            ], 'Password reset OTP verification failed.', $target['model'], $target['subject_id'], ModuleEnums::authentication, 422);
 
             throw $th;
         }
 
-        GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_VERIFIED, $request, null, [
+        $target = $this->auditTargetFromResetPayload($payload);
+        GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_VERIFIED, $request, $target['subject_id'], [
             'purpose' => 'PASSWORD_RESET',
-        ], 'Password reset OTP verified successfully.', null, null, ModuleEnums::authentication, 200);
+        ], 'Password reset OTP verified successfully.', $target['model'], $target['subject_id'], ModuleEnums::authentication, 200);
 
         return $payload;
     }
@@ -168,16 +174,18 @@ class PasswordResetService
         try {
             $payload = $this->otpService->verifyPasswordResetOtp($challengeToken, $otp);
         } catch (\Throwable $th) {
-            GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_FAILED, $request, null, [
+            $target = $this->challengeTokenService->auditTarget($challengeToken, OtpPurposeEnum::PASSWORD_RESET);
+            GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_FAILED, $request, $target['subject_id'], [
                 'purpose' => 'PASSWORD_RESET',
-            ], 'Password reset OTP verification failed.', null, null, ModuleEnums::authentication, 422);
+            ], 'Password reset OTP verification failed.', $target['model'], $target['subject_id'], ModuleEnums::authentication, 422);
 
             throw $th;
         }
 
-        GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_VERIFIED, $request, null, [
+        $target = $this->auditTargetFromResetPayload($payload);
+        GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_VERIFIED, $request, $target['subject_id'], [
             'purpose' => 'PASSWORD_RESET',
-        ], 'Password reset OTP verified successfully.', null, null, ModuleEnums::authentication, 200);
+        ], 'Password reset OTP verified successfully.', $target['model'], $target['subject_id'], ModuleEnums::authentication, 200);
 
         return $payload;
     }
@@ -331,4 +339,23 @@ class PasswordResetService
         return $subject->displayName();
     }
 
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array{subject_id: ?string, model: ?string}
+     */
+    private function auditTargetFromResetPayload(array $payload): array
+    {
+        try {
+            $decoded = decrypt((string) ($payload['reset_token'] ?? ''));
+            $subjectId = is_array($decoded) ? ($decoded['subject_id'] ?? null) : null;
+            $subjectType = is_array($decoded) ? ($decoded['subject_type'] ?? null) : null;
+        } catch (\Throwable) {
+            return ['subject_id' => null, 'model' => null];
+        }
+
+        return [
+            'subject_id' => is_string($subjectId) && $subjectId !== '' ? $subjectId : null,
+            'model' => $subjectType === UserTypeEnum::ADMIN->value ? Admin::class : User::class,
+        ];
+    }
 }
