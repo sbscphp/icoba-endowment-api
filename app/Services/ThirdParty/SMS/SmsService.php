@@ -3,6 +3,7 @@
 namespace App\Services\ThirdParty\SMS;
 
 use App\Models\Country;
+use App\Support\SmsMode;
 use App\Services\Phone\PhoneNumberService;
 use Illuminate\Support\Facades\Log;
 
@@ -34,7 +35,7 @@ class SmsService
             $expiresInMinutes
         );
 
-        $driver = strtolower((string) config('services.sms.driver', 'log'));
+        $driver = $this->resolveDriver($phoneNumber);
 
         try {
             match ($driver) {
@@ -42,7 +43,10 @@ class SmsService
                 'termii' => $this->termiiService->send($phoneNumber, $message),
                 'twilio' => $this->twilioService->send($phoneNumber, $message),
                 'log' => Log::info('OTP SMS prepared', ['to' => $phoneNumber, 'purpose' => $purposeLabel]),
-                default => null,
+                default => Log::warning('OTP SMS skipped: unknown provider', [
+                    'driver' => $driver,
+                    'to' => $phoneNumber,
+                ]),
             };
         } catch (\Throwable $th) {
             // OTP email delivery still proceeds; avoid leaking provider failure to public auth flows.
@@ -51,6 +55,39 @@ class SmsService
                 'error' => $th->getMessage(),
             ]);
         }
+    }
+
+    private function resolveDriver(string $phoneDigits): string
+    {
+        return match (SmsMode::current()) {
+            SmsMode::LOG => 'log',
+            SmsMode::LIVE => $this->resolveLiveProvider($phoneDigits),
+            default => 'log',
+        };
+    }
+
+    private function resolveLiveProvider(string $phoneDigits): string
+    {
+        if ($this->isNigerianNumber($phoneDigits)) {
+            return 'termii';
+        }
+
+        $foreignProvider = strtolower(trim((string) config('services.sms.foreign_provider', 'twilio')));
+
+        if (in_array($foreignProvider, ['infobip', 'twilio'], true)) {
+            return $foreignProvider;
+        }
+
+        Log::warning('SMS foreign provider invalid; falling back to twilio', [
+            'configured' => $foreignProvider,
+        ]);
+
+        return 'twilio';
+    }
+
+    private function isNigerianNumber(string $phoneDigits): bool
+    {
+        return str_starts_with($phoneDigits, '234');
     }
 
     private function resolveSmsDigits(?string $countryCode, ?string $nationalNumber): ?string
