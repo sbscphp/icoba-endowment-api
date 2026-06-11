@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 class CheckSmsBalanceCommand extends Command
 {
     protected $signature = 'sms:check-balance
-                            {--provider= : SMS provider to check (termii, twilio, infobip). Defaults to SMS_PROVIDER.}
+                            {--provider= : SMS provider to check (termii, twilio, infobip). Defaults to termii.}
                             {--scheduled : Scheduled run — only email when a threshold is newly crossed.}';
 
     protected $description = 'Check SMS provider wallet balance and email when budget thresholds are crossed.';

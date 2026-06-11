@@ -13,7 +13,6 @@ use App\Http\Resources\Auth\AuthResource;
 use App\Responser\JsonResponser;
 use App\Services\Auth\AuthService;
 use App\Support\OtpFlowLogger;
-use Illuminate\Http\JsonResponse;
 
 class EmailVerificationController extends Controller
 {
@@ -41,13 +40,13 @@ class EmailVerificationController extends Controller
             );
 
             if (isset($payload['access_token'])) {
-                return $this->logAndReturn('EMAIL_VERIFICATION', 'HTTP verify-otp response 200 (email verified + tokens)', [
+                return OtpFlowLogger::logAndReturn('EMAIL_VERIFICATION', 'HTTP verify-otp response 200 (email verified + tokens)', [
                     'token_fp' => OtpFlowLogger::tokenFingerprint($challengeToken),
                     'has_access_token' => true,
                 ], JsonResponser::send(false, 'Email verified.', AuthResource::make($payload), 200));
             }
 
-            return $this->logAndReturn('EMAIL_VERIFICATION', 'HTTP verify-otp response 200 (login OTP next)', array_merge(
+            return OtpFlowLogger::logAndReturn('EMAIL_VERIFICATION', 'HTTP verify-otp response 200 (login OTP next)', array_merge(
                 OtpFlowLogger::tokenMeta((string) ($payload['challenge_token'] ?? '')),
                 ['registration_step' => $payload['registration_step'] ?? null],
             ), JsonResponser::send(false, 'Sign-in code sent. Please verify to complete login.', $payload, 200));
@@ -115,15 +114,5 @@ class EmailVerificationController extends Controller
 
             return $response;
         }
-    }
-
-    /**
-     * @param  array<string, mixed>  $context
-     */
-    private function logAndReturn(string $flow, string $step, array $context, JsonResponse $response): JsonResponse
-    {
-        OtpFlowLogger::log($flow, $step, array_merge($context, ['status' => $response->getStatusCode()]));
-
-        return $response;
     }
 }

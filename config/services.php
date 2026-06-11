@@ -51,7 +51,14 @@ return [
     ],
 
     'sms' => [
-        'driver' => env('SMS_PROVIDER', 'log'),
+        /*
+        | SMS_MODE controls OTP SMS delivery:
+        | stub — fixed OTP (SMS_STUB_CODE), no SMS API calls (local dev)
+        | log  — random OTP, message written to logs only (staging)
+        | live — random OTP, sent via Termii (NG) or SMS_FOREIGN_PROVIDER (foreign)
+        */
+        'stub_code' => (string) env('SMS_STUB_CODE', '123456'),
+        'foreign_provider' => env('SMS_FOREIGN_PROVIDER', 'twilio'),
         'infobip' => [
             'base_url' => env('INFOBIP_BASE_URL'),
             'api_key' => env('INFOBIP_API_KEY'),

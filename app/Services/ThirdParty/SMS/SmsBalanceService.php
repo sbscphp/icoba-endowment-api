@@ -18,7 +18,7 @@ class SmsBalanceService
      */
     public function checkAndNotify(?string $provider = null, bool $forceNotify = false): array
     {
-        $provider = strtolower(trim((string) ($provider ?? config('services.sms.driver', 'log'))));
+        $provider = strtolower(trim((string) ($provider ?? 'termii')));
 
         if (! in_array($provider, ['termii', 'twilio', 'infobip'], true)) {
             return [
