@@ -245,17 +245,6 @@ class OtpService
     private function dispatchOtp(User|Admin $subject, string $plainOtp, OtpPurposeEnum $purpose, string $purposeLabel, OtpChannelEnum $channel): void
     {
         if ($channel === OtpChannelEnum::EMAIL) {
-            if (SmsMode::isStub()) {
-                Log::info('OTP email stub: SMS_MODE=stub', [
-                    'subject_type' => $this->subjectType($subject),
-                    'subject_id' => $subject->uuid,
-                    'purpose' => $purpose->value,
-                    'email' => $subject->email,
-                ]);
-
-                return;
-            }
-
             $theme = app(ThemeResolver::class)->resolveForMail();
             $recipientName = $subject instanceof User
                 ? $subject->displayName()

@@ -4,6 +4,7 @@ namespace Tests\Unit\Services\Auth;
 
 use App\Enums\OtpChannelEnum;
 use App\Enums\OtpPurposeEnum;
+use App\Mail\OTPMail;
 use App\Models\AuthChallenge;
 use App\Models\User;
 use App\Support\SmsMode;
@@ -48,7 +49,7 @@ class OtpStubModeTest extends TestCase
 
         $this->assertNotNull($challenge);
         $this->assertTrue(Hash::check('123456', (string) $challenge->code_hash));
-        Mail::assertNothingSent();
+        Mail::assertSent(OTPMail::class);
     }
 
     public function test_stub_mode_uses_fixed_code_for_sms_login_otp(): void

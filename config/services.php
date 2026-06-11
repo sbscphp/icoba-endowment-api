@@ -53,7 +53,7 @@ return [
     'sms' => [
         /*
         | SMS_MODE controls OTP SMS delivery:
-        | stub — fixed OTP (SMS_STUB_CODE) for all channels, no email/SMS dispatch (local dev)
+        | stub — fixed OTP (SMS_STUB_CODE) for all channels; email still sent; SMS providers not called (local dev)
         | log  — random OTP, message written to logs only (staging)
         | live — random OTP, sent via Termii (NG) or SMS_FOREIGN_PROVIDER (foreign)
         */
