@@ -47,9 +47,9 @@ class OtpService
         return max(1, (int) config('security.otp_send_cooldown_seconds'));
     }
 
-    public function sendLoginOtp(User|Admin $subject): array
+    public function sendLoginOtp(User|Admin $subject, OtpChannelEnum $channel = OtpChannelEnum::EMAIL): array
     {
-        return $this->sendOtp($subject, OtpPurposeEnum::LOGIN, 'login', OtpChannelEnum::EMAIL);
+        return $this->sendOtp($subject, OtpPurposeEnum::LOGIN, 'login', $channel);
     }
 
     public function verifyLoginOtp(string $challengeToken, string $otpCode): User|Admin
@@ -245,6 +245,17 @@ class OtpService
     private function dispatchOtp(User|Admin $subject, string $plainOtp, OtpPurposeEnum $purpose, string $purposeLabel, OtpChannelEnum $channel): void
     {
         if ($channel === OtpChannelEnum::EMAIL) {
+            if (SmsMode::isStub()) {
+                Log::info('OTP email stub: SMS_MODE=stub', [
+                    'subject_type' => $this->subjectType($subject),
+                    'subject_id' => $subject->uuid,
+                    'purpose' => $purpose->value,
+                    'email' => $subject->email,
+                ]);
+
+                return;
+            }
+
             $theme = app(ThemeResolver::class)->resolveForMail();
             $recipientName = $subject instanceof User
                 ? $subject->displayName()
@@ -276,7 +287,7 @@ class OtpService
 
     private function generateOtpCode(OtpChannelEnum $channel): string
     {
-        if ($channel === OtpChannelEnum::SMS && SmsMode::isStub()) {
+        if (SmsMode::isStub()) {
             return SmsMode::stubCode();
         }
 
@@ -325,6 +336,10 @@ class OtpService
      */
     private function evaluateOtpSendGate(User|Admin $subject, OtpPurposeEnum $purpose, OtpChannelEnum $channel): array
     {
+        if (SmsMode::isStub()) {
+            return ['mode' => 'send_new'];
+        }
+
         $cooldownSec = $this->otpSendCooldownSeconds();
         $subjectType = $this->subjectType($subject);
 
