@@ -11,6 +11,7 @@ use App\Models\AuthChallenge;
 use App\Models\User;
 use App\Services\Auth\ChallengeTokenService;
 use App\Services\Auth\OtpService;
+use App\Support\SmsMode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -37,6 +38,15 @@ final class EmailVerificationResendTest extends TestCase
 
         $this->challengeTokenService = app(ChallengeTokenService::class);
         $this->otpService = app(OtpService::class);
+
+        SmsMode::setOverride(SmsMode::LOG);
+    }
+
+    protected function tearDown(): void
+    {
+        SmsMode::setOverride(null);
+
+        parent::tearDown();
     }
 
     public function test_decode_rejects_expired_challenge_token(): void

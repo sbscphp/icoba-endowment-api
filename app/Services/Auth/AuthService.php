@@ -202,9 +202,10 @@ class AuthService
             return $this->withRegistrationStep($payload, CustomerRegistrationStepEnum::COMPLETED);
         }
 
-        $payload = $this->otpService->sendLoginOtp($user);
+        $payload = $this->otpService->sendLoginOtp($user, OtpChannelEnum::tryFromRequest($request->input('otp_channel'), OtpChannelEnum::EMAIL));
         GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, $user->uuid, [
             'purpose' => 'LOGIN',
+            'otp_channel' => $payload['otp_channel'] ?? null,
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
         ], $this->displayName($user).' requested a login OTP.', User::class, $user->uuid, ModuleEnums::authentication, 200);
 
@@ -271,9 +272,10 @@ class AuthService
             return $payload;
         }
 
-        $payload = $this->otpService->sendLoginOtp($admin);
+        $payload = $this->otpService->sendLoginOtp($admin, OtpChannelEnum::tryFromRequest($request->input('otp_channel'), OtpChannelEnum::EMAIL));
         GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_SENT, $request, $admin->uuid, [
             'purpose' => 'LOGIN',
+            'otp_channel' => $payload['otp_channel'] ?? null,
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
         ], $this->displayName($admin).' requested a login OTP.', Admin::class, $admin->uuid, ModuleEnums::authentication, 200);
 

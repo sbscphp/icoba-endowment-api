@@ -4,11 +4,13 @@ namespace App\Http\Requests\Auth;
 
 use App\Enums\eClientType;
 use App\Http\Requests\ApiFormRequest;
+use App\Http\Requests\Concerns\ValidatesOtpChannel;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Validation\Rule;
 
 class LoginRequest extends ApiFormRequest
 {
+    use ValidatesOtpChannel;
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -28,6 +30,7 @@ class LoginRequest extends ApiFormRequest
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
             'client' => ['nullable', Rule::in(eClientType::values())],
+            ...$this->otpChannelRules(),
         ];
     }
 
@@ -46,11 +49,14 @@ class LoginRequest extends ApiFormRequest
             'email.email' => 'Please enter a valid email address.',
             'password.required' => 'Please enter your password.',
             'client.in' => 'Please select a valid client type.',
+            'otp_channel.in' => 'Verification channel must be either email or sms.',
         ]);
     }
 
     protected function prepareForValidation(): void
     {
+        $this->mergeDefaultOtpChannel();
+
         $this->merge([
             'email' => strtolower(trim($this->email)),
             'client' => $this->client ? strtolower(trim($this->client)) : null,
