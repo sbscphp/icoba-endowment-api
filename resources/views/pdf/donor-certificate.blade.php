@@ -27,6 +27,8 @@
             left: 0;
             width: 842px;
             height: 595px;
+            max-width: none;
+            max-height: none;
             z-index: 0;
             margin: 0;
             padding: 0;
@@ -38,6 +40,8 @@
             top: 0;
             width: 269px;
             height: 595px;
+            max-width: none;
+            max-height: none;
             margin: 0;
             padding: 0;
             border: 0;
@@ -45,7 +49,7 @@
             z-index: 1;
         }
         .side-image--left { left: 0; }
-        .side-image--right { right: 0; background-position: right center; }
+        .side-image--right { left: 573px; }
         .content-panel {
             position: absolute;
             top: 0;
@@ -156,7 +160,14 @@
 
 <div class="page">
     @if(!$isSideLayout && !empty($backgroundSrc))
-        <img src="{{ $backgroundSrc }}" alt="" class="background">
+        <img
+            src="{{ $backgroundSrc }}"
+            alt=""
+            class="background"
+            width="842"
+            height="595"
+            style="width: 842px; height: 595px;"
+        >
     @endif
 
     @if($isSideLayout && !empty($sideImageSrc))
@@ -166,6 +177,7 @@
             class="side-image {{ $isImageRight ? 'side-image--right' : 'side-image--left' }}"
             width="269"
             height="595"
+            style="width: 269px; height: 595px;"
         >
     @endif
 
@@ -183,7 +195,7 @@
                         <div class="icon-wrap">
                             <table width="100%" cellpadding="0" cellspacing="0">
                                 <tr>
-                                    <td align="{{ $iconPosition === 'left' ? 'left' : ($iconPosition === 'right' ? 'right' : 'center') }}">
+                                    <td align="center">
                                         <img src="{{ $iconSrc }}" alt="" class="icon">
                                     </td>
                                 </tr>

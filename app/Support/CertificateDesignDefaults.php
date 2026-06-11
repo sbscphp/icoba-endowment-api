@@ -10,7 +10,7 @@ final class CertificateDesignDefaults
 
     public const GENERAL_TEXT_POSITION = 'center';
 
-    public const ICON_POSITION = 'left';
+    public const ICON_POSITION = 'center';
 
     public const AWARDEE_FONT = 'Inter';
 
