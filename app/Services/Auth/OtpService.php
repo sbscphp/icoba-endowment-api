@@ -276,7 +276,7 @@ class OtpService
 
     private function generateOtpCode(OtpChannelEnum $channel): string
     {
-        if (SmsMode::isStub()) {
+        if ($channel === OtpChannelEnum::SMS && SmsMode::isStub()) {
             return SmsMode::stubCode();
         }
 
@@ -325,7 +325,7 @@ class OtpService
      */
     private function evaluateOtpSendGate(User|Admin $subject, OtpPurposeEnum $purpose, OtpChannelEnum $channel): array
     {
-        if (SmsMode::isStub()) {
+        if (SmsMode::isStub() && $channel === OtpChannelEnum::SMS) {
             return ['mode' => 'send_new'];
         }
 

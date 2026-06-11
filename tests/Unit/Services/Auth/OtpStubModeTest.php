@@ -24,7 +24,7 @@ class OtpStubModeTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_stub_mode_uses_fixed_code_for_email_login_otp(): void
+    public function test_stub_mode_uses_random_code_for_email_login_otp(): void
     {
         SmsMode::setOverride(SmsMode::STUB);
         config(['services.sms.stub_code' => '123456']);
@@ -48,7 +48,7 @@ class OtpStubModeTest extends TestCase
             ->first();
 
         $this->assertNotNull($challenge);
-        $this->assertTrue(Hash::check('123456', (string) $challenge->code_hash));
+        $this->assertFalse(Hash::check('123456', (string) $challenge->code_hash));
         Mail::assertSent(OTPMail::class);
     }
 
