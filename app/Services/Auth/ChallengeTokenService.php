@@ -3,8 +3,11 @@
 namespace App\Services\Auth;
 
 use App\Enums\OtpPurposeEnum;
+use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
+use App\Models\Admin;
 use App\Models\AuthChallenge;
+use App\Models\User;
 use Illuminate\Support\Facades\Log;
 
 class ChallengeTokenService
@@ -48,6 +51,27 @@ class ChallengeTokenService
         }
 
         return $payload;
+    }
+
+    /**
+     * Resolve audit-log subject from a challenge token without requiring token expiry.
+     *
+     * @return array{subject_id: ?string, model: ?string}
+     */
+    public function auditTarget(string $token, OtpPurposeEnum $purpose): array
+    {
+        try {
+            $payload = $this->decodeForResend($token, $purpose);
+        } catch (\Throwable) {
+            return ['subject_id' => null, 'model' => null];
+        }
+
+        $subjectId = $payload['subject_id'] ?? null;
+
+        return [
+            'subject_id' => is_string($subjectId) && $subjectId !== '' ? $subjectId : null,
+            'model' => ($payload['subject_type'] ?? null) === UserTypeEnum::ADMIN->value ? Admin::class : User::class,
+        ];
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Enums\AuditActionEnum;
 use App\Enums\CustomerRegistrationStepEnum;
 use App\Enums\DonorTypeSlug;
 use App\Enums\OtpChannelEnum;
+use App\Enums\OtpPurposeEnum;
 use App\Enums\eClientType;
 use App\Enums\eRole;
 use App\Enums\ModuleEnums;
@@ -43,6 +44,7 @@ class AuthService
     public function __construct(
         private readonly UserRepositoryInterface $userRepository,
         private readonly OtpService $otpService,
+        private readonly ChallengeTokenService $challengeTokenService,
         private readonly NotificationDispatchService $notificationDispatchService,
         private readonly GivingIdentityResolver $givingIdentityResolver,
     ) {}
@@ -287,9 +289,10 @@ class AuthService
         try {
             $user = $this->otpService->verifyLoginOtp($challengeToken, $otp);
         } catch (\Throwable $th) {
-            GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_FAILED, $request, null, [
+            $target = $this->challengeTokenService->auditTarget($challengeToken, OtpPurposeEnum::LOGIN);
+            GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_FAILED, $request, $target['subject_id'], [
                 'purpose' => 'LOGIN',
-            ], 'Customer login OTP verification failed.', null, null, ModuleEnums::authentication, 422);
+            ], 'Customer login OTP verification failed.', $target['model'], $target['subject_id'], ModuleEnums::authentication, 422);
 
             $this->maybeOpaqueLoginOtpException($th);
         }
@@ -337,9 +340,10 @@ class AuthService
         try {
             $user = $this->otpService->verifyEmailVerificationOtp($challengeToken, $otp);
         } catch (\Throwable $th) {
-            GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_FAILED, $request, null, [
+            $target = $this->challengeTokenService->auditTarget($challengeToken, OtpPurposeEnum::EMAIL_VERIFICATION);
+            GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_FAILED, $request, $target['subject_id'], [
                 'purpose' => 'EMAIL_VERIFICATION',
-            ], 'Customer email verification OTP failed.', null, null, ModuleEnums::authentication, 422);
+            ], 'Customer email verification OTP failed.', $target['model'], $target['subject_id'], ModuleEnums::authentication, 422);
 
             throw $th;
         }
@@ -400,13 +404,14 @@ class AuthService
 
     public function resendCustomerEmailVerificationOtp(string $challengeToken, ?OtpChannelEnum $channel, Request $request): array
     {
+        $target = $this->challengeTokenService->auditTarget($challengeToken, OtpPurposeEnum::EMAIL_VERIFICATION);
         $payload = $this->otpService->resendEmailVerificationOtp($challengeToken, $channel);
-        GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, null, [
+        GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, $target['subject_id'], [
             'purpose' => 'EMAIL_VERIFICATION',
             'otp_channel' => $payload['otp_channel'] ?? $channel?->value,
             'resend' => true,
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
-        ], 'Customer verification OTP was resent.', null, null, ModuleEnums::authentication, 200);
+        ], 'Customer verification OTP was resent.', $target['model'], $target['subject_id'], ModuleEnums::authentication, 200);
 
         return $this->withRegistrationStep($payload, CustomerRegistrationStepEnum::AWAITING_OTP);
     }
@@ -416,9 +421,10 @@ class AuthService
         try {
             $admin = $this->otpService->verifyLoginOtp($challengeToken, $otp);
         } catch (\Throwable $th) {
-            GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_FAILED, $request, null, [
+            $target = $this->challengeTokenService->auditTarget($challengeToken, OtpPurposeEnum::LOGIN);
+            GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_FAILED, $request, $target['subject_id'], [
                 'purpose' => 'LOGIN',
-            ], 'Admin login OTP verification failed.', null, null, ModuleEnums::authentication, 422);
+            ], 'Admin login OTP verification failed.', $target['model'], $target['subject_id'], ModuleEnums::authentication, 422);
 
             $this->maybeOpaqueLoginOtpException($th);
         }
@@ -465,13 +471,14 @@ class AuthService
 
     public function resendCustomerLoginOtp(string $challengeToken, ?OtpChannelEnum $channel, Request $request): array
     {
+        $target = $this->challengeTokenService->auditTarget($challengeToken, OtpPurposeEnum::LOGIN);
         $payload = $this->otpService->resendLoginOtp($challengeToken, $channel);
-        GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, null, [
+        GeneralHelper::storeAuditLog(UserTypeEnum::CUSTOMER, AuditActionEnum::OTP_SENT, $request, $target['subject_id'], [
             'purpose' => 'LOGIN',
             'otp_channel' => $payload['otp_channel'] ?? $channel?->value,
             'resend' => true,
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
-        ], 'Customer login OTP was resent.', null, null, ModuleEnums::authentication, 200);
+        ], 'Customer login OTP was resent.', $target['model'], $target['subject_id'], ModuleEnums::authentication, 200);
 
         return $this->withLoginTwoFactor(
             $this->withRegistrationStep($payload, CustomerRegistrationStepEnum::COMPLETED)
@@ -480,13 +487,14 @@ class AuthService
 
     public function resendAdminLoginOtp(string $challengeToken, ?OtpChannelEnum $channel, Request $request): array
     {
+        $target = $this->challengeTokenService->auditTarget($challengeToken, OtpPurposeEnum::LOGIN);
         $payload = $this->otpService->resendLoginOtp($challengeToken, $channel);
-        GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_SENT, $request, null, [
+        GeneralHelper::storeAuditLog(UserTypeEnum::ADMIN, AuditActionEnum::OTP_SENT, $request, $target['subject_id'], [
             'purpose' => 'LOGIN',
             'otp_channel' => $payload['otp_channel'] ?? $channel?->value,
             'resend' => true,
             'reuse_active_challenge' => (bool) ($payload['cooldown_active'] ?? false),
-        ], 'Admin login OTP was resent.', null, null, ModuleEnums::authentication, 200);
+        ], 'Admin login OTP was resent.', $target['model'], $target['subject_id'], ModuleEnums::authentication, 200);
 
         return $this->withLoginTwoFactor($payload);
     }
@@ -832,6 +840,8 @@ class AuthService
      */
     private function failLogin(UserTypeEnum $userType, Request $request, ?string $userId, array $metadata = []): never
     {
+        $userId = $userId ?? $this->resolveLoginAuditUserId($userType, $request);
+
         GeneralHelper::storeAuditLog(
             $userType,
             AuditActionEnum::LOGIN_FAILED,
@@ -1005,6 +1015,20 @@ class AuthService
     private function modelClassForUserType(UserTypeEnum $userType): string
     {
         return $userType === UserTypeEnum::ADMIN ? Admin::class : User::class;
+    }
+
+    private function resolveLoginAuditUserId(UserTypeEnum $userType, Request $request): ?string
+    {
+        $email = strtolower(trim((string) $request->input('email')));
+        if ($email === '') {
+            return null;
+        }
+
+        if ($userType === UserTypeEnum::ADMIN) {
+            return Admin::query()->where('email', $email)->value('uuid');
+        }
+
+        return User::query()->where('email', $email)->value('uuid');
     }
 
     private function customerRequiresLoginOtp(User $user): bool
