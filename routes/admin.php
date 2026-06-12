@@ -237,8 +237,8 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:pledges.read']);
             Route::get('/', [PledgeController::class, 'index'])
                 ->middleware(['permission:pledges.read']);
-            Route::post('/', [PledgeController::class, 'store'])
-                ->middleware(['permission:pledges.create']);
+            // Route::post('/', [PledgeController::class, 'store'])
+            //     ->middleware(['permission:pledges.create']);
             Route::get('/{pledgeUuid}', [PledgeController::class, 'show'])
                 ->middleware(['permission:pledges.read']);
         });
