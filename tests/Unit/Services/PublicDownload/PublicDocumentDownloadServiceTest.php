@@ -45,6 +45,23 @@ class PublicDocumentDownloadServiceTest extends TestCase
         );
     }
 
+    public function test_public_download_url_falls_back_when_frontend_url_is_api_host(): void
+    {
+        config([
+            'app.url' => 'https://api.icoba-endowment.sbscuk.co.uk',
+            'app.frontend_url' => 'https://api.icoba-endowment.sbscuk.co.uk',
+        ]);
+
+        $recognition = $this->createRecognition();
+        $service = app(PublicDocumentDownloadService::class);
+        $tokenRecord = $service->issueRecognitionCertificateToken($recognition);
+
+        $this->assertSame(
+            'https://icoba-endowment.onrender.com/download/'.$tokenRecord->token,
+            $service->publicDownloadUrl($tokenRecord),
+        );
+    }
+
     public function test_issue_token_reuses_active_record_for_same_document(): void
     {
         $recognition = $this->createRecognition();

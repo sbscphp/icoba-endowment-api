@@ -16,6 +16,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class PublicDocumentDownloadService
 {
+    private const DEFAULT_FRONTEND_URL = 'https://icoba-endowment.onrender.com';
+
     public function __construct(
         private readonly CertificatePdfService $certificatePdfService,
         private readonly ReceiptPdfService $receiptPdfService,
@@ -43,7 +45,7 @@ final class PublicDocumentDownloadService
 
     public function publicDownloadUrl(PublicDocumentDownloadToken $tokenRecord): string
     {
-        return rtrim((string) config('app.frontend_url'), '/')
+        return $this->frontendBaseUrl()
             .'/download/'.urlencode($tokenRecord->token);
     }
 
@@ -200,5 +202,22 @@ final class PublicDocumentDownloadService
             PublicDocumentType::RecognitionCertificate => 'This certificate has been revoked and is no longer available for download.',
             PublicDocumentType::DonationReceipt, PublicDocumentType::TaxReceipt => 'This receipt is no longer available for download.',
         };
+    }
+
+    private function frontendBaseUrl(): string
+    {
+        $frontendUrl = rtrim((string) config('app.frontend_url'), '/');
+        $apiUrl = rtrim((string) config('app.url'), '/');
+
+        if ($frontendUrl === '' || $frontendUrl === $apiUrl) {
+            return self::DEFAULT_FRONTEND_URL;
+        }
+
+        $host = parse_url($frontendUrl, PHP_URL_HOST);
+        if (is_string($host) && str_starts_with(strtolower($host), 'api.')) {
+            return self::DEFAULT_FRONTEND_URL;
+        }
+
+        return $frontendUrl;
     }
 }
