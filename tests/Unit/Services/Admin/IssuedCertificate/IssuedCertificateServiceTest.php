@@ -3,9 +3,11 @@
 namespace Tests\Unit\Services\Admin\IssuedCertificate;
 
 use App\Enums\IssuedCertificateStatus;
+use App\Jobs\SendDonorRecognitionRevokedEmailJob;
 use App\Models\DonorRecognition;
 use App\Services\Admin\IssuedCertificate\IssuedCertificateService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class IssuedCertificateServiceTest extends TestCase
@@ -63,10 +65,13 @@ class IssuedCertificateServiceTest extends TestCase
 
     public function test_revoke_marks_certificate_revoked_and_clears_download_token(): void
     {
+        Queue::fake();
+
         $tier = $this->createTier();
         $recognition = DonorRecognition::query()->create([
             'recognition_number' => 'ICOBA-REC-2026-TEST0004',
             'donor_key' => 'donor-d',
+            'donor_email' => 'donor@example.com',
             'awardee_name' => 'Donor D',
             'tier_uuid' => $tier->uuid,
             'cumulative_amount_ngn' => 1000000,
@@ -80,6 +85,10 @@ class IssuedCertificateServiceTest extends TestCase
 
         $this->assertSame(IssuedCertificateStatus::REVOKED, $revoked->status);
         $this->assertNull($revoked->download_token);
+        Queue::assertPushed(
+            SendDonorRecognitionRevokedEmailJob::class,
+            fn (SendDonorRecognitionRevokedEmailJob $job): bool => $job->recognitionUuid === $recognition->uuid,
+        );
     }
 
     public function test_reissue_updates_reference_and_status(): void

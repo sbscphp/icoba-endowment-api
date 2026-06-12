@@ -517,9 +517,11 @@ class CampaignService
     {
         $query = Campaign::query()->orderBy('name');
 
-        if ($status === 'draft') {
-            $query->where('status', CampaignStatus::DRAFT);
-        } elseif ($status === 'active') {
+        // if ($status === 'draft') {
+        //     $query->where('status', CampaignStatus::DRAFT);
+        // }
+
+        if ($status === 'active') {
             $query->where('status', CampaignStatus::ACTIVE);
         } elseif ($status === 'paused') {
             $query->where('status', CampaignStatus::PAUSED);
@@ -527,6 +529,8 @@ class CampaignService
             $query->where('status', CampaignStatus::COMPLETED);
         } elseif ($status === 'deactivated') {
             $query->where('status', CampaignStatus::DEACTIVATED);
+        } else {
+            $query->where('status', '!=', CampaignStatus::DRAFT);
         }
 
         return $query->get(['uuid', 'name', 'campaign_id', 'status']);

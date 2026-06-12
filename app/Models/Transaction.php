@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\PaymentGateway;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
 use App\Traits\HasUuid;
@@ -99,5 +100,36 @@ class Transaction extends Model
                         TransactionApplicationType::PLEDGE_PLACEHOLDER->value
                     );
             });
+    }
+
+    public function resolvePaymentMethod(): ?string
+    {
+        $metadata = is_array($this->metadata) ? $this->metadata : [];
+        $fromMetadata = isset($metadata['payment_method']) && $metadata['payment_method'] !== ''
+            ? (string) $metadata['payment_method']
+            : null;
+
+        if ($fromMetadata !== null) {
+            return $fromMetadata;
+        }
+
+        $gateway = is_string($this->gateway) ? strtolower(trim($this->gateway)) : null;
+        if ($gateway === PaymentGateway::Stripe->value) {
+            return 'stripe';
+        }
+        if ($gateway === PaymentGateway::Paystack->value) {
+            return 'paystack';
+        }
+        if ($gateway === PaymentGateway::Fcmb->value) {
+            return 'bank_transfer';
+        }
+
+        $applicationType = $this->application_type;
+        if ($applicationType instanceof TransactionApplicationType
+            && $applicationType === TransactionApplicationType::BANK_TRANSFER) {
+            return 'bank_transfer';
+        }
+
+        return null;
     }
 }

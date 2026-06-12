@@ -63,7 +63,7 @@ class PledgeService
     {
         $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
         $query = Pledge::query()->with([
-            'campaign:uuid,name,campaign_id,allow_anonymous_donation',
+            'campaign:uuid,name,campaign_id,status,allow_anonymous_donation',
             'donor:uuid,firstname,lastname,email,phone_number',
         ])->where('user_uuid', $userUuid);
 
@@ -222,7 +222,7 @@ class PledgeService
         $pledge = Pledge::query()
             ->where('uuid', $uuid)
             ->with([
-                'campaign:uuid,name,campaign_id',
+                'campaign:uuid,name,campaign_id,status,allow_anonymous_donation',
                 'donor:uuid,firstname,lastname,email,graduation_set_uuid,donor_type_uuid',
                 'donor.graduationSet:uuid,name,set_number',
                 'donor.donorType:uuid,slug,label',

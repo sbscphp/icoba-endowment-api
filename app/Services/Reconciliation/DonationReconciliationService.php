@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Services\Bank\BankAccountRegistry;
 use App\Services\Donation\BankTransferReferenceService;
 use App\Services\Donation\CampaignAnonymousDonationValidator;
+use App\Services\Donation\DonationCurrencyValidator;
 use App\Services\Donation\DonorCumulativeTotalService;
 use App\Services\GivingIdentity\GivingIdentityResolver;
 use App\Services\Pledge\PledgeBalanceService;
@@ -49,6 +50,7 @@ class DonationReconciliationService
         private readonly PledgeBalanceService $pledgeBalanceService,
         private readonly PledgeScheduleService $pledgeScheduleService,
         private readonly CampaignAnonymousDonationValidator $anonymousDonationValidator,
+        private readonly DonationCurrencyValidator $donationCurrencyValidator,
         private readonly AdminManualReconciliationDonorResolver $adminManualDonorResolver,
     ) {}
 
@@ -348,6 +350,7 @@ class DonationReconciliationService
 
         $metadata = [
             'source' => 'admin_manual',
+            'payment_method' => 'bank_transfer',
             'narration' => $narration,
             'bank_transaction_date' => $paidAt->toIso8601String(),
             'paid_into_account_number' => $account['account_number'],
@@ -407,6 +410,7 @@ class DonationReconciliationService
             'amount_in_naira' => $snapshot['amount_in_naira'],
             'status' => TransactionStatus::PENDING,
             'gateway' => PaymentGateway::Fcmb->value,
+            'gateway_reference' => $referenceId,
             'application_type' => TransactionApplicationType::BANK_TRANSFER,
             'paid_into_account_number' => $account['account_number'],
             'fcmb_statement_reference' => $referenceId,
@@ -527,6 +531,25 @@ class DonationReconciliationService
                     ],
                 ]);
             }
+        }
+
+        $campaignUuid = filled($transaction->campaign_uuid)
+            ? (string) $transaction->campaign_uuid
+            : null;
+        if ($campaignUuid === null && $transaction->pledge_uuid !== null) {
+            $pledgeCampaignUuid = Pledge::query()
+                ->where('uuid', $transaction->pledge_uuid)
+                ->value('campaign_uuid');
+            $campaignUuid = is_string($pledgeCampaignUuid) && $pledgeCampaignUuid !== ''
+                ? $pledgeCampaignUuid
+                : null;
+        }
+        if ($campaignUuid !== null) {
+            $this->assertCampaignAcceptsReconciliationCurrency(
+                $account['currency'],
+                $campaignUuid,
+                'paid_into_account_number',
+            );
         }
 
         return DB::transaction(function () use ($transaction, $account): Transaction {
@@ -922,6 +945,17 @@ class DonationReconciliationService
             );
         }
 
+        $effectiveCampaignUuid = $campaignUuid
+            ?? $pledge?->campaign_uuid
+            ?? (filled($transaction->campaign_uuid) ? (string) $transaction->campaign_uuid : null);
+        if ($effectiveCampaignUuid !== null && $effectiveCampaignUuid !== '') {
+            $this->assertCampaignAcceptsReconciliationCurrency(
+                (string) $transaction->currency,
+                $effectiveCampaignUuid,
+                'campaign_uuid',
+            );
+        }
+
         return [
             'user' => $user,
             'campaign_uuid' => $campaignUuid,
@@ -1045,7 +1079,28 @@ class DonationReconciliationService
             ]);
         }
 
+        $this->assertCampaignAcceptsReconciliationCurrency($currency, $campaignUuid, 'bank_key');
+
         return $campaignUuid;
+    }
+
+    private function assertCampaignAcceptsReconciliationCurrency(
+        string $currency,
+        string $campaignUuid,
+        string $errorField,
+    ): void {
+        try {
+            $this->donationCurrencyValidator->assertAllowed($currency, $campaignUuid);
+        } catch (ValidationException $exception) {
+            $errors = $exception->errors();
+            if (isset($errors['currency'])) {
+                throw ValidationException::withMessages([
+                    $errorField => $errors['currency'],
+                ]);
+            }
+
+            throw $exception;
+        }
     }
 
     /**

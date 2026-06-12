@@ -8,6 +8,7 @@ use App\Exceptions\ApiException;
 use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Jobs\GenerateCertificateImageJob;
 use App\Jobs\SendDonorRecognitionEmailJob;
+use App\Jobs\SendDonorRecognitionRevokedEmailJob;
 use App\Models\DonorRecognition;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
@@ -93,7 +94,7 @@ class IssuedCertificateService
 
     public function revoke(string $recognitionId): DonorRecognition
     {
-        return DB::transaction(function () use ($recognitionId): DonorRecognition {
+        $recognition = DB::transaction(function () use ($recognitionId): DonorRecognition {
             $recognition = $this->lockRecognition($recognitionId);
 
             if ($recognition->status === IssuedCertificateStatus::REVOKED) {
@@ -107,6 +108,10 @@ class IssuedCertificateService
 
             return $recognition->fresh($this->detailRelations()) ?? $recognition;
         });
+
+        SendDonorRecognitionRevokedEmailJob::dispatch($recognition->uuid);
+
+        return $recognition;
     }
 
     /**

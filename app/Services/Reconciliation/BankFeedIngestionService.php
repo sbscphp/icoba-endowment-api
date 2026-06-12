@@ -246,6 +246,7 @@ final class BankFeedIngestionService
 
         $metadata = [
             'source' => $source,
+            'payment_method' => 'bank_transfer',
             'narration' => $narration,
             'bank_transaction_date' => $paidAt->toIso8601String(),
             'paid_into_account_number' => $accountNumber,
