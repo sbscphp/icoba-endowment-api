@@ -18,7 +18,7 @@ class CreateAdminRequest extends ApiFormRequest
                 'string',
                 'uuid',
                 Rule::exists((new Role)->getTable(), 'uuid')->where(
-                    fn ($query) => $query->where('guard_name', 'api')
+                    fn ($query) => $query->where('guard_name', 'api')->where('is_active', true)
                 ),
             ],
             'is_active' => ['sometimes', 'boolean'],
@@ -35,7 +35,7 @@ class CreateAdminRequest extends ApiFormRequest
             'email.max' => 'Email address may not be longer than 255 characters.',
             'role_id.required' => 'Please select a role for the admin.',
             'role_id.uuid' => 'The selected role is invalid.',
-            'role_id.exists' => 'The selected role does not exist.',
+            'role_id.exists' => 'The selected role does not exist or is deactivated.',
         ]);
     }
 
