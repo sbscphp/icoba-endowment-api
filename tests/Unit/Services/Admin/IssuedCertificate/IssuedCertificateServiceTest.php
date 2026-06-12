@@ -80,11 +80,15 @@ class IssuedCertificateServiceTest extends TestCase
             'download_token' => 'existing-token',
         ]);
 
+        $tokenRecord = app(\App\Services\PublicDownload\PublicDocumentDownloadService::class)
+            ->issueRecognitionCertificateToken($recognition);
+
         $service = app(IssuedCertificateService::class);
         $revoked = $service->revoke($recognition->uuid);
 
         $this->assertSame(IssuedCertificateStatus::REVOKED, $revoked->status);
         $this->assertNull($revoked->download_token);
+        $this->assertNotNull($tokenRecord->fresh()?->revoked_at);
         Queue::assertPushed(
             SendDonorRecognitionRevokedEmailJob::class,
             fn (SendDonorRecognitionRevokedEmailJob $job): bool => $job->recognitionUuid === $recognition->uuid,

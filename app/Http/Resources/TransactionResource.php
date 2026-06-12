@@ -8,6 +8,7 @@ use App\Models\GivingIdentity;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
 use App\Services\Bank\BankAccountRegistry;
+use App\Services\PublicDownload\PublicDocumentDownloadService;
 use App\Services\Receipt\ReceiptService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -180,15 +181,18 @@ class TransactionResource extends JsonResource
         }
 
         $receiptService = app(ReceiptService::class);
-        $base = rtrim((string) config('app.url'), '/').'/api/v1/receipts/'.$this->receipt_number;
+        $downloadService = app(PublicDocumentDownloadService::class);
 
         $links = [
-            'donation' => $base.'/download',
+            'donation' => $downloadService->publicDownloadUrl(
+                $downloadService->issueDonationReceiptToken($this->resource),
+            ),
         ];
 
         if ($receiptService->isEligibleForTaxReceipt($this->resource)) {
-            $links['tax'] = rtrim((string) config('app.url'), '/')
-                .'/api/v1/public/receipts/'.$this->receipt_number.'/tax/download';
+            $links['tax'] = $downloadService->publicDownloadUrl(
+                $downloadService->issueTaxReceiptToken($this->resource),
+            );
         }
 
         return $links;

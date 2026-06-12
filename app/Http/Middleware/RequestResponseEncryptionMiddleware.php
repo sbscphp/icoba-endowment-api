@@ -72,6 +72,7 @@ final readonly class RequestResponseEncryptionMiddleware
      * @var list<string>
      */
     private const BYPASS_REGEX = [
+        '#^/api/v1/public/downloads/[A-Za-z0-9]{32,64}$#i',
         '#^/api/v1/public/recognitions/[^/]+/download$#i',
         '#^/api/v1/public/receipts/[^/]+/download$#i',
         '#^/api/v1/public/receipts/[^/]+/tax/download$#i',
