@@ -11,6 +11,7 @@ use App\Models\Transaction;
 use App\Models\TransactionReceipt;
 use App\Models\User;
 use App\Services\Pledge\PledgeBalanceService;
+use App\Services\PublicDownload\PublicDocumentDownloadService;
 use App\Services\Tier\TierResolutionService;
 
 class ReceiptService
@@ -144,18 +145,18 @@ class ReceiptService
 
     public function guestTaxReceiptDownloadUrl(Transaction $transaction): string
     {
-        $transaction = $this->ensurePublicReceiptAccess($transaction);
+        $downloadService = app(PublicDocumentDownloadService::class);
+        $tokenRecord = $downloadService->issueTaxReceiptToken($transaction);
 
-        return rtrim((string) config('app.url'), '/')
-            .'/api/v1/public/receipts/'.$transaction->receipt_number.'/tax/download';
+        return $downloadService->publicDownloadUrl($tokenRecord);
     }
 
     public function guestDonationReceiptDownloadUrl(Transaction $transaction): string
     {
-        $transaction = $this->ensurePublicReceiptAccess($transaction);
+        $downloadService = app(PublicDocumentDownloadService::class);
+        $tokenRecord = $downloadService->issueDonationReceiptToken($transaction);
 
-        return rtrim((string) config('app.url'), '/')
-            .'/api/v1/public/receipts/'.$transaction->receipt_number.'/download';
+        return $downloadService->publicDownloadUrl($tokenRecord);
     }
 
     public function ensurePublicReceiptAccess(Transaction $transaction): Transaction

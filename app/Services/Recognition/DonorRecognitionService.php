@@ -14,6 +14,7 @@ use App\Models\TierConfiguration;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Donation\DonorCumulativeTotalService;
+use App\Services\PublicDownload\PublicDocumentDownloadService;
 use App\Services\Tier\TierResolutionService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +25,7 @@ final class DonorRecognitionService
     public function __construct(
         private readonly DonorCumulativeTotalService $cumulativeTotalService,
         private readonly TierResolutionService $tierResolution,
+        private readonly PublicDocumentDownloadService $publicDocumentDownloadService,
     ) {}
 
     /**
@@ -174,11 +176,9 @@ final class DonorRecognitionService
 
     public function guestCertificateDownloadUrl(DonorRecognition $recognition): string
     {
-        $recognition = $this->ensureDownloadToken($recognition);
+        $tokenRecord = $this->publicDocumentDownloadService->issueRecognitionCertificateToken($recognition);
 
-        return rtrim((string) config('app.url'), '/')
-            .'/api/v1/public/recognitions/'.$recognition->recognition_number.'/download'
-            .'?token='.urlencode((string) $recognition->download_token);
+        return $this->publicDocumentDownloadService->publicDownloadUrl($tokenRecord);
     }
 
     /**

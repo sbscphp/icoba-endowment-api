@@ -8,6 +8,7 @@ use App\Http\Controllers\v1\Public\PublicCampaignController;
 use App\Http\Controllers\v1\Public\PublicCampaignUpdateReportController;
 use App\Http\Controllers\v1\Public\PublicBankAccountController;
 use App\Http\Controllers\v1\Public\PublicTierController;
+use App\Http\Controllers\v1\Public\PublicDocumentDownloadController;
 use App\Http\Controllers\v1\Public\ReceiptDownloadController;
 use App\Http\Controllers\v1\Public\RecognitionDownloadController;
 use Illuminate\Support\Facades\Route;
@@ -35,6 +36,10 @@ Route::prefix('v1')->group(function () {
         Route::get('tiers', [PublicTierController::class, 'index']);
         Route::get('hero-slides', [PublicHeroSlideController::class, 'index']);
         Route::get('bank-accounts', [PublicBankAccountController::class, 'index']);
+
+        Route::get('downloads/{token}', [PublicDocumentDownloadController::class, 'download'])
+            ->where('token', '[A-Za-z0-9]{32,64}')
+            ->middleware(['throttle:public-receipt']);
 
         Route::get('receipts/{receiptNumber}/download', [ReceiptDownloadController::class, 'guestPdf'])
             ->middleware(['throttle:public-receipt']);

@@ -34,6 +34,8 @@ class AdminUserService
             ->where('uuid', $roleUuid)
             ->firstOrFail();
 
+        $this->assertRoleIsActive($role);
+
         $frontendUrl = isset($payload['frontend_url']) && is_string($payload['frontend_url'])
             ? $payload['frontend_url']
             : null;
@@ -54,7 +56,7 @@ class AdminUserService
             return $admin;
         });
 
-        $this->queueInviteResetLink($admin, $frontendUrl);
+        $this->sendInviteResetLink($admin, $frontendUrl, immediate: true);
 
         $admin = $admin->fresh() ?? $admin;
 
@@ -86,7 +88,7 @@ class AdminUserService
             throw new ApiException('Reset link can only be resent for admins pending first-time password setup.', 422);
         }
 
-        $this->queueInviteResetLink($admin);
+        $this->sendInviteResetLink($admin);
 
         GeneralHelper::storeAuditLog(
             UserTypeEnum::ADMIN,
@@ -209,8 +211,13 @@ class AdminUserService
     public function update(string $adminId, array $payload, Admin $actor, Request $request): Admin
     {
         $admin = $this->resolveAdmin($adminId);
-        $admin->loadMissing('roles:id,name');
-        $previousRoleName = $admin->roles->first()?->name;
+        $admin->loadMissing('roles:id,name,is_active,uuid');
+        $currentRole = $admin->roles->first();
+        if ($currentRole instanceof Role) {
+            $this->assertRoleIsActive($currentRole);
+        }
+
+        $previousRoleName = $currentRole?->name;
         $previous = [
             'name' => $admin->name,
             'email' => $admin->email,
@@ -232,6 +239,7 @@ class AdminUserService
                 ->where('guard_name', 'api')
                 ->where('uuid', (string) $roleUuid)
                 ->firstOrFail();
+            $this->assertRoleIsActive($role);
             $admin->syncRoles([$role->name]);
             $newRoleName = $role->name;
         }
@@ -354,8 +362,21 @@ class AdminUserService
             ->firstOrFail();
     }
 
-    private function queueInviteResetLink(Admin $admin, ?string $frontendUrl = null): void
+    private function assertRoleIsActive(Role $role): void
     {
+        if (! (bool) $role->is_active) {
+            throw new ApiException('The role is deactivated.', 422);
+        }
+    }
+
+    private function sendInviteResetLink(Admin $admin, ?string $frontendUrl = null, bool $immediate = false): void
+    {
+        if ($immediate) {
+            SendAdminInviteSetPasswordEmailJob::dispatchSync($admin->uuid, $frontendUrl);
+
+            return;
+        }
+
         SendAdminInviteSetPasswordEmailJob::dispatch($admin->uuid, $frontendUrl);
     }
 }

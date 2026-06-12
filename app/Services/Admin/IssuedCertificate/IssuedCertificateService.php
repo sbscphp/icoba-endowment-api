@@ -12,6 +12,7 @@ use App\Jobs\SendDonorRecognitionRevokedEmailJob;
 use App\Models\DonorRecognition;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
+use App\Services\PublicDownload\PublicDocumentDownloadService;
 use App\Services\Recognition\DonorRecognitionService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -27,6 +28,7 @@ class IssuedCertificateService
 
     public function __construct(
         private readonly DonorRecognitionService $donorRecognitionService,
+        private readonly PublicDocumentDownloadService $publicDocumentDownloadService,
     ) {}
 
     /**
@@ -108,6 +110,8 @@ class IssuedCertificateService
 
             return $recognition->fresh($this->detailRelations()) ?? $recognition;
         });
+
+        $this->publicDocumentDownloadService->revokeTokensForRecognition($recognition);
 
         SendDonorRecognitionRevokedEmailJob::dispatch($recognition->uuid);
 

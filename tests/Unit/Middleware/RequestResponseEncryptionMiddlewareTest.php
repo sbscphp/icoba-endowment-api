@@ -117,6 +117,7 @@ final class RequestResponseEncryptionMiddlewareTest extends TestCase
             'stripe webhook' => ['/api/v1/payment/stripe/webhook'],
             'dev api registration' => ['/api/v1/dev/api-users'],
             'dev crypto encrypt' => ['/api/v1/dev/crypto/encrypt'],
+            'guest unified document download' => ['/api/v1/public/downloads/'.str_repeat('a', 48), 'GET'],
             'guest recognition download' => ['/api/v1/public/recognitions/REC-001/download', 'GET'],
             'guest donation receipt download' => ['/api/v1/public/receipts/RCP-001/download', 'GET'],
             'guest tax receipt download' => ['/api/v1/public/receipts/RCP-001/tax/download', 'GET'],
