@@ -9,9 +9,9 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('campaigns:auto-complete')
-    ->hourly()
-    ->withoutOverlapping()
-    ->appendOutputTo(storage_path('logs/campaigns-auto-complete.log'));
+    ->everyThirtyMinutes()
+    ->withoutOverlapping();
+    // ->appendOutputTo(storage_path('logs/campaigns-auto-complete.log'));
 
 Schedule::command('contact-submissions:auto-close')
     ->daily()

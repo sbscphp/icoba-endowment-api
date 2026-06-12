@@ -33,10 +33,10 @@ final class CampaignContributionValidator
             ]);
         }
 
-        if ($campaign->status !== CampaignStatus::ACTIVE) {
-            throw ValidationException::withMessages([
-                'campaign_uuid' => ['This campaign is not accepting donations.'],
-            ]);
-        }
+        // if ($campaign->status !== CampaignStatus::ACTIVE) {
+        //     throw ValidationException::withMessages([
+        //         'campaign_uuid' => ['This campaign is not accepting donations.'],
+        //     ]);
+        // }
     }
 }
