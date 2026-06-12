@@ -22,6 +22,11 @@
 
     @include('emails.components.button', ['url' => $certificateDownloadUrl, 'label' => 'Download certificate'])
 
+    <p style="margin:0 0 16px 0; font-size:13px; line-height:1.6;">
+        This opens your secure download page. If the button does not work, copy and paste this link into your browser:<br>
+        <span style="word-break:break-all;">{{ $certificateDownloadUrl }}</span>
+    </p>
+
     <p style="margin:16px 0 0 0; font-size:13px; line-height:1.6; color:{{ $theme->muted_text_color }};">
         You can also download your donation receipt here:
         <a href="{{ $donationReceiptDownloadUrl }}" style="color:{{ $theme->linkColor() }};">Download donation receipt</a>
