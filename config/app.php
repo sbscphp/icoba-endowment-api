@@ -84,7 +84,7 @@ return [
 
     'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
 
-    'frontend_url' => env('FRONTEND_URL', env('APP_URL')),
+    'frontend_url' => env('FRONTEND_URL', 'https://icoba-endowment.onrender.com'),
 
     /*
     |--------------------------------------------------------------------------
