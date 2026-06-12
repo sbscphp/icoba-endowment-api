@@ -61,8 +61,6 @@ class GenerateCertificateImageJob implements ShouldQueue
             return;
         }
 
-        $sendMail = $fresh->email_sent_at === null;
-
         $notificationDispatch->notifyDonor(
             $fresh->user_uuid,
             $fresh->donor_email,
@@ -82,7 +80,7 @@ class GenerateCertificateImageJob implements ShouldQueue
                 icon: '/icons/certificate-ready.png',
                 severity: 'success',
                 tags: ['recognition', 'certificate_ready'],
-                sendMail: $sendMail,
+                sendMail: false,
             ),
         );
     }
