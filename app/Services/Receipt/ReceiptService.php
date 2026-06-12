@@ -313,9 +313,7 @@ class ReceiptService
                 : null,
             'tierLabel' => $receipt->tier_label,
             'campaignName' => $transaction->campaign?->name ?? 'General Endowment Fund',
-            'paymentMethod' => isset($metadata['payment_method']) && $metadata['payment_method'] !== ''
-                ? ucwords(str_replace('_', ' ', (string) $metadata['payment_method']))
-                : 'Credit Card',
+            'paymentMethod' => ucwords(str_replace('_', ' ', (string) ($transaction->resolvePaymentMethod() ?? 'credit_card'))),
             'donorName' => $this->donorDisplayLine($transaction),
             'donorEmail' => $corporate['donor_email'],
             'organizationName' => $corporate['organization_name'],

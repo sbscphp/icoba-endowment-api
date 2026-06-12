@@ -182,8 +182,8 @@ Route::prefix('v1/admin')->group(function () {
                 ->where('status', 'active|inactive|all')
                 ->middleware(['permission:campaigns.read']);
             Route::get('/dropdown/{status?}', [CampaignController::class, 'dropdown'])
-                ->where('status', 'draft|active|paused|completed|deactivated|all')
-                ->middleware(['permission:campaigns.read']);
+                ->where('status', 'active|paused|completed|deactivated|all')
+                ->middleware(['permission:campaigns.read']); // draft is not visible to admin currently
             Route::get('/stats', [CampaignController::class, 'stats'])
                 ->middleware(['permission:campaigns.read']);
             Route::get('/', [CampaignController::class, 'index'])

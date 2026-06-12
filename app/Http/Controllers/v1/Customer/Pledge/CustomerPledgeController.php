@@ -251,7 +251,7 @@ class CustomerPledgeController extends Controller
                 ? $this->pledgeScheduleService->pausePledge($pledge, (string) $request->validated('resume_date'))
                 : $this->pledgeScheduleService->resumePledge($pledge);
 
-            $pledge->load(['campaign:uuid,name,campaign_id', 'donor:uuid,firstname,lastname,email,phone_number']);
+            $pledge->load(['campaign:uuid,name,campaign_id,status,allow_anonymous_donation', 'donor:uuid,firstname,lastname,email,phone_number']);
             $pledge->setAttribute('schedule_view', $this->pledgeScheduleService->buildForPledge($pledge));
 
             $message = $action === 'pause' ? 'Pledge paused.' : 'Pledge resumed.';
@@ -278,7 +278,7 @@ class CustomerPledgeController extends Controller
             $pref = PledgePaymentPreference::from((string) $request->validated('payment_preference'));
             $pledge = $this->pledgeScheduleService->setPaymentPreference($pledge, $pref);
 
-            $pledge->load(['campaign:uuid,name,campaign_id', 'donor:uuid,firstname,lastname,email,phone_number']);
+            $pledge->load(['campaign:uuid,name,campaign_id,status,allow_anonymous_donation', 'donor:uuid,firstname,lastname,email,phone_number']);
             $pledge->setAttribute('schedule_view', $this->pledgeScheduleService->buildForPledge($pledge));
 
             return JsonResponser::send(false, 'Pledge payment preference updated.', PledgeListResource::make($pledge)->resolve());

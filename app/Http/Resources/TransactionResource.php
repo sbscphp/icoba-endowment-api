@@ -85,9 +85,7 @@ class TransactionResource extends JsonResource
             'donation_type' => isset($metadata['donation_type']) && $metadata['donation_type'] !== ''
                 ? (string) $metadata['donation_type']
                 : 'One Time Donation',
-            'payment_method' => isset($metadata['payment_method']) && $metadata['payment_method'] !== ''
-                ? (string) $metadata['payment_method']
-                : null,
+            'payment_method' => $this->resolvePaymentMethod(),
             'payment_via' => $this->gateway,
             'gateway_reference' => $this->gateway_reference,
             'amount' => (string) $this->amount,
