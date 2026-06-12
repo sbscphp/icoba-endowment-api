@@ -29,6 +29,11 @@
 
     @include('emails.components.button', ['url' => $donationReceiptDownloadUrl, 'label' => 'Download donation receipt'])
 
+    <p style="margin:0 0 16px 0; font-size:13px; line-height:1.6;">
+        If the button does not work, copy and paste this secure download link into your browser:<br>
+        <span style="word-break:break-all;">{{ $donationReceiptDownloadUrl }}</span>
+    </p>
+
     @if ($taxReceiptDownloadUrl !== null)
         <p style="margin:16px 0 0 0; font-size:13px; line-height:1.6; color:{{ $theme->muted_text_color }};">
             A separate tax exemption receipt is also available for your records:
