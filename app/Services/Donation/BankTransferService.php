@@ -161,7 +161,7 @@ class BankTransferService
         $amountLabel = $this->formatPaymentAmount((float) $transaction->amount, (string) $transaction->currency);
         $adminFrontendBase = rtrim((string) config('app.admin_frontend_url'), '/');
         $actionUrl = $adminFrontendBase !== ''
-            ? $adminFrontendBase.'/reconciliation/queue/'.$transaction->uuid
+            ? $adminFrontendBase.'/main/reconciliation/'.$transaction->uuid
             : null;
 
         $referenceLabel = $reference !== '' ? $reference : 'N/A';
