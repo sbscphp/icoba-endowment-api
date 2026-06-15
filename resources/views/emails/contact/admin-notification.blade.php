@@ -21,9 +21,4 @@
         Message
     </p>
     <p style="margin:0 0 16px 0; font-size:14px; line-height:1.6; color:{{ $theme->text_color }}; white-space:pre-wrap;">{{ $submission->description }}</p>
-
-    @include('emails.components.button', [
-        'url' => $adminViewUrl,
-        'label' => 'View in admin',
-    ])
 @endsection

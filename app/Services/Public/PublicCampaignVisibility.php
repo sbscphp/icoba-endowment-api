@@ -30,7 +30,6 @@ final class PublicCampaignVisibility
             ->where($column('status'), '!=', CampaignStatus::DRAFT)
             ->where($column('status'), '!=', CampaignStatus::DEACTIVATED)
             ->where($column('status'), '!=', CampaignStatus::PAUSED)
-            ->where($column('status'), '!=', CampaignStatus::COMPLETED) //Public should not see completed campaigns (total fund raised)
             ->whereDate($column('start_date'), '<=', $today)
             ->whereDate($column('end_date'), '>=', $today);
     }
