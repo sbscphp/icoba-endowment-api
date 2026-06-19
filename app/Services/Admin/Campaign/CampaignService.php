@@ -26,6 +26,7 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -398,26 +399,48 @@ class CampaignService
     }
 
     /**
-     * @return array<string, int>
+     * @return array<string, int|string>
      */
     public function delete(string $campaignId): array
     {
         $campaign = $this->resolveCampaign($campaignId);
 
-        if ($campaign->status !== CampaignStatus::DRAFT) {
-            return ['blocked' => 1, 'transactions_count' => $campaign->transactions()->count()];
-        }
+        $transactionsCount = $campaign->transactions()->count();
+        $pledgesCount = $campaign->pledges()->count();
 
-        $count = $campaign->transactions()->count();
-
-        if ($count > 0) {
-            return ['blocked' => 1, 'transactions_count' => $count];
+        if ($transactionsCount > 0 || $pledgesCount > 0) {
+            return [
+                'blocked' => 1,
+                'transactions_count' => $transactionsCount,
+                'pledges_count' => $pledgesCount,
+                'message' => $this->buildCampaignDeleteBlockedMessage($pledgesCount, $transactionsCount),
+            ];
         }
 
         $uuid = $campaign->uuid;
         $campaign->delete();
 
-        return ['blocked' => 0, 'transactions_count' => 0, 'uuid' => $uuid];
+        return [
+            'blocked' => 0,
+            'transactions_count' => 0,
+            'pledges_count' => 0,
+            'uuid' => $uuid,
+        ];
+    }
+
+    private function buildCampaignDeleteBlockedMessage(int $pledgesCount, int $transactionsCount): string
+    {
+        $parts = [];
+
+        if ($pledgesCount > 0) {
+            $parts[] = $pledgesCount.' '.Str::plural('pledge', $pledgesCount);
+        }
+
+        if ($transactionsCount > 0) {
+            $parts[] = $transactionsCount.' '.Str::plural('transaction', $transactionsCount);
+        }
+
+        return 'Campaign cannot be deleted ('.implode(', ', $parts).').';
     }
 
     /**
