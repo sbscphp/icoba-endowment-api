@@ -36,6 +36,11 @@ Schedule::command('sms:check-balance --scheduled')
 $exchangeRateFetchHours = max(1, min(12, (int) config('endowment.exchange_rate.fetch_interval_hours', 4)));
 
 Schedule::command('exchange:fetch-rates')
-    ->cron(sprintf('0 */%d * * *', $exchangeRateFetchHours))
+    ->cron(sprintf('0 */%d * * *', $exchangeRateFetchHours)) // Every $exchangeRateFetchHours hours
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/exchange-rates.log'));
+
+Schedule::command('sets:sync')
+    ->cron('0 2 */3 * *') // Every 3 days at 2:00 AM
+    ->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/sets-sync.log'));
