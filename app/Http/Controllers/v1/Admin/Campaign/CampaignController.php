@@ -217,8 +217,11 @@ class CampaignController extends Controller
             if ((int) $result['blocked'] === 1) {
                 return JsonResponser::send(
                     true,
-                    'Campaign cannot be deleted.',
-                    ['transactions_count' => $result['transactions_count'] ?? 0],
+                    (string) ($result['message'] ?? 'Campaign cannot be deleted.'),
+                    [
+                        'transactions_count' => $result['transactions_count'] ?? 0,
+                        'pledges_count' => $result['pledges_count'] ?? 0,
+                    ],
                     422
                 );
             }
