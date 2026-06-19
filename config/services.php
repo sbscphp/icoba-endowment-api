@@ -50,6 +50,11 @@ return [
         'failed_url' => env('PAYSTACK_FAILED_URL'),
     ],
 
+    'remote_sync' => [
+        'secret' => env('REMOTE_SYNC_SECRET'),
+        'sets_url' => env('REMOTE_SYNC_SETS_URL'),
+    ],
+
     'sms' => [
         /*
         | SMS_MODE controls OTP SMS delivery:
