@@ -44,7 +44,11 @@ class SyncSetsFromRemoteCommand extends Command
             return self::FAILURE;
         }
 
-        $remoteSets = collect($response->json('data'));
+        $remoteSets = collect($response->json('data'))
+            ->map(fn (array $remote): array => $this->normalizeRemoteSet($remote))
+            ->filter(fn (array $remote): bool => $remote['uuid'] !== '' && $remote['set_number'] !== '')
+            ->unique('set_number')
+            ->values();
 
         if ($remoteSets->isEmpty()) {
             $this->warn('Remote returned 0 sets. Aborting to prevent accidental wipe.');
@@ -135,7 +139,8 @@ class SyncSetsFromRemoteCommand extends Command
      */
     private function findLocalSet(Collection $localSets, array $remote): ?GraduationSet
     {
-        $remoteUuid = (string) $remote['uuid'];
+        $remoteUuid = $remote['uuid'];
+        $setNumber = $remote['set_number'];
 
         $byRemoteUuid = $localSets->first(fn (GraduationSet $set): bool => $set->remote_uuid === $remoteUuid);
         if ($byRemoteUuid) {
@@ -148,7 +153,7 @@ class SyncSetsFromRemoteCommand extends Command
         }
 
         return $localSets->first(
-            fn (GraduationSet $set): bool => $set->set_number === $this->normalizeSetNumber($remote['set_number'] ?? null)
+            fn (GraduationSet $set): bool => $set->set_number === $setNumber
         );
     }
 
@@ -159,12 +164,12 @@ class SyncSetsFromRemoteCommand extends Command
     private function mapRemoteToLocal(array $remote): array
     {
         return [
-            'remote_uuid' => (string) $remote['uuid'],
-            'public_id' => (string) $remote['uuid'],
-            'name' => (string) $remote['name'],
+            'remote_uuid' => $remote['uuid'],
+            'public_id' => $remote['uuid'],
+            'name' => $remote['name'],
             'start_year' => $remote['start_year'],
             'end_year' => $remote['end_year'],
-            'set_number' => $this->normalizeSetNumber($remote['set_number'] ?? null),
+            'set_number' => $remote['set_number'],
         ];
     }
 
@@ -173,15 +178,34 @@ class SyncSetsFromRemoteCommand extends Command
      */
     private function hasChanges(GraduationSet $local, array $remote): bool
     {
-        return $local->remote_uuid !== (string) $remote['uuid']
-            || $local->name !== (string) $remote['name']
+        return $local->remote_uuid !== $remote['uuid']
+            || $local->name !== $remote['name']
             || $local->start_year != $remote['start_year']
             || $local->end_year != $remote['end_year']
-            || $local->set_number !== $this->normalizeSetNumber($remote['set_number'] ?? null);
+            || $local->set_number !== $remote['set_number'];
+    }
+
+    /**
+     * @param  array<string, mixed>  $remote
+     * @return array{uuid: string, name: string, start_year: mixed, end_year: mixed, set_number: string}
+     */
+    private function normalizeRemoteSet(array $remote): array
+    {
+        $setNumber = $this->normalizeSetNumber($remote['set_number'] ?? $remote['name'] ?? null);
+
+        return [
+            'uuid' => trim((string) ($remote['uuid'] ?? '')),
+            'name' => $setNumber === '' ? trim((string) ($remote['name'] ?? '')) : "Class {$setNumber}",
+            'start_year' => $remote['start_year'] ?? null,
+            'end_year' => $remote['end_year'] ?? null,
+            'set_number' => $setNumber,
+        ];
     }
 
     private function normalizeSetNumber(mixed $setNumber): string
     {
-        return trim((string) $setNumber);
+        $setNumber = trim((string) $setNumber);
+
+        return preg_replace('/^(class|set)\s+/i', '', $setNumber) ?? $setNumber;
     }
 }
