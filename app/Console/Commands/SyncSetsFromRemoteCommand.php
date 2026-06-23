@@ -11,7 +11,9 @@ use Illuminate\Support\Facades\Log;
 
 class SyncSetsFromRemoteCommand extends Command
 {
-    protected $signature = 'sets:sync {--dry-run : Preview changes without writing to DB}';
+    protected $signature = 'sets:sync
+        {--force : Write detected changes to the database}
+        {--dry-run : Preview changes without writing to DB}';
 
     protected $description = 'Sync sets table from remote platform via secure API';
 
@@ -50,8 +52,8 @@ class SyncSetsFromRemoteCommand extends Command
             return self::FAILURE;
         }
 
-        $dryRun = (bool) $this->option('dry-run');
-        $remoteUuids = $remoteSets->pluck('uuid')->all();
+        $force = (bool) $this->option('force');
+        $dryRun = (bool) $this->option('dry-run') || ! $force;
         $localSets = GraduationSet::query()->get();
         $matchedLocalIds = [];
 
@@ -80,9 +82,7 @@ class SyncSetsFromRemoteCommand extends Command
                 continue;
             }
 
-            if ($local->remote_uuid && ! in_array($local->remote_uuid, $remoteUuids, true)) {
-                $toDelete[] = $local;
-            }
+            $toDelete[] = $local;
         }
 
         $this->info(sprintf(
@@ -93,7 +93,11 @@ class SyncSetsFromRemoteCommand extends Command
         ));
 
         if ($dryRun) {
-            $this->warn('[Dry Run] No changes written.');
+            $message = $force
+                ? '[Dry Run] No changes written.'
+                : '[Preview] No changes written. Re-run with --force to apply these changes.';
+
+            $this->warn($message);
 
             return self::SUCCESS;
         }
@@ -111,7 +115,8 @@ class SyncSetsFromRemoteCommand extends Command
 
             foreach ($toDelete as $local) {
                 $local->delete();
-                $this->line("  - Deleted: {$local->remote_uuid}");
+                $deletedIdentifier = $local->remote_uuid ?? $local->public_id;
+                $this->line("  - Deleted: {$deletedIdentifier} ({$local->set_number})");
             }
         });
 
@@ -130,14 +135,21 @@ class SyncSetsFromRemoteCommand extends Command
      */
     private function findLocalSet(Collection $localSets, array $remote): ?GraduationSet
     {
-        $remoteUuid = $remote['uuid'];
+        $remoteUuid = (string) $remote['uuid'];
 
         $byRemoteUuid = $localSets->first(fn (GraduationSet $set): bool => $set->remote_uuid === $remoteUuid);
         if ($byRemoteUuid) {
             return $byRemoteUuid;
         }
 
-        return $localSets->first(fn (GraduationSet $set): bool => $set->public_id === $remoteUuid);
+        $byPublicId = $localSets->first(fn (GraduationSet $set): bool => $set->public_id === $remoteUuid);
+        if ($byPublicId) {
+            return $byPublicId;
+        }
+
+        return $localSets->first(
+            fn (GraduationSet $set): bool => $set->set_number === $this->normalizeSetNumber($remote['set_number'] ?? null)
+        );
     }
 
     /**
@@ -147,12 +159,12 @@ class SyncSetsFromRemoteCommand extends Command
     private function mapRemoteToLocal(array $remote): array
     {
         return [
-            'remote_uuid' => $remote['uuid'],
-            'public_id' => $remote['uuid'],
-            'name' => $remote['name'],
+            'remote_uuid' => (string) $remote['uuid'],
+            'public_id' => (string) $remote['uuid'],
+            'name' => (string) $remote['name'],
             'start_year' => $remote['start_year'],
             'end_year' => $remote['end_year'],
-            'set_number' => $remote['set_number'],
+            'set_number' => $this->normalizeSetNumber($remote['set_number'] ?? null),
         ];
     }
 
@@ -161,10 +173,15 @@ class SyncSetsFromRemoteCommand extends Command
      */
     private function hasChanges(GraduationSet $local, array $remote): bool
     {
-        return $local->remote_uuid !== $remote['uuid']
-            || $local->name !== $remote['name']
+        return $local->remote_uuid !== (string) $remote['uuid']
+            || $local->name !== (string) $remote['name']
             || $local->start_year != $remote['start_year']
             || $local->end_year != $remote['end_year']
-            || $local->set_number !== $remote['set_number'];
+            || $local->set_number !== $this->normalizeSetNumber($remote['set_number'] ?? null);
+    }
+
+    private function normalizeSetNumber(mixed $setNumber): string
+    {
+        return trim((string) $setNumber);
     }
 }
