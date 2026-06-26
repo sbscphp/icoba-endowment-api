@@ -26,7 +26,7 @@ final class DropdownService
         return [
             'donor_types' => DonorType::query()->orderBy('id')->get(['uuid', 'slug', 'label', 'description']),
             'corporate_categories' => CorporateCategory::query()->orderBy('id')->get(['uuid', 'name']),
-            'sets' => GraduationSet::query()->orderBy('set_number')->get(['uuid', 'public_id', 'name', 'set_number']),
+            'sets' => GraduationSet::query()->orderBy('sort_order')->orderBy('set_number')->get(['uuid', 'public_id', 'name', 'set_number']),
             'countries' => CountryResource::collection(
                 Country::query()->active()->orderBy('name')->get()
             )->resolve(),
