@@ -44,7 +44,13 @@ class SyncSetsFromRemoteCommand extends Command
             return self::FAILURE;
         }
 
-        $remoteSets = collect($response->json('data'))
+        $rawRemoteSets = collect($response->json('data'));
+
+        if ($rawRemoteSets->isNotEmpty() && ! $this->remotePayloadIncludesSortOrder($rawRemoteSets->first())) {
+            $this->warn('Remote API response has no sort_order/set_order field — all sort_order values will default to 0 until the alumni API is updated.');
+        }
+
+        $remoteSets = $rawRemoteSets
             ->map(fn (array $remote): array => $this->normalizeRemoteSet($remote))
             ->filter(fn (array $remote): bool => $remote['uuid'] !== '' && $remote['set_number'] !== '')
             ->unique('set_number')
@@ -201,8 +207,36 @@ class SyncSetsFromRemoteCommand extends Command
             'start_year' => $remote['start_year'] ?? null,
             'end_year' => $remote['end_year'] ?? null,
             'set_number' => $setNumber,
-            'sort_order' => (int) ($remote['set_order'] ?? 0),
+            'sort_order' => $this->resolveRemoteSortOrder($remote),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $remote
+     */
+    private function resolveRemoteSortOrder(array $remote): int
+    {
+        foreach (['sort_order', 'set_order'] as $key) {
+            if (array_key_exists($key, $remote) && $remote[$key] !== null && $remote[$key] !== '') {
+                return (int) $remote[$key];
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $remote
+     */
+    private function remotePayloadIncludesSortOrder(array $remote): bool
+    {
+        foreach (['sort_order', 'set_order'] as $key) {
+            if (array_key_exists($key, $remote)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function normalizeSetNumber(mixed $setNumber): string
