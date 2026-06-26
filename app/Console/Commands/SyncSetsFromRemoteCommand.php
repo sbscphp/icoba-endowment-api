@@ -170,6 +170,7 @@ class SyncSetsFromRemoteCommand extends Command
             'start_year' => $remote['start_year'],
             'end_year' => $remote['end_year'],
             'set_number' => $remote['set_number'],
+            'sort_order' => $remote['sort_order'],
         ];
     }
 
@@ -182,12 +183,13 @@ class SyncSetsFromRemoteCommand extends Command
             || $local->name !== $remote['name']
             || $local->start_year != $remote['start_year']
             || $local->end_year != $remote['end_year']
-            || $local->set_number !== $remote['set_number'];
+            || $local->set_number !== $remote['set_number']
+            || (int) $local->sort_order !== $remote['sort_order'];
     }
 
     /**
      * @param  array<string, mixed>  $remote
-     * @return array{uuid: string, name: string, start_year: mixed, end_year: mixed, set_number: string}
+     * @return array{uuid: string, name: string, start_year: mixed, end_year: mixed, set_number: string, sort_order: int}
      */
     private function normalizeRemoteSet(array $remote): array
     {
@@ -199,6 +201,7 @@ class SyncSetsFromRemoteCommand extends Command
             'start_year' => $remote['start_year'] ?? null,
             'end_year' => $remote['end_year'] ?? null,
             'set_number' => $setNumber,
+            'sort_order' => (int) ($remote['set_order'] ?? 0),
         ];
     }
 

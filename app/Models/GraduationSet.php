@@ -15,6 +15,13 @@ class GraduationSet extends Model
 
     protected $guarded = ['id', 'uuid'];
 
+    protected function casts(): array
+    {
+        return [
+            'sort_order' => 'integer',
+        ];
+    }
+
     public function users(): HasMany
     {
         return $this->hasMany(User::class, 'graduation_set_uuid', 'uuid');
