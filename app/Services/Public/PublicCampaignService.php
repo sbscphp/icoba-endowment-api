@@ -40,6 +40,7 @@ class PublicCampaignService
     public function dropdown(array $filters): Collection
     {
         return $this->baseQuery($filters)
+            ->where('status', CampaignStatus::ACTIVE)
             ->orderBy('name')
             ->get(['uuid', 'name']);
     }
