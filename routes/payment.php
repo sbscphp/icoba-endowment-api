@@ -14,6 +14,9 @@ Route::prefix('v1/payment')->group(function (): void {
 });
 
 Route::prefix('v1/webhooks')->group(function (): void {
+    Route::get('fcmb/transactions', [FcmbWebhookController::class, 'ping'])
+        ->middleware(['throttle:60,1']);
+
     Route::post('fcmb/transactions', [FcmbWebhookController::class, 'handle'])
         ->middleware(['throttle:60,1']);
 });
