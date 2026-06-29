@@ -27,14 +27,26 @@ class TransactionPaymentMethodTest extends TestCase
         $this->assertSame('paystack', $transaction->resolvePaymentMethod());
     }
 
-    public function test_resolve_payment_method_falls_back_to_fcmb_gateway(): void
+    public function test_resolve_payment_method_falls_back_to_fcmb_gateway_for_bank_transfer(): void
     {
         $transaction = $this->makeTransaction([
             'gateway' => PaymentGateway::Fcmb->value,
+            'application_type' => TransactionApplicationType::BANK_TRANSFER->value,
             'metadata' => ['source' => 'admin_manual'],
         ]);
 
         $this->assertSame('bank_transfer', $transaction->resolvePaymentMethod());
+    }
+
+    public function test_resolve_payment_method_returns_fcmb_checkout_for_online_fcmb(): void
+    {
+        $transaction = $this->makeTransaction([
+            'gateway' => PaymentGateway::Fcmb->value,
+            'application_type' => TransactionApplicationType::INSTANT_DONATION->value,
+            'metadata' => ['payment_method' => 'fcmb_checkout'],
+        ]);
+
+        $this->assertSame('fcmb_checkout', $transaction->resolvePaymentMethod());
     }
 
     public function test_transaction_resource_exposes_resolved_payment_method(): void

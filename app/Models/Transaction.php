@@ -120,14 +120,14 @@ class Transaction extends Model
         if ($gateway === PaymentGateway::Paystack->value) {
             return 'paystack';
         }
-        if ($gateway === PaymentGateway::Fcmb->value) {
-            return 'bank_transfer';
-        }
-
         $applicationType = $this->application_type;
         if ($applicationType instanceof TransactionApplicationType
             && $applicationType === TransactionApplicationType::BANK_TRANSFER) {
             return 'bank_transfer';
+        }
+
+        if ($gateway === PaymentGateway::Fcmb->value) {
+            return 'fcmb_checkout';
         }
 
         return null;

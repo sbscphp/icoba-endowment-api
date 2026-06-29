@@ -42,6 +42,7 @@ final readonly class RequestResponseEncryptionMiddleware
         '/flutterwave/webhook',
         '/flutterwave/callback',
         '/stripe/webhook',
+        '/fcmb/transactions',
     ];
 
     /**

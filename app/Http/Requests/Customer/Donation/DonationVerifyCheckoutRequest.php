@@ -31,6 +31,7 @@ class DonationVerifyCheckoutRequest extends ApiFormRequest
                 Rule::requiredIf(fn () => in_array($this->input('payment_gateway'), [
                     PaymentGateway::Stripe->value,
                     PaymentGateway::Paystack->value,
+                    PaymentGateway::Fcmb->value,
                 ], true)),
                 'nullable',
                 'string',
