@@ -17,13 +17,22 @@ use RuntimeException;
  */
 class FcmbWebhookController extends Controller
 {
-    public function __construct(
-        private readonly FcmbCheckoutService $fcmbCheckoutService,
-        private readonly FcmbPaymentWebhookService $fcmbPaymentWebhookService,
-    ) {}
-
-    public function handle(Request $request): JsonResponse
+    /**
+     * URL reachability check for FCMB / CLNX dashboard webhook registration.
+     */
+    public function ping(): JsonResponse
     {
+        return response()->json([
+            'status' => 'ok',
+            'message' => 'FCMB webhook endpoint is reachable.',
+        ]);
+    }
+
+    public function handle(
+        Request $request,
+        FcmbCheckoutService $fcmbCheckoutService,
+        FcmbPaymentWebhookService $fcmbPaymentWebhookService,
+    ): JsonResponse {
         /** @var array<string, mixed>|null $payload */
         $payload = $request->json()->all();
         if (! is_array($payload)) {
@@ -31,7 +40,7 @@ class FcmbWebhookController extends Controller
         }
 
         try {
-            $this->assertValidWebhook($payload);
+            $this->assertValidWebhook($payload, $fcmbCheckoutService);
         } catch (RuntimeException $e) {
             Log::notice('FCMB CLNX webhook verification failed.', ['error' => $e->getMessage()]);
 
@@ -41,7 +50,7 @@ class FcmbWebhookController extends Controller
         $handshakeId = $this->resolveHandshakeId($payload);
 
         try {
-            $this->fcmbPaymentWebhookService->handlePayload($payload);
+            $fcmbPaymentWebhookService->handlePayload($payload);
         } catch (\Throwable $e) {
             Log::error('FCMB CLNX webhook handler failed.', ['exception' => $e]);
 
@@ -56,9 +65,9 @@ class FcmbWebhookController extends Controller
      *
      * @throws RuntimeException
      */
-    private function assertValidWebhook(array $payload): void
+    private function assertValidWebhook(array $payload, FcmbCheckoutService $fcmbCheckoutService): void
     {
-        if (! $this->fcmbCheckoutService->verifyWebhookHash($payload)) {
+        if (! $fcmbCheckoutService->verifyWebhookHash($payload)) {
             if (app()->environment('production')) {
                 throw new RuntimeException('FCMB webhook hash mismatch.');
             }
