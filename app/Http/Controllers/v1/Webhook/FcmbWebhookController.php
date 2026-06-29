@@ -2,104 +2,105 @@
 
 namespace App\Http\Controllers\v1\Webhook;
 
-use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
-use App\Responser\JsonResponser;
-use App\Services\Reconciliation\BankFeedIngestionService;
+use App\Services\Payment\FcmbCheckoutService;
+use App\Services\Payment\FcmbPaymentWebhookService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use RuntimeException;
 
 /**
- * Stub endpoint for the future FCMB credit-notification webhook.
- *
- * FCMB has not yet finalized the partnership integration. Until they do, this
- * endpoint only accepts traffic when `fcmb_webhook.allow_test_payloads` is
- * enabled, and always returns 501 in production deployments. The same row
- * processor (`BankFeedIngestionService`) used by the CSV importer is reused
- * here so behaviour stays identical between the two ingestion paths.
+ * CLNX / FCMB payment notification webhook (hosted checkout).
  */
 class FcmbWebhookController extends Controller
 {
     public function __construct(
-        private readonly BankFeedIngestionService $ingestionService,
+        private readonly FcmbCheckoutService $fcmbCheckoutService,
+        private readonly FcmbPaymentWebhookService $fcmbPaymentWebhookService,
     ) {}
 
-    public function handle(Request $request)
+    public function handle(Request $request): JsonResponse
     {
+        /** @var array<string, mixed>|null $payload */
+        $payload = $request->json()->all();
+        if (! is_array($payload)) {
+            return response()->json(['message' => 'Invalid payload'], 400);
+        }
+
         try {
-            if (! (bool) config('fcmb_webhook.enabled', false)) {
-                if (! (bool) config('fcmb_webhook.allow_test_payloads', false)) {
-                    return JsonResponser::send(true, 'FCMB webhook is not yet enabled.', null, 501);
-                }
+            $this->assertValidWebhook($payload);
+        } catch (RuntimeException $e) {
+            Log::notice('FCMB CLNX webhook verification failed.', ['error' => $e->getMessage()]);
+
+            return response()->json(['message' => 'Invalid webhook'], 400);
+        }
+
+        $handshakeId = $this->resolveHandshakeId($payload);
+
+        try {
+            $this->fcmbPaymentWebhookService->handlePayload($payload);
+        } catch (\Throwable $e) {
+            Log::error('FCMB CLNX webhook handler failed.', ['exception' => $e]);
+
+            return response()->json(['message' => 'Processing failed'], 500);
+        }
+
+        return response()->json(['handshakeId' => $handshakeId]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws RuntimeException
+     */
+    private function assertValidWebhook(array $payload): void
+    {
+        if (! $this->fcmbCheckoutService->verifyWebhookHash($payload)) {
+            if (app()->environment('production')) {
+                throw new RuntimeException('FCMB webhook hash mismatch.');
             }
 
-            if (! $this->signatureValid($request)) {
-                Log::warning('FCMB webhook: signature verification failed.', [
-                    'header' => (string) config('fcmb_webhook.signature_header'),
-                ]);
-
-                return JsonResponser::send(true, 'Invalid signature.', null, 401);
+            if (! (bool) config('services.fcmb.allow_test_webhooks', false)) {
+                throw new RuntimeException('FCMB webhook hash mismatch.');
             }
-
-            $payload = $request->all();
-            $rows = $this->extractRows($payload);
-
-            $summary = $this->ingestionService->ingest($rows, 'fcmb_webhook');
-
-            return JsonResponser::send(false, 'FCMB webhook accepted.', $summary);
-        } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'Webhook\FcmbWebhookController@handle');
         }
     }
 
     /**
      * @param  array<string, mixed>  $payload
-     * @return list<array<string, mixed>>
      */
-    private function extractRows(array $payload): array
+    private function resolveHandshakeId(array $payload): string
     {
-        $path = (string) config('fcmb_webhook.payload_map.transactions_path', 'transactions');
-        $fields = (array) config('fcmb_webhook.payload_map.fields', []);
+        $fingerprint = hash('sha256', json_encode($this->handshakeFingerprint($payload)));
+        $cacheKey = 'fcmb_clnx_webhook_handshake:'.$fingerprint;
 
-        $rawRows = data_get($payload, $path);
-        if (! is_array($rawRows)) {
-            $rawRows = [$payload];
+        /** @var string|null $existing */
+        $existing = Cache::get($cacheKey);
+        if (is_string($existing) && $existing !== '') {
+            return $existing;
         }
 
-        $rows = [];
-        foreach ($rawRows as $row) {
-            if (! is_array($row)) {
-                continue;
-            }
+        $handshakeId = (string) Str::uuid();
+        Cache::forever($cacheKey, $handshakeId);
 
-            $rows[] = [
-                'transaction_date' => $row[$fields['transaction_date'] ?? 'transaction_date'] ?? null,
-                'amount' => $row[$fields['amount'] ?? 'amount'] ?? null,
-                'narration' => $row[$fields['narration'] ?? 'narration'] ?? null,
-                'statement_reference' => $row[$fields['statement_reference'] ?? 'reference'] ?? null,
-                'account_number' => $row[$fields['account_number'] ?? 'account_number'] ?? null,
-                'source' => 'fcmb_webhook',
-            ];
-        }
-
-        return $rows;
+        return $handshakeId;
     }
 
-    private function signatureValid(Request $request): bool
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function handshakeFingerprint(array $payload): array
     {
-        $secret = (string) config('fcmb_webhook.shared_secret', '');
-        if ($secret === '') {
-            return (bool) config('fcmb_webhook.allow_test_payloads', false);
-        }
-
-        $header = (string) config('fcmb_webhook.signature_header', 'X-FCMB-Signature');
-        $received = (string) $request->header($header, '');
-        if ($received === '') {
-            return false;
-        }
-
-        $expected = hash_hmac('sha256', (string) $request->getContent(), $secret);
-
-        return hash_equals($expected, $received);
+        return [
+            'amount' => $payload['amount'] ?? null,
+            'reference' => $payload['reference'] ?? null,
+            'invoiceRequestReference' => $payload['invoiceRequestReference'] ?? null,
+            'status' => $payload['status'] ?? null,
+            'transactionDate' => $payload['transactionDate'] ?? null,
+        ];
     }
 }

@@ -83,6 +83,25 @@ class DonationCheckoutRequest extends ApiFormRequest
         } else {
             $this->appendGuestDonorProfileValidation($validator);
         }
+
+        $validator->after(function (Validator $validator): void {
+            if ($this->input('payment_gateway') !== PaymentGateway::Fcmb->value) {
+                return;
+            }
+
+            $currency = strtoupper(trim((string) ($this->input('currency') ?? '')));
+            $allowed = config('services.fcmb.allowed_currencies', ['NGN']);
+            if (! is_array($allowed)) {
+                $allowed = ['NGN'];
+            }
+
+            if ($currency !== '' && ! in_array($currency, $allowed, true)) {
+                $validator->errors()->add(
+                    'currency',
+                    'FCMB checkout is only available for '.implode(', ', $allowed).' donations at this time.',
+                );
+            }
+        });
     }
 
     public function paymentGateway(): PaymentGateway

@@ -15,6 +15,8 @@ use App\Services\Admin\Transaction\TransactionService;
 use App\Services\Donation\DonationIntentService;
 use App\Services\Donation\DonorNameRequirement;
 use App\Services\Payment\CheckoutRedirectResolver;
+use App\Services\Payment\FcmbCheckoutService;
+use App\Services\Payment\FcmbCheckoutVerificationService;
 use App\Services\Payment\PaystackCheckoutService;
 use App\Services\Payment\PaystackCheckoutVerificationService;
 use App\Services\Payment\StripeCheckoutService;
@@ -29,6 +31,8 @@ class DonationCheckoutController extends Controller
         private readonly StripeCheckoutVerificationService $stripeCheckoutVerificationService,
         private readonly PaystackCheckoutService $paystackCheckoutService,
         private readonly PaystackCheckoutVerificationService $paystackCheckoutVerificationService,
+        private readonly FcmbCheckoutService $fcmbCheckoutService,
+        private readonly FcmbCheckoutVerificationService $fcmbCheckoutVerificationService,
         private readonly TransactionService $transactionService,
         private readonly DonorNameRequirement $donorNameRequirement,
         private readonly CheckoutRedirectResolver $checkoutRedirectResolver,
@@ -103,6 +107,14 @@ class DonationCheckoutController extends Controller
                     $cancelUrl,
                     $frontendUrl,
                 ),
+                PaymentGateway::Fcmb => $this->fcmbCheckoutService->createCheckoutSession(
+                    $transaction,
+                    $user,
+                    $successUrl,
+                    $failedUrl,
+                    $cancelUrl,
+                    $frontendUrl,
+                ),
                 default => throw new ApiException('This payment gateway is not yet supported.', 501),
             };
 
@@ -138,6 +150,11 @@ class DonationCheckoutController extends Controller
                     $validated['transaction_uuid'] ?? null,
                 ),
                 PaymentGateway::Paystack => $this->paystackCheckoutVerificationService->verify(
+                    $validated['checkout_session_id'],
+                    $user,
+                    $validated['transaction_uuid'] ?? null,
+                ),
+                PaymentGateway::Fcmb => $this->fcmbCheckoutVerificationService->verify(
                     $validated['checkout_session_id'],
                     $user,
                     $validated['transaction_uuid'] ?? null,

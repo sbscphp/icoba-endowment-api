@@ -50,6 +50,19 @@ return [
         'failed_url' => env('PAYSTACK_FAILED_URL'),
     ],
 
+    'fcmb' => [
+        'base_url' => env('FCMB_CLNX_BASE_URL', 'https://dev.clnx.io'),
+        'business_id' => env('FCMB_CLNX_BUSINESS_ID'),
+        'secret_key' => env('FCMB_CLNX_SECRET_KEY'),
+        'success_url' => env('FCMB_SUCCESS_URL'),
+        'failed_url' => env('FCMB_FAILED_URL'),
+        'allowed_currencies' => array_values(array_filter(array_map(
+            static fn (string $currency): string => strtoupper(trim($currency)),
+            explode(',', (string) env('FCMB_CLNX_ALLOWED_CURRENCIES', 'NGN')),
+        ))),
+        'allow_test_webhooks' => env('FCMB_CLNX_ALLOW_TEST_WEBHOOKS', false),
+    ],
+
     'remote_sync' => [
         'secret' => env('REMOTE_SYNC_SECRET'),
         'sets_url' => env('REMOTE_SYNC_SETS_URL'),
