@@ -2,7 +2,6 @@
 
 namespace Tests\Unit\Services\Payment;
 
-use App\Services\Bank\BankAccountRegistry;
 use App\Services\Payment\CheckoutRedirectResolver;
 use App\Services\Payment\FcmbCheckoutService;
 use Tests\TestCase;
@@ -17,14 +16,6 @@ class FcmbCheckoutServiceTest extends TestCase
             'services.fcmb.base_url' => 'https://dev.clnx.io',
             'services.fcmb.business_id' => 'test-business-id',
             'services.fcmb.secret_key' => 'test-secret-key',
-            'bank_accounts.accounts' => [
-                [
-                    'account_key' => 'fcmb_ngn',
-                    'currency' => 'NGN',
-                    'currency_symbol' => '₦',
-                    'account_number' => '2007877660',
-                ],
-            ],
         ]);
     }
 
@@ -66,9 +57,6 @@ class FcmbCheckoutServiceTest extends TestCase
 
     private function makeService(): FcmbCheckoutService
     {
-        return new FcmbCheckoutService(
-            new CheckoutRedirectResolver,
-            new BankAccountRegistry,
-        );
+        return new FcmbCheckoutService(new CheckoutRedirectResolver);
     }
 }

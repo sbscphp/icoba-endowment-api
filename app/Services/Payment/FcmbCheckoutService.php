@@ -4,7 +4,6 @@ namespace App\Services\Payment;
 
 use App\Models\Transaction;
 use App\Models\User;
-use App\Services\Bank\BankAccountRegistry;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -19,7 +18,6 @@ final class FcmbCheckoutService
 
     public function __construct(
         private readonly CheckoutRedirectResolver $redirectResolver,
-        private readonly BankAccountRegistry $bankAccountRegistry,
     ) {
         $businessId = config('services.fcmb.business_id');
         $secretKey = config('services.fcmb.secret_key');
@@ -80,7 +78,6 @@ final class FcmbCheckoutService
             'email' => $email,
             'invoiceRequestReference' => $invoiceRequestReference,
             'isVatEnabled' => false,
-            'settlements' => $this->buildSettlements($currency),
             'customFields' => [
                 [
                     'label' => 'transaction_uuid',
@@ -89,6 +86,11 @@ final class FcmbCheckoutService
             ],
             'hash' => $this->hashInitializePayment($amount, $email, $invoiceRequestReference),
         ];
+
+        $settlements = $this->buildSettlements($currency);
+        if ($settlements !== null) {
+            $payload['settlements'] = $settlements;
+        }
 
         $phone = $this->resolveDonorPhone($transaction, $donorUser);
         if ($phone !== null) {
@@ -215,17 +217,22 @@ final class FcmbCheckoutService
     }
 
     /**
-     * @return list<array{accountNumber: string, type: string, category: string, value: int}>
+     * @return list<array{accountNumber: string, type: string, category: string, value: int}>|null
      */
-    private function buildSettlements(string $currency): array
+    private function buildSettlements(string $currency): ?array
     {
-        $account = $this->bankAccountRegistry->resolveByCurrency($currency);
-        if ($account === null || $account['account_number'] === '') {
-            throw new RuntimeException('No FCMB settlement account is configured for '.$currency.'.');
+        $accounts = config('services.fcmb.settlement_accounts', []);
+        if (! is_array($accounts)) {
+            return null;
+        }
+
+        $accountNumber = $accounts[strtoupper($currency)] ?? null;
+        if (! is_string($accountNumber) || trim($accountNumber) === '') {
+            return null;
         }
 
         return [[
-            'accountNumber' => $account['account_number'],
+            'accountNumber' => trim($accountNumber),
             'type' => 'PERCENTAGE',
             'category' => 'SINGLE',
             'value' => 100,
