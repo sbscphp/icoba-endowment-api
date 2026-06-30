@@ -61,6 +61,12 @@ return [
             explode(',', (string) env('FCMB_CLNX_ALLOWED_CURRENCIES', 'NGN')),
         ))),
         'allow_test_webhooks' => env('FCMB_CLNX_ALLOW_TEST_WEBHOOKS', false),
+        'settlement_accounts' => array_filter([
+            'NGN' => env('FCMB_CLNX_SETTLEMENT_ACCOUNT_NGN'),
+            'USD' => env('FCMB_CLNX_SETTLEMENT_ACCOUNT_USD'),
+            'GBP' => env('FCMB_CLNX_SETTLEMENT_ACCOUNT_GBP'),
+            'EUR' => env('FCMB_CLNX_SETTLEMENT_ACCOUNT_EUR'),
+        ], static fn (?string $account): bool => is_string($account) && trim($account) !== ''),
     ],
 
     'remote_sync' => [
