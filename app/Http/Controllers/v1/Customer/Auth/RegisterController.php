@@ -8,12 +8,31 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\CustomerRegisterRequest;
 use App\Responser\JsonResponser;
 use App\Services\Auth\AuthService;
+use App\Services\DropdownService;
 
 class RegisterController extends Controller
 {
     public function __construct(
         private readonly AuthService $authService,
+        private readonly DropdownService $dropdownService,
     ) {}
+
+    /**
+     * Customer registration metadata (countries, OTP channels).
+     */
+    public function metadata()
+    {
+        try {
+            return JsonResponser::send(
+                false,
+                'Registration options retrieved.',
+                $this->dropdownService->customerRegistrationMetadata(),
+                200
+            );
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Auth\RegisterController@metadata');
+        }
+    }
 
     public function store(CustomerRegisterRequest $request)
     {

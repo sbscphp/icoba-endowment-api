@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
     Route::prefix('auth')->group(function () {
+        Route::get('registration/options', [RegisterController::class, 'metadata'])->middleware('throttle:60,1');
         Route::post('signup', [RegisterController::class, 'store'])->middleware('throttle:customer-register');
         Route::post('email/verify-otp', [EmailVerificationController::class, 'verify'])->middleware('throttle:customer-otp-verify');
         Route::post('email/resend-otp', [EmailVerificationController::class, 'resend'])->middleware('throttle:customer-otp-send');
