@@ -3,6 +3,8 @@
 use App\Http\Controllers\v1\Admin\AuditTrail\AuditTrailController;
 use App\Http\Controllers\v1\Admin\Auth\AdminLoginController;
 use App\Http\Controllers\v1\Admin\Auth\PasswordController as AdminPasswordController;
+use App\Http\Controllers\v1\Admin\Notification\NotificationController;
+use App\Http\Controllers\v1\Admin\Settings\SettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1/admin')->group(function () {
@@ -20,5 +22,22 @@ Route::prefix('v1/admin')->group(function () {
 
     Route::middleware(['auth:sanctum', 'permission:audit_trail.read'])->group(function () {
         Route::get('audit-trails', [AuditTrailController::class, 'index']);
+    });
+
+    Route::middleware('auth:sanctum')->prefix('notifications')->group(function () {
+        Route::get('/', [NotificationController::class, 'index']);
+        Route::post('/read-all', [NotificationController::class, 'markAllRead']);
+        Route::get('/{id}', [NotificationController::class, 'show']);
+        Route::patch('/{id}/read', [NotificationController::class, 'markRead']);
+        Route::patch('/{id}/unread', [NotificationController::class, 'markUnread']);
+        Route::delete('/{id}/dismiss', [NotificationController::class, 'dismiss']);
+    });
+
+    Route::middleware('auth:sanctum')->prefix('settings')->group(function () {
+        Route::get('/profile', [SettingsController::class, 'profile']);
+        Route::patch('/profile', [SettingsController::class, 'updateProfile']);
+        Route::match(['patch', 'post'], '/2fa', [SettingsController::class, 'toggleTwoFactor']);
+        Route::match(['patch', 'post'], '/password', [SettingsController::class, 'changePassword']);
+        Route::match(['patch', 'post'], '/notifications', [SettingsController::class, 'updateNotificationPreferences']);
     });
 });
