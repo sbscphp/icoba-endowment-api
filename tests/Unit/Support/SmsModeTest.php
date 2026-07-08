@@ -18,7 +18,7 @@ class SmsModeTest extends TestCase
     {
         SmsMode::setOverride(SmsMode::STUB);
 
-        config(['services.sms.stub_code' => '654321']);
+        config(['security.otp_sms_stub_code' => '654321']);
 
         $this->assertTrue(SmsMode::isStub());
         $this->assertFalse(SmsMode::invokesSmsService());

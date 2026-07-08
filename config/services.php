@@ -7,10 +7,7 @@ return [
     | Third Party Services
     |--------------------------------------------------------------------------
     |
-    | This file is for storing the credentials for third party services such
-    | as Mailgun, Postmark, AWS and more. This file provides the de facto
-    | location for this type of information, allowing packages to have
-    | a conventional file to locate the various service credentials.
+    | Credentials for third-party services used by the application.
     |
     */
 
@@ -35,29 +32,13 @@ return [
         ],
     ],
 
-    'stripe' => [
-        'secret' => env('STRIPE_SECRET'),
-        'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
-        'success_url' => env('STRIPE_SUCCESS_URL'),
-        'failed_url' => env('STRIPE_FAILED_URL', env('STRIPE_CANCEL_URL')),
-        'cancel_url' => env('STRIPE_CANCEL_URL'),
-    ],
-
-    'paystack' => [
-        'secret' => env('PAYSTACK_SECRET_KEY'),
-        'public' => env('PAYSTACK_PUBLIC_KEY'),
-        'callback_url' => env('PAYSTACK_CALLBACK_URL'),
-        'failed_url' => env('PAYSTACK_FAILED_URL'),
-    ],
-
     'sms' => [
         /*
-        | SMS_MODE controls OTP SMS delivery:
-        | stub — SMS uses fixed OTP (SMS_STUB_CODE), no SMS provider calls; email uses random OTP and is still sent
-        | log  — random OTP, message written to logs only (staging)
-        | live — random OTP, sent via Termii (NG) or SMS_FOREIGN_PROVIDER (foreign)
+        | SMS_MODE controls provider dispatch when security.otp_sms_dispatch_enabled is true:
+        | log  — message written to logs only
+        | live — sent via Termii (NG) or SMS_FOREIGN_PROVIDER (foreign)
+        | Fixed SMS OTP while dispatch is off: security.otp_sms_stub_code (OTP_SMS_STUB_CODE).
         */
-        'stub_code' => (string) env('SMS_STUB_CODE', '123456'),
         'foreign_provider' => env('SMS_FOREIGN_PROVIDER', 'twilio'),
         'infobip' => [
             'base_url' => env('INFOBIP_BASE_URL'),

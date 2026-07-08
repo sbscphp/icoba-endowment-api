@@ -2,14 +2,10 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-
 use App\Notifications\Auth\ResetPasswordMail;
 use App\Traits\HasUuid;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -23,32 +19,16 @@ class User extends Authenticatable
 
     protected $guard_name = 'api';
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $guarded = ['uuid', 'id'];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
-        'stripe_customer_id',
         'two_factor_secret',
         'two_factor_recovery_codes',
         'remember_token',
         '2fa_expires_at',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
@@ -67,37 +47,8 @@ class User extends Authenticatable
         ];
     }
 
-    public function donorType(): BelongsTo
-    {
-        return $this->belongsTo(DonorType::class, 'donor_type_uuid', 'uuid');
-    }
-
-    public function corporateCategory(): BelongsTo
-    {
-        return $this->belongsTo(CorporateCategory::class, 'corporate_category_uuid', 'uuid');
-    }
-
-    public function graduationSet(): BelongsTo
-    {
-        return $this->belongsTo(GraduationSet::class, 'graduation_set_uuid', 'uuid');
-    }
-
-    public function transactions(): HasMany
-    {
-        return $this->hasMany(Transaction::class, 'user_uuid', 'uuid');
-    }
-
-    public function pledges(): HasMany
-    {
-        return $this->hasMany(Pledge::class, 'user_uuid', 'uuid');
-    }
-
     public function displayName(): string
     {
-        if (filled($this->organization_name)) {
-            return trim((string) $this->organization_name);
-        }
-
         $name = trim(implode(' ', array_filter([
             (string) ($this->firstname ?? ''),
             (string) ($this->lastname ?? ''),

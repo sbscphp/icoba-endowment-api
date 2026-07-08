@@ -117,14 +117,6 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('customer-register', function (Request $request) {
             return Limit::perMinute(10)->by((string) $request->ip());
         });
-
-        RateLimiter::for('public-leaderboard', function (Request $request) {
-            return Limit::perMinute(60)->by((string) $request->ip());
-        });
-
-        RateLimiter::for('public-receipt', function (Request $request) {
-            return Limit::perMinute(30)->by((string) $request->ip());
-        });
     }
 
     private function loginThrottleKey(Request $request): string

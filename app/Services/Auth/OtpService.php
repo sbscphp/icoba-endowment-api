@@ -13,7 +13,6 @@ use App\Models\AuthChallenge;
 use App\Models\User;
 use App\Support\OtpFlowLogger;
 use App\Services\Theme\ThemeResolver;
-use App\Support\SmsMode;
 use App\Services\ThirdParty\SMS\SmsService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -254,7 +253,7 @@ class OtpService
             return;
         }
 
-        if (SmsMode::invokesSmsService()) {
+        if ($this->smsDispatchEnabled()) {
             $this->smsService->sendOtp(
                 data_get($subject, 'country_code'),
                 data_get($subject, 'phone_number'),
@@ -266,7 +265,7 @@ class OtpService
             return;
         }
 
-        Log::info('OTP SMS stub: SMS_MODE=stub', [
+        Log::info('OTP SMS stub: provider dispatch skipped', [
             'subject_type' => $this->subjectType($subject),
             'subject_id' => $subject->uuid,
             'purpose' => $purpose->value,
@@ -276,11 +275,18 @@ class OtpService
 
     private function generateOtpCode(OtpChannelEnum $channel): string
     {
-        if ($channel === OtpChannelEnum::SMS && SmsMode::isStub()) {
-            return SmsMode::stubCode();
+        if ($channel === OtpChannelEnum::SMS && ! $this->smsDispatchEnabled()) {
+            $stub = (string) config('security.otp_sms_stub_code', '123456');
+
+            return preg_match('/^\d{6}$/', $stub) === 1 ? $stub : '123456';
         }
 
         return (string) random_int(100000, 999999);
+    }
+
+    private function smsDispatchEnabled(): bool
+    {
+        return (bool) config('security.otp_sms_dispatch_enabled', false);
     }
 
     private function assertChannelSupported(User|Admin $subject, OtpChannelEnum $channel): void
@@ -325,10 +331,6 @@ class OtpService
      */
     private function evaluateOtpSendGate(User|Admin $subject, OtpPurposeEnum $purpose, OtpChannelEnum $channel): array
     {
-        if (SmsMode::isStub() && $channel === OtpChannelEnum::SMS) {
-            return ['mode' => 'send_new'];
-        }
-
         $cooldownSec = $this->otpSendCooldownSeconds();
         $subjectType = $this->subjectType($subject);
 

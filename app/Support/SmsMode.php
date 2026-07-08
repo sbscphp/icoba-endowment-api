@@ -49,7 +49,7 @@ final class SmsMode
 
     public static function stubCode(): string
     {
-        $stub = (string) config('services.sms.stub_code', '123456');
+        $stub = (string) config('security.otp_sms_stub_code', '123456');
 
         return preg_match('/^\d{6}$/', $stub) === 1 ? $stub : '123456';
     }

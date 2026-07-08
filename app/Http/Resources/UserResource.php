@@ -3,8 +3,6 @@
 namespace App\Http\Resources;
 
 use App\Enums\CustomerRegistrationStepEnum;
-use App\Enums\DonorTypeSlug;
-use App\Services\Customer\CustomerTierService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -13,7 +11,6 @@ class UserResource extends JsonResource
     public function toArray(Request $request): array
     {
         $role = $this->roles->first();
-        $tiers = app(CustomerTierService::class)->tiersForUser($this->resource);
 
         return [
             'uuid' => $this->uuid,
@@ -40,52 +37,6 @@ class UserResource extends JsonResource
             ] : null,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
-            'donor' => $this->donorPayload(),
-            'donation_tier' => $tiers['donation_tier'],
-            'pledge_tier' => $tiers['pledge_tier'],
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function donorPayload(): array
-    {
-        $donorType = $this->relationLoaded('donorType') ? $this->donorType : $this->donorType()->first();
-        $graduationSet = $this->relationLoaded('graduationSet') ? $this->graduationSet : $this->graduationSet()->first();
-        $corporateCategory = $this->relationLoaded('corporateCategory') ? $this->corporateCategory : $this->corporateCategory()->first();
-
-        $type = null;
-
-        if ($donorType !== null) {
-            $type = [
-                'slug' => $donorType->slug,
-                'label' => $donorType->label,
-            ];
-        } elseif (! empty($this->organization_name)) {
-            $type = [
-                'slug' => DonorTypeSlug::CORPORATE_DONOR->value,
-                'label' => DonorTypeSlug::CORPORATE_DONOR->label(),
-            ];
-        } elseif (! empty($this->graduation_set_uuid) || ! empty($this->alumni_identifier)) {
-            $type = [
-                'slug' => DonorTypeSlug::ICOBA_ALUMNI->value,
-                'label' => DonorTypeSlug::ICOBA_ALUMNI->label(),
-            ];
-        }
-
-        return [
-            'type' => $type,
-            'organization_name' => $this->organization_name,
-            'rc_number' => $this->rc_number,
-            'tin' => $this->tin,
-            'alumni_identifier' => $this->alumni_identifier,
-            'set' => $graduationSet !== null
-                ? $graduationSet->only(['uuid', 'name', 'set_number', 'public_id'])
-                : null,
-            'corporate_category' => $corporateCategory !== null
-                ? $corporateCategory->only(['uuid', 'name'])
-                : null,
         ];
     }
 }

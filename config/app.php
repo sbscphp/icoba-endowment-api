@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'ICOBA Endowment'),
+    'name' => env('APP_NAME', 'NHEF Nexus'),
 
     /*
     |--------------------------------------------------------------------------
@@ -96,7 +96,7 @@ return [
     | customer frontend URL only if no admin frontend URL is configured.
     |
     */
-    'admin_frontend_url' => env('ADMIN_FRONTEND_URL', 'https://icoba-endowment-admin.onrender.com'),
+    'admin_frontend_url' => env('ADMIN_FRONTEND_URL', env('FRONTEND_URL', env('APP_URL'))),
 
     /*
     |--------------------------------------------------------------------------

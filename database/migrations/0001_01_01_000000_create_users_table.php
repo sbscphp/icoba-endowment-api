@@ -6,9 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
@@ -22,8 +19,14 @@ return new class extends Migration
             $table->string('country_code', 10)->nullable()->comment('prefix e.g. +234, 234');
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+            $table->text('two_factor_secret')->nullable();
+            $table->text('two_factor_recovery_codes')->nullable();
+            $table->timestamp('two_factor_confirmed_at')->nullable();
             $table->boolean('2fa')->default(false)->comment('True, False');
             $table->dateTime('2fa_expires_at')->nullable();
+            $table->boolean('email_notifications_enabled')->default(true);
+            $table->boolean('push_notifications_enabled')->default(true);
+            $table->boolean('biometrics_enabled')->default(false);
             $table->boolean('is_active')->default(true)->index();
             $table->boolean('can_login')->default(true)->index();
             $table->timestamp('last_login_at')->nullable()->index();
@@ -51,13 +54,10 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('users');
-        Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('users');
     }
 };

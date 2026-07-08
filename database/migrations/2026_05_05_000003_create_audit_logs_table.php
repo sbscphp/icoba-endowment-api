@@ -20,6 +20,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
+            $table->unsignedSmallInteger('http_status')->nullable();
             $table->json('metadata')->nullable();
             $table->timestamps();
 
@@ -28,6 +29,7 @@ return new class extends Migration
             $table->index('action');
             $table->index(['model', 'model_id']);
             $table->index('ip_address');
+            $table->index('http_status');
         });
     }
 

@@ -8,8 +8,6 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * Represents the API consumer resolved from the X-ClientKey header.
- *
  * @mixin ApiUser
  */
 class ApiUserResource extends JsonResource
@@ -28,7 +26,6 @@ class ApiUserResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            // 'id' => $this->resource->id,
             'uuid' => $this->resource->uuid,
             'name' => $this->resource->name,
             'email' => $this->resource->email,

@@ -1,6 +1,6 @@
 # Giving Identities
 
-This document describes how the ICOBA Endowment API tracks **who** a donor is for leaderboard aggregation, tier recognition, and guest-to-account history linking.
+This document describes how the NHEF Nexus API tracks **who** a donor is for leaderboard aggregation, tier recognition, and guest-to-account history linking.
 
 ## Problem this solves
 

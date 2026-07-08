@@ -4,7 +4,6 @@ namespace App\Services\Auth;
 
 use App\Enums\AuditActionEnum;
 use App\Enums\CustomerRegistrationStepEnum;
-use App\Enums\DonorTypeSlug;
 use App\Enums\OtpChannelEnum;
 use App\Enums\OtpPurposeEnum;
 use App\Enums\eClientType;
@@ -14,16 +13,12 @@ use App\Enums\UserTypeEnum;
 use App\Exceptions\ApiException;
 use App\Helpers\GeneralHelper;
 use App\Helpers\OpaqueMessageHelper;
-use App\Jobs\LinkGuestDonorHistoryJob;
-use App\Mail\WelcomeToEndowmentPortalMail;
+use App\Mail\WelcomeToPortalMail;
 use App\Models\Admin;
 use App\Models\Country;
-use App\Models\DonorType;
-use App\Models\GraduationSet;
 use App\Models\User;
 use App\Notifications\GenericDatabaseNotification;
 use App\Repositories\Contracts\User\UserRepositoryInterface;
-use App\Services\GivingIdentity\GivingIdentityResolver;
 use App\Services\Notifications\NotificationDispatchService;
 use App\Services\Theme\ThemeResolver;
 use Illuminate\Http\Request;
@@ -46,7 +41,6 @@ class AuthService
         private readonly OtpService $otpService,
         private readonly ChallengeTokenService $challengeTokenService,
         private readonly NotificationDispatchService $notificationDispatchService,
-        private readonly GivingIdentityResolver $givingIdentityResolver,
     ) {}
 
     public function register(array $data)
@@ -57,31 +51,31 @@ class AuthService
     }
 
     /**
-     * Register an ICOBA endowment donor and send an email verification OTP. Tokens are issued after email is verified.
+     * Register a customer and send an email verification OTP. Tokens are issued after email is verified.
      *
      * @param  array<string, mixed>  $validated
      * @return array<string, mixed>
      */
     public function registerCustomer(array $validated, Request $request): array
     {
-        $donorType = DonorType::query()->where('slug', $validated['donor_type'])->firstOrFail();
-
-        return DB::transaction(function () use ($validated, $request, $donorType): array {
-            $payload = $this->mapDonorRegistrationToUserPayload($validated, $donorType);
-            $user = $this->userRepository->create($payload);
+        return DB::transaction(function () use ($validated, $request): array {
+            $user = $this->userRepository->create([
+                'firstname' => $validated['firstname'],
+                'lastname' => $validated['lastname'],
+                'email' => $validated['email'],
+                'password' => $validated['password'],
+                'phone_number' => $validated['phone_number'],
+                'country_code' => $validated['country_code'] ?? Country::defaultDialCode(),
+            ]);
             $user->assignRole(eRole::CUSTOMER->value);
-            $user->load(['roles', 'donorType', 'corporateCategory', 'graduationSet']);
-
-            $this->givingIdentityResolver->linkRegistrationToIdentity($user);
-
-            LinkGuestDonorHistoryJob::dispatch($user->uuid);
+            $user->load('roles');
 
             GeneralHelper::storeAuditLog(
                 UserTypeEnum::CUSTOMER,
                 AuditActionEnum::REGISTERED,
                 $request,
                 $user->uuid,
-                ['donor_type' => $donorType->slug],
+                [],
                 $this->displayName($user).' registered.',
                 User::class,
                 $user->uuid,
@@ -99,49 +93,6 @@ class AuthService
 
             return $this->withRegistrationStep($otpPayload, CustomerRegistrationStepEnum::AWAITING_OTP);
         });
-    }
-
-    /**
-     * @param  array<string, mixed>  $validated
-     * @return array<string, mixed>
-     */
-    private function mapDonorRegistrationToUserPayload(array $validated, DonorType $donorType): array
-    {
-        $row = [
-            'email' => $validated['email'],
-            'password' => $validated['password'],
-            'phone_number' => $validated['phone_number'],
-            'country_code' => $validated['country_code'] ?? Country::defaultDialCode(),
-            'donor_type_uuid' => $donorType->uuid,
-            'corporate_category_uuid' => null,
-            'graduation_set_uuid' => null,
-            'organization_name' => null,
-            'rc_number' => null,
-            'tin' => null,
-            'alumni_identifier' => null,
-        ];
-
-        return match ($donorType->slug) {
-            DonorTypeSlug::ICOBA_ALUMNI->value => array_merge($row, [
-                'firstname' => $validated['firstname'],
-                'lastname' => $validated['lastname'],
-                'graduation_set_uuid' => GraduationSet::query()->where('set_number', $validated['set_number'])->value('uuid'),
-                'alumni_identifier' => ! empty($validated['alumni_identifier']) ? $validated['alumni_identifier'] : null,
-            ]),
-            DonorTypeSlug::CORPORATE_DONOR->value => array_merge($row, [
-                'organization_name' => $validated['organization_name'],
-                'corporate_category_uuid' => $validated['corporate_category_uuid'],
-                'rc_number' => $validated['rc_number'],
-                'tin' => $validated['tin'],
-                'firstname' => $validated['organization_name'],
-                'lastname' => '', //Organization
-            ]),
-            DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value => array_merge($row, [
-                'firstname' => $validated['firstname'],
-                'lastname' => $validated['lastname'],
-            ]),
-            default => $row,
-        };
     }
 
     public function loginCustomer(string $email, string $password, Request $request, string $client = eClientType::MOBILE->value): array
@@ -366,7 +317,7 @@ class AuthService
             200,
         );
 
-        $this->sendEndowmentWelcomeMail($user);
+        $this->sendWelcomeMail($user);
 
         if ($this->customerRequiresLoginOtp($user)) {
             $payload = $this->otpService->sendLoginOtp($user);
@@ -987,7 +938,7 @@ class AuthService
         $this->notificationDispatchService->notifyUsersByUuids([$authenticatable->uuid], $notification);
     }
 
-    private function sendEndowmentWelcomeMail(User $user): void
+    private function sendWelcomeMail(User $user): void
     {
         $loginUrl = config('app.frontend_login_url');
 
@@ -998,7 +949,7 @@ class AuthService
         try {
             $theme = app(ThemeResolver::class)->resolveForMail();
 
-            Mail::to($user->email)->send(new WelcomeToEndowmentPortalMail(
+            Mail::to($user->email)->send(new WelcomeToPortalMail(
                 $this->displayName($user),
                 $theme,
                 $loginUrl

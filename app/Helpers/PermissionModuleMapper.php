@@ -8,26 +8,12 @@ use App\Enums\ModuleEnums;
 final class PermissionModuleMapper
 {
     /**
-     * Ordered module keys used when returning grouped permissions.
-     *
      * @return list<string>
      */
     public static function orderedModuleKeys(): array
     {
         return [
-            'dashboard',
-            'campaign_management',
-            'transactions',
-            'pledges',
-            'tier_configuration',
-            'reconciliation',
-            'issued_certificate',
-            'certificate_template',
             'user_management',
-            'content_management',
-            'contact_submissions',
-            'reports',
-            'email_campaigns',
             'audit_trail',
         ];
     }
@@ -37,19 +23,7 @@ final class PermissionModuleMapper
         $prefix = explode('.', $name, 2)[0] ?? '';
 
         return match ($prefix) {
-            'dashboard' => 'dashboard',
-            'campaigns' => 'campaign_management',
-            'transactions' => 'transactions',
-            'pledges' => 'pledges',
-            'tier_configuration' => 'tier_configuration',
-            'reconciliation' => 'reconciliation',
-            'issued_certificates' => 'issued_certificate',
-            'certificate_templates' => 'certificate_template',
             'roles', 'admins' => 'user_management',
-            'content_management' => 'content_management',
-            'contact_submissions' => 'contact_submissions',
-            'reports' => 'reports',
-            'email_campaigns' => 'email_campaigns',
             'audit_trail' => 'audit_trail',
             default => 'other',
         };
@@ -102,9 +76,6 @@ final class PermissionModuleMapper
     }
 
     /**
-     * Same module shape as {@see groupedApiPermissions()}, but only permission names
-     * present in $permissionNames. Modules with no matching permissions are omitted.
-     *
      * @param  list<string>  $permissionNames
      * @return list<array{key: string, label: string, permissions: list<array{name: string}>}>
      */

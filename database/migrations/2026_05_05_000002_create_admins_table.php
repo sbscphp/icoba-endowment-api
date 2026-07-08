@@ -18,6 +18,9 @@ return new class extends Migration
             $table->boolean('2fa')->default(false)->comment('True, False');
             $table->boolean('is_active')->default(true)->index();
             $table->boolean('can_login')->default(true)->index();
+            $table->boolean('must_reset_password')->default(false)->index();
+            $table->boolean('email_notifications_enabled')->default(true);
+            $table->boolean('push_notifications_enabled')->default(true);
             $table->timestamp('last_login_at')->nullable()->index();
             $table->unsignedTinyInteger('login_attempts')->default(0);
             $table->boolean('is_locked')->default(false)->index();

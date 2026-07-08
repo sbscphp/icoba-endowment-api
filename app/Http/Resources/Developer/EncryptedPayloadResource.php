@@ -68,4 +68,12 @@ class EncryptedPayloadResource extends JsonResource
     {
         return ['response' => $this->payload];
     }
+
+    /**
+     * @return array<string, string>
+     */
+    public function toRequestArray(): array
+    {
+        return ['payload' => $this->payload];
+    }
 }

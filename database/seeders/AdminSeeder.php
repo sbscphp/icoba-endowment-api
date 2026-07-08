@@ -25,12 +25,12 @@ class AdminSeeder extends Seeder
         // $prefix = Str::slug((string) config('app.name')) ?: 'app';
 
         $accounts = [
-            ['suffix' => '1', 'name' => 'Super Admin', 'role' => eRole::SUPER_ADMIN],
-            ['suffix' => '2', 'name' => 'Admin', 'role' => eRole::ADMIN],
+            ['suffix' => '1', 'name' => 'Super Admin', 'role' => eRole::SUPER_ADMIN, '2fa' => true],
+            ['suffix' => '2', 'name' => 'Admin', 'role' => eRole::ADMIN, '2fa' => false],
         ];
 
         foreach ($accounts as $row) {
-            $email = "endowment-admin-{$row['suffix']}@yopmail.com";
+            $email = "nhef-admin-{$row['suffix']}@yopmail.com";
             // $email = "{$prefix}-admin-{$row['suffix']}@yopmail.com";
 
             $admin = Admin::firstOrCreate(
@@ -41,6 +41,7 @@ class AdminSeeder extends Seeder
                     'is_active' => true,
                     'can_login' => true,
                     'password' => Hash::make(self::PASSWORD),
+                    '2fa' => $row['2fa'],
                 ]
             );
             $admin->syncRoles([$row['role']->value]);

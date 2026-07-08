@@ -41,6 +41,18 @@ return [
     'otp_verify_max_per_window' => max(1, (int) env('OTP_VERIFY_MAX_PER_WINDOW', 20)),
 
     /*
+    | When false (default), SMS-channel OTPs use otp_sms_stub_code and no provider is called.
+    | Set OTP_SMS_DISPATCH_ENABLED=true when ready to bill SMS providers (Termii/Twilio/Infobip via SMS_MODE).
+    */
+    'otp_sms_dispatch_enabled' => filter_var(env('OTP_SMS_DISPATCH_ENABLED', false), FILTER_VALIDATE_BOOL),
+
+    /*
+    | Fixed 6-digit OTP for SMS channel while otp_sms_dispatch_enabled is false (local/staging only).
+    | Env: OTP_SMS_STUB_CODE
+    */
+    'otp_sms_stub_code' => (string) env('OTP_SMS_STUB_CODE', '123456'),
+
+    /*
     | Plain OTP flow logging to storage/logs/laravel.log (token fingerprints only, no secrets).
     | Set OTP_FLOW_DEBUG=true locally while debugging resend/verify issues.
     */
@@ -211,8 +223,10 @@ return [
     |
     | Routes (all require X-Dev-Api-User-Secret; crypto helpers also require X-ClientKey):
     | POST /api/v1/dev/api-users
-    | POST /api/v1/dev/crypto/encrypt   body: { "plaintext": "..." }
-    | POST /api/v1/dev/crypto/decrypt   body: { "response": "<base64 from response envelope>" }
+    | POST /api/v1/dev/crypto/encrypt       body: { "plaintext": "..." }
+    | POST /api/v1/dev/crypto/encrypt-json  body: { ... } (JSON object encrypted as request payload)
+    | POST /api/v1/dev/crypto/encrypt-form body: form fields (form-data or x-www-form-urlencoded)
+    | POST /api/v1/dev/crypto/decrypt       body: { "response": "<base64 from response envelope>" }
     |
     */
     'api_user_dev_registration' => [
