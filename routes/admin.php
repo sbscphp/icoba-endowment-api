@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\v1\Admin\AuditTrail\AuditTrailController;
 use App\Http\Controllers\v1\Admin\Auth\AdminLoginController;
 use App\Http\Controllers\v1\Admin\Auth\PasswordController as AdminPasswordController;
 use Illuminate\Support\Facades\Route;
@@ -15,5 +16,9 @@ Route::prefix('v1/admin')->group(function () {
         Route::post('reset-password', [AdminPasswordController::class, 'resetPassword'])->middleware('throttle:admin-otp-verify');
         Route::post('refresh', [AdminLoginController::class, 'refresh'])->middleware('throttle:admin-token-refresh');
         Route::middleware('auth:sanctum')->post('logout', [AdminLoginController::class, 'logout']);
+    });
+
+    Route::middleware(['auth:sanctum', 'permission:audit_trail.read'])->group(function () {
+        Route::get('audit-trails', [AuditTrailController::class, 'index']);
     });
 });
