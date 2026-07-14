@@ -75,21 +75,16 @@ class CertificateTemplateSeeder extends Seeder
                     'size' => '22px',
                 ],
                 [
-                    'text' => 'Endowment Contribution',
+                    'text' => '{{tier_name}} Endowment Contribution',
                     'font' => 'DejaVu Sans',
-                    'size' => '30px',
+                    'size' => '34px',
+                    'weight' => 'bold',
+                    'position' => 'center',
                 ],
                 [
                     'text' => 'THIS CERTIFICATE IS PROUDLY PRESENTED TO',
                     'font' => 'DejaVu Sans',
                     'size' => '11px',
-                ],
-                [
-                    'text' => '{{tier_name}}',
-                    'font' => 'DejaVu Sans',
-                    'size' => '22px',
-                    'weight' => 'bold',
-                    'position' => 'center',
                 ],
                 [
                     'text' => 'In grateful recognition of their generous contribution to the ICOBA Endowment Programme. Your support plays a vital role in sustaining excellence, empowering future generations, and strengthening the legacy of our institution.',

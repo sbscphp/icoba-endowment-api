@@ -43,10 +43,12 @@
             border: 0;
             display: block;
             z-index: 1;
-            object-fit: cover;
+            background-size: cover;
+            background-position: center center;
+            background-repeat: no-repeat;
         }
         .side-image--left { left: 0; }
-        .side-image--right { right: 0; background-position: right center; }
+        .side-image--right { right: 0; background-position: center center; }
         .content-panel {
             position: absolute;
             top: 0;
@@ -172,11 +174,10 @@
     @endif
 
     @if($isSideLayout && !empty($sideImageSrc))
-        <img
-            src="{{ $sideImageSrc }}"
-            alt=""
+        <div
             class="side-image {{ $isImageRight ? 'side-image--right' : 'side-image--left' }}"
-        >
+            style="background-image: url('{{ $sideImageSrc }}');"
+        ></div>
     @endif
 
     <div class="content-panel {{ $contentPanelClass }}">
