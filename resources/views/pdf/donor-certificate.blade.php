@@ -37,12 +37,13 @@
             position: absolute;
             top: 0;
             width: 269px;
-            height: 595px;
+            height: 100%;
             margin: 0;
             padding: 0;
             border: 0;
             display: block;
             z-index: 1;
+            object-fit: cover;
         }
         .side-image--left { left: 0; }
         .side-image--right { right: 0; background-position: right center; }
@@ -66,9 +67,18 @@
         .meta-cell {
             padding: 16px 40px 4px 40px;
             text-align: center;
-            font-size: 9px;
+            font-size: 12px;
             color: #6b7280;
             line-height: 1.5;
+        }
+        .meta-number {
+            font-size: 14px;
+            font-weight: 700;
+            color: #122168;
+        }
+        .meta-date {
+            font-size: 12px;
+            color: #6b7280;
         }
         .body-cell {
             padding: 8px 40px;
@@ -79,8 +89,10 @@
             margin-bottom: 10px;
         }
         .icon {
-            width: 88px;
+            width: 120px;
             height: auto;
+            display: block;
+            margin: 0 auto;
         }
         .awardee-name {
             font-family: {{ $awardeeFont ?? 'DejaVu Sans' }}, DejaVu Sans, sans-serif;
@@ -103,7 +115,7 @@
             max-width: 500px;
         }
         .signatories-cell {
-            padding: 0 40px 28px 40px;
+            padding: 0 40px 40px 40px;
             vertical-align: bottom;
         }
         .signatories-table {
@@ -164,8 +176,6 @@
             src="{{ $sideImageSrc }}"
             alt=""
             class="side-image {{ $isImageRight ? 'side-image--right' : 'side-image--left' }}"
-            width="269"
-            height="595"
         >
     @endif
 
@@ -173,12 +183,12 @@
         <table class="content-layout" cellpadding="0" cellspacing="0" height="595">
             <tr>
                 <td class="meta-cell" height="8%" valign="top">
-                    {{ $recognitionNumber }}<br>
-                    {{ $issuedAt }}
+                    <div class="meta-number">{{ $recognitionNumber }}</div>
+                    <div class="meta-date">{{ $issuedAt }}</div>
                 </td>
             </tr>
             <tr>
-                <td class="body-cell" height="57%" align="center" valign="middle">
+                <td class="body-cell" height="52%" align="center" valign="middle">
                     @if(!empty($iconSrc))
                         <div class="icon-wrap">
                             <table width="100%" cellpadding="0" cellspacing="0">
@@ -209,7 +219,7 @@
             </tr>
             @if(!empty($leftSignatory) || !empty($rightSignatory) || !empty($sealSrc))
                 <tr>
-                    <td class="signatories-cell" height="35%" valign="bottom">
+                    <td class="signatories-cell" height="40%" valign="bottom">
                         <table class="signatories-table" cellpadding="0" cellspacing="0">
                             <tr>
                                 <td class="signatory-col">
@@ -241,7 +251,7 @@
                 </tr>
             @else
                 <tr>
-                    <td class="signatories-cell" height="35%" valign="bottom">&nbsp;</td>
+                    <td class="signatories-cell" height="40%" valign="bottom">&nbsp;</td>
                 </tr>
             @endif
         </table>
