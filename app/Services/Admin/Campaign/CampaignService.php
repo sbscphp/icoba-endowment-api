@@ -116,7 +116,7 @@ class CampaignService
 
         if ($campaign->status !== CampaignStatus::DRAFT) {
             $data = $this->onlyKeys($data, [
-                'short_description', 'long_description', 'cover_image', 'gallery_images',
+                'short_description', 'long_description', 'cover_image', 'gallery_images', 'available_donation_currencies',
             ]);
         }
 
@@ -144,7 +144,7 @@ class CampaignService
             if (array_key_exists('base_currency', $data) && $campaign->status === CampaignStatus::DRAFT) {
                 $updates['base_currency'] = (string) $data['base_currency'];
             }
-            if (array_key_exists('available_donation_currencies', $data) && $campaign->status === CampaignStatus::DRAFT) {
+            if (array_key_exists('available_donation_currencies', $data)) {
                 $updates['available_donation_currencies'] = array_values((array) $data['available_donation_currencies']);
             }
             if (array_key_exists('target_amount', $data) && $campaign->status === CampaignStatus::DRAFT) {

@@ -10,7 +10,7 @@ final class CertificateDesignDefaults
 
     public const GENERAL_TEXT_POSITION = 'center';
 
-    public const ICON_POSITION = 'left';
+    public const ICON_POSITION = 'center';
 
     public const AWARDEE_FONT = 'Inter';
 
@@ -67,10 +67,11 @@ final class CertificateDesignDefaults
                     return [];
                 }
 
-                return array_merge($line, [
+                // apply defaults but allow explicit values in the design to override
+                return array_merge([
                     'weight' => self::LINE_WEIGHT,
                     'position' => self::LINE_POSITION,
-                ]);
+                ], $line);
             },
             $design['lines'],
         );
