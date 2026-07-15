@@ -338,6 +338,77 @@ class PledgeScheduleService
     }
 
     /**
+     * Regenerate a pledge's remaining installment plan anchored on a new start date,
+     * optionally changing the installment count and/or payment plan type. Already
+     * recorded payments are unaffected and settle against the new schedule in sequence.
+     *
+     * @param  array{start_date: string, installment_count?: int|null, payment_plan_type?: string|null, schedule?: array{frequency: string, interval: int}|null}  $options
+     */
+    public function reschedulePledge(Pledge $pledge, array $options): Pledge
+    {
+        $this->assertPledgeIsManageable($pledge);
+
+        $start = Carbon::parse((string) $options['start_date'])->startOfDay();
+
+        $plan = isset($options['payment_plan_type'])
+            ? PledgePaymentPlanType::from((string) $options['payment_plan_type'])
+            : ($pledge->payment_plan_type instanceof PledgePaymentPlanType
+                ? $pledge->payment_plan_type
+                : PledgePaymentPlanType::tryFrom((string) $pledge->payment_plan_type));
+
+        $count = isset($options['installment_count'])
+            ? max(1, (int) $options['installment_count'])
+            : max(1, (int) ($pledge->installment_count ?? 1));
+
+        $metadata = $pledge->metadata ?? [];
+
+        if ($plan === PledgePaymentPlanType::CUSTOM) {
+            $config = isset($options['schedule']) && is_array($options['schedule'])
+                ? PledgeScheduleInput::normalizeConfig($options['schedule'])
+                : $this->scheduleConfig($pledge);
+
+            if ($config === null) {
+                throw ValidationException::withMessages([
+                    'schedule' => ['A frequency and interval are required to reschedule a custom payment plan.'],
+                ]);
+            }
+
+            $metadata['schedule_config'] = $config;
+        } else {
+            unset($metadata['schedule_config']);
+        }
+
+        $history = is_array($metadata['reschedule_history'] ?? null) ? $metadata['reschedule_history'] : [];
+        $history[] = [
+            'rescheduled_at' => now()->toIso8601String(),
+            'previous_payment_plan_type' => $pledge->payment_plan_type instanceof PledgePaymentPlanType
+                ? $pledge->payment_plan_type->value
+                : $pledge->payment_plan_type,
+            'previous_installment_count' => $pledge->installment_count,
+            'previous_schedule' => $pledge->schedule,
+        ];
+        $metadata['reschedule_history'] = $history;
+
+        $pledge->metadata = $metadata;
+        $items = $this->buildScheduleItems($pledge, $start, $plan, $count);
+
+        $pledge->update([
+            'payment_plan_type' => $plan,
+            'installment_count' => $count,
+            'metadata' => $metadata,
+            'schedule' => array_map(fn (array $item): array => [
+                'id' => $item['id'],
+                'sequence' => $item['sequence'],
+                'due_date' => $item['due_date'],
+                'amount' => $item['amount'],
+                'amount_ngn' => $item['amount_ngn'],
+            ], $items),
+        ]);
+
+        return $pledge->fresh();
+    }
+
+    /**
      * Validate a pledge payment amount against preference and optional installment target.
      */
     public function assertPaymentAllowed(Pledge $pledge, float $amount, ?string $scheduleItemId = null): void
@@ -481,10 +552,28 @@ class PledgeScheduleService
      */
     private function generateDefaultSchedule(Pledge $pledge): array
     {
-        $count = max(1, (int) ($pledge->installment_count ?? 1));
         $plan = $pledge->payment_plan_type instanceof PledgePaymentPlanType
             ? $pledge->payment_plan_type
             : PledgePaymentPlanType::tryFrom((string) $pledge->payment_plan_type);
+
+        return $this->buildScheduleItems(
+            $pledge,
+            $pledge->created_at ?? now(),
+            $plan,
+            max(1, (int) ($pledge->installment_count ?? 1)),
+        );
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function buildScheduleItems(
+        Pledge $pledge,
+        CarbonInterface $start,
+        ?PledgePaymentPlanType $plan,
+        int $count,
+    ): array {
+        $count = max(1, $count);
 
         if ($plan === PledgePaymentPlanType::ONE_TIME_FUTURE) {
             $count = 1;
@@ -499,7 +588,6 @@ class PledgeScheduleService
         $items = [];
         $allocated = 0.0;
         $allocatedNgn = 0.0;
-        $start = $pledge->created_at ?? now();
 
         for ($i = 1; $i <= $count; $i++) {
             $isLast = $i === $count;
@@ -539,10 +627,8 @@ class PledgeScheduleService
         }
 
         return match ($plan) {
-            PledgePaymentPlanType::MONTHLY => $start->copy()->addMonths($sequence),
-            PledgePaymentPlanType::QUARTERLY => $start->copy()->addMonths($sequence * 3),
-            PledgePaymentPlanType::ONE_TIME_FUTURE => $start->copy()->addMonth(),
-            default => $start->copy()->addMonths($sequence),
+            PledgePaymentPlanType::QUARTERLY => $start->copy()->addMonths(($sequence - 1) * 3),
+            default => $start->copy()->addMonths($sequence - 1),
         };
     }
 
@@ -552,7 +638,7 @@ class PledgeScheduleService
         string $frequency,
         int $interval,
     ): CarbonInterface {
-        $step = $sequence * max(1, $interval);
+        $step = ($sequence - 1) * max(1, $interval);
 
         return match (CustomScheduleFrequency::tryFrom($frequency)) {
             CustomScheduleFrequency::DAILY => $start->copy()->addDays($step),

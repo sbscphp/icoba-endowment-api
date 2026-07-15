@@ -73,6 +73,10 @@ Route::prefix('v1')->group(function () {
             ->whereUuid('pledgeUuid');
         Route::post('/pledges/{pledgeUuid}/pause', [CustomerPledgeController::class, 'updatePause'])
             ->whereUuid('pledgeUuid');
+        Route::patch('/pledges/{pledgeUuid}/reschedule', [CustomerPledgeController::class, 'reschedule'])
+            ->whereUuid('pledgeUuid');
+        Route::post('/pledges/{pledgeUuid}/reschedule', [CustomerPledgeController::class, 'reschedule'])
+            ->whereUuid('pledgeUuid');
         // Route::patch('/pledges/{pledgeUuid}/payment-preference', [CustomerPledgeController::class, 'updateSchedule'])
         //     ->whereUuid('pledgeUuid');
         // Route::post('/pledges/{pledgeUuid}/payment-preference', [CustomerPledgeController::class, 'updateSchedule'])

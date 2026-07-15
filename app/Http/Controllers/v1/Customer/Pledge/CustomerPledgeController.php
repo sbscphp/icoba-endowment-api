@@ -11,6 +11,7 @@ use App\Http\Requests\Customer\Pledge\PledgeOverdueListRequest;
 use App\Http\Requests\Customer\Pledge\PledgeStatsRequest;
 use App\Http\Requests\Customer\Pledge\PledgeStoreRequest;
 use App\Http\Requests\Customer\Pledge\UpdatePledgePauseRequest;
+use App\Http\Requests\Customer\Pledge\UpdatePledgeRescheduleRequest;
 use App\Http\Requests\Customer\Pledge\UpdatePledgeScheduleRequest;
 use App\Http\Resources\Customer\CustomerOverduePledgeResource;
 use App\Http\Resources\PledgeDetailResource;
@@ -259,6 +260,36 @@ class CustomerPledgeController extends Controller
             return JsonResponser::send(false, $message, PledgeListResource::make($pledge)->resolve());
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Customer\Pledge\CustomerPledgeController@updatePause');
+        }
+    }
+
+    public function reschedule(UpdatePledgeRescheduleRequest $request, string $pledgeUuid)
+    {
+        try {
+            $user = $request->user();
+            if (! $user instanceof User) {
+                abort(401);
+            }
+
+            $pledge = $this->pledgeService->findByUuid($pledgeUuid);
+            if ($pledge->user_uuid !== $user->uuid) {
+                throw (new ModelNotFoundException)->setModel($pledge::class, [$pledgeUuid]);
+            }
+
+            $v = $request->validated();
+            $pledge = $this->pledgeScheduleService->reschedulePledge($pledge, [
+                'start_date' => $v['start_date'],
+                'installment_count' => $v['installment_count'] ?? null,
+                'payment_plan_type' => $v['payment_plan_type'] ?? null,
+                'schedule' => $v['schedule'] ?? null,
+            ]);
+
+            $pledge->load(['campaign:uuid,name,campaign_id,status,allow_anonymous_donation', 'donor:uuid,firstname,lastname,email,phone_number']);
+            $pledge->setAttribute('schedule_view', $this->pledgeScheduleService->buildForPledge($pledge));
+
+            return JsonResponser::send(false, 'Pledge rescheduled.', PledgeListResource::make($pledge)->resolve());
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Pledge\CustomerPledgeController@reschedule');
         }
     }
 
