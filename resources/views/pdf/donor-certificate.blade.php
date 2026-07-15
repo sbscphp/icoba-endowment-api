@@ -36,8 +36,10 @@
         .side-image {
             position: absolute;
             top: 0;
+            bottom: 0;
             width: 269px;
-            height: 100%;
+            height: auto;
+            min-height: 595px;
             margin: 0;
             padding: 0;
             border: 0;
