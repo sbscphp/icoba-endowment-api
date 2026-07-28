@@ -11,6 +11,7 @@ use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateControl
 use App\Http\Controllers\v1\Admin\ContactSubmission\ContactSubmissionController;
 use App\Http\Controllers\v1\Admin\Dashboard\DashboardController;
 use App\Http\Controllers\v1\Admin\EmailCampaign\EmailCampaignController;
+use App\Http\Controllers\v1\Admin\Event\EventController;
 use App\Http\Controllers\v1\Admin\IssuedCertificate\IssuedCertificateController;
 use App\Http\Controllers\v1\Admin\Media\ImageUploadController;
 use App\Http\Controllers\v1\Admin\Notification\NotificationController;
@@ -221,6 +222,26 @@ Route::prefix('v1/admin')->group(function () {
                 Route::delete('/{reportId}', [CampaignUpdateReportController::class, 'destroy'])
                     ->middleware(['permission:campaigns.delete']);
             });
+        });
+
+        Route::prefix('events')->group(function () {
+            Route::get('/', [EventController::class, 'index'])
+                ->middleware(['permission:events.read']);
+            Route::post('/', [EventController::class, 'store'])
+                ->middleware(['permission:events.create']);
+            Route::get('/{eventId}', [EventController::class, 'show'])
+                ->middleware(['permission:events.read']);
+            Route::patch('/{eventId}', [EventController::class, 'update'])
+                ->middleware(['permission:events.update']);
+            Route::patch('/{eventId}/status', [EventController::class, 'updateStatus'])
+                ->middleware(['permission:events.update']);
+            Route::delete('/{eventId}', [EventController::class, 'destroy'])
+                ->middleware(['permission:events.delete']);
+
+            Route::put('/{eventId}/images', [EventController::class, 'syncImages'])
+                ->middleware(['permission:events.update']);
+            Route::delete('/{eventId}/images/{imageId}', [EventController::class, 'destroyImage'])
+                ->middleware(['permission:events.update']);
         });
 
         Route::prefix('transactions')->group(function () {
