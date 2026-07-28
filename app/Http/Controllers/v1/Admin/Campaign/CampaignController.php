@@ -20,6 +20,7 @@ use App\Http\Requests\Admin\Campaign\CampaignStatusLogListRequest;
 use App\Http\Requests\Admin\Campaign\CreateCampaignRequest;
 use App\Http\Requests\Admin\Campaign\ShowCampaignRequest;
 use App\Http\Requests\Admin\Campaign\UpdateCampaignRequest;
+use App\Http\Requests\Admin\Dashboard\DashboardTrendRequest;
 use App\Http\Resources\Admin\CampaignDonorListResource;
 use App\Http\Resources\Admin\CampaignListResource;
 use App\Http\Resources\Admin\CampaignPledgeListResource;
@@ -34,6 +35,7 @@ use App\Responser\JsonResponser;
 use App\Services\Admin\Campaign\CampaignDonorService;
 use App\Services\Admin\Campaign\CampaignPledgeService;
 use App\Services\Admin\Campaign\CampaignService;
+use App\Services\Admin\Dashboard\DashboardService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -47,6 +49,7 @@ class CampaignController extends Controller
         private readonly CampaignDonorService $campaignDonorService,
         private readonly CampaignPledgeService $campaignPledgeService,
         private readonly PDFReportHelper $pdfReportHelper,
+        private readonly DashboardService $dashboardService,
     ) {}
 
     public function index(CampaignListRequest $request)
@@ -257,6 +260,23 @@ class CampaignController extends Controller
             );
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\Campaign\CampaignController@statusLogs');
+        }
+    }
+
+    public function contributionTrend(DashboardTrendRequest $request, string $campaignId)
+    {
+        try {
+            $campaign = $this->campaignService->findCampaign($campaignId);
+            $filters = $request->validated();
+            $filters['campaign_uuid'] = $campaign->uuid;
+
+            return JsonResponser::send(
+                false,
+                'Campaign contribution trend retrieved.',
+                $this->dashboardService->campaignContributionTrend($filters)
+            );
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\Campaign\CampaignController@contributionTrend');
         }
     }
 
