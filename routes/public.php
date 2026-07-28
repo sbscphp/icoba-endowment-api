@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\v1\Public\ContactSubmissionController;
+use App\Http\Controllers\v1\Public\PublicEventController;
 use App\Http\Controllers\v1\Public\LeaderboardController;
 use App\Http\Controllers\v1\Public\PublicEndowmentStatsController;
 use App\Http\Controllers\v1\Public\PublicHeroSlideController;
@@ -36,6 +37,10 @@ Route::prefix('v1')->group(function () {
         Route::get('tiers', [PublicTierController::class, 'index']);
         Route::get('hero-slides', [PublicHeroSlideController::class, 'index']);
         Route::get('bank-accounts', [PublicBankAccountController::class, 'index']);
+
+        Route::get('events', [PublicEventController::class, 'index']);
+        Route::get('events/{eventUuid}', [PublicEventController::class, 'show'])
+            ->whereUuid('eventUuid');
 
         Route::get('downloads/{token}', [PublicDocumentDownloadController::class, 'download'])
             ->where('token', '[A-Za-z0-9]{32,64}')

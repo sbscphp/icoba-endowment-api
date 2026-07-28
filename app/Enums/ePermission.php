@@ -66,6 +66,12 @@ enum ePermission: string
     case CONTACT_SUBMISSIONS_READ = 'contact_submissions.read';
     case CONTACT_SUBMISSIONS_UPDATE = 'contact_submissions.update';
 
+    // 10c. Events
+    case EVENTS_READ = 'events.read';
+    case EVENTS_CREATE = 'events.create';
+    case EVENTS_UPDATE = 'events.update';
+    case EVENTS_DELETE = 'events.delete';
+
     // 11. Reports
     case REPORTS_READ = 'reports.read';
     case REPORTS_EXPORT = 'reports.export';

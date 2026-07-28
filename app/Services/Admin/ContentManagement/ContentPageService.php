@@ -3,6 +3,8 @@
 namespace App\Services\Admin\ContentManagement;
 
 use App\Enums\ContentPage;
+use App\Enums\EventStatus;
+use App\Models\Event;
 use App\Models\HeroSlide;
 
 class ContentPageService
@@ -14,6 +16,7 @@ class ContentPageService
     {
         return [
             $this->heroSliderPageSummary(),
+            $this->eventsPageSummary(),
         ];
     }
 
@@ -35,6 +38,27 @@ class ContentPageService
             'last_updated' => $latestSlide?->updated_at,
             'updated_by' => $latestSlide?->updatedByAdmin?->displayName(),
             'status' => $hasActiveSlide ? 'active' : 'inactive',
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function eventsPageSummary(): array
+    {
+        $latestEvent = Event::query()
+            ->with('updater')
+            ->orderByDesc('updated_at')
+            ->first();
+
+        $hasPublishedEvent = Event::query()->where('status', EventStatus::PUBLISHED->value)->exists();
+
+        return [
+            'page_key' => ContentPage::EVENTS->value,
+            'page_title' => ContentPage::EVENTS->label(),
+            'last_updated' => $latestEvent?->updated_at,
+            'updated_by' => $latestEvent?->updater?->displayName(),
+            'status' => $hasPublishedEvent ? 'active' : 'inactive',
         ];
     }
 }
