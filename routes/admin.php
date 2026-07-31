@@ -228,22 +228,22 @@ Route::prefix('v1/admin')->group(function () {
 
         Route::prefix('events')->group(function () {
             Route::get('/', [EventController::class, 'index'])
-                ->middleware(['permission:events.read']);
+                ->middleware(['permission:content_management.read']);
             Route::post('/', [EventController::class, 'store'])
-                ->middleware(['permission:events.create']);
+                ->middleware(['permission:content_management.create']);
             Route::get('/{eventId}', [EventController::class, 'show'])
-                ->middleware(['permission:events.read']);
+                ->middleware(['permission:content_management.read']);
             Route::patch('/{eventId}', [EventController::class, 'update'])
-                ->middleware(['permission:events.update']);
+                ->middleware(['permission:content_management.update']);
             Route::patch('/{eventId}/status', [EventController::class, 'updateStatus'])
-                ->middleware(['permission:events.update']);
+                ->middleware(['permission:content_management.update']);
             Route::delete('/{eventId}', [EventController::class, 'destroy'])
-                ->middleware(['permission:events.delete']);
+                ->middleware(['permission:content_management.delete']);
 
             Route::put('/{eventId}/images', [EventController::class, 'syncImages'])
-                ->middleware(['permission:events.update']);
+                ->middleware(['permission:content_management.update']);
             Route::delete('/{eventId}/images/{imageId}', [EventController::class, 'destroyImage'])
-                ->middleware(['permission:events.update']);
+                ->middleware(['permission:content_management.update']);
         });
 
         Route::prefix('transactions')->group(function () {
