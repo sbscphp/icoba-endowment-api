@@ -20,7 +20,6 @@ enum ModuleEnums: string
     case certificate_template = 'certificate_template';
     case user_management = 'user_management';
     case content_management = 'content_management';
-    case events = 'events';
     case contact_submissions = 'contact_submissions';
     case reports = 'reports';
     case email_campaigns = 'email_campaigns';
@@ -46,7 +45,6 @@ enum ModuleEnums: string
             self::certificate_template => 'Certificate template',
             self::user_management => 'User management',
             self::content_management => 'Content management',
-            self::events => 'Events',
             self::contact_submissions => 'Contact submissions',
             self::reports => 'Reports',
             self::email_campaigns => 'Email campaigns',
