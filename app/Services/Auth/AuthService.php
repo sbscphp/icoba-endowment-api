@@ -136,7 +136,7 @@ class AuthService
                 'firstname' => $validated['organization_name'],
                 'lastname' => '', //Organization
             ]),
-            DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value => array_merge($row, [
+            DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value, DonorTypeSlug::WIVES_OF_ICOBA->value => array_merge($row, [
                 'firstname' => $validated['firstname'],
                 'lastname' => $validated['lastname'],
             ]),

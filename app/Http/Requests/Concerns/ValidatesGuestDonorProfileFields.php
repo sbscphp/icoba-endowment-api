@@ -77,7 +77,8 @@ trait ValidatesGuestDonorProfileFields
                 'tin' => ['required', 'string', 'min:2', 'max:64'],
             ]),
             DonorTypeSlug::FRIENDS_OF_ICOBA->value,
-            DonorTypeSlug::RELATIVES_OF_ICOBA->value => array_merge($shared, [
+            DonorTypeSlug::RELATIVES_OF_ICOBA->value,
+            DonorTypeSlug::WIVES_OF_ICOBA->value => array_merge($shared, [
                 'firstname' => $this->guestPersonNameRules(),
                 'lastname' => $this->guestPersonNameRules(),
             ]),

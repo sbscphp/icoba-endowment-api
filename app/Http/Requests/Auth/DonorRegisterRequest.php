@@ -52,7 +52,7 @@ class DonorRegisterRequest extends ApiFormRequest
                 'rc_number' => ['required', 'string', 'min:2', 'max:64'],
                 'tin' => ['required', 'string', 'min:2', 'max:64'],
             ]),
-            DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value => array_merge($shared, [
+            DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value, DonorTypeSlug::WIVES_OF_ICOBA->value => array_merge($shared, [
                 'firstname' => $this->personNameRules(),
                 'lastname' => $this->personNameRules(),
             ]),
