@@ -77,7 +77,7 @@ final class GuestDonorProfileSnapshotService
             }
 
             $donorName = $organizationName;
-        } elseif (in_array($slug, [DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value], true)) {
+        } elseif (in_array($slug, [DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value, DonorTypeSlug::WIVES_OF_ICOBA->value], true)) {
             $profile['firstname'] = trim((string) ($data['firstname'] ?? ''));
             $profile['lastname'] = trim((string) ($data['lastname'] ?? ''));
             $donorName = trim($profile['firstname'].' '.$profile['lastname']);
