@@ -203,6 +203,8 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:campaigns.delete']);
             Route::get('/{campaignId}/status-logs', [CampaignController::class, 'statusLogs'])
                 ->middleware(['permission:campaigns.read']);
+            Route::get('/{campaignId}/contribution-trend', [CampaignController::class, 'contributionTrend'])
+                ->middleware(['permission:campaigns.read']);
             Route::get('/{campaignId}/report', [CampaignController::class, 'report'])
                 ->middleware(['permission:campaigns.read']);
             Route::post('/{campaignId}/transition', [CampaignController::class, 'transition'])

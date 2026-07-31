@@ -332,6 +332,8 @@ class DashboardService
             $query->where('transactions.currency', $this->resolvedCurrency($filters));
         }
 
+        $this->applyCampaignFilter($query, $filters);
+
         $range = ListingFilterRules::resolveDateWindow($filters);
         if ($range['start'] !== null) {
             $query->where('transactions.created_at', '>=', $range['start']);
@@ -355,7 +357,24 @@ class DashboardService
             $query->where('currency', $this->resolvedCurrency($filters));
         }
 
+        $this->applyCampaignFilter($query, $filters);
+
         return $query;
+    }
+
+    /**
+     * Restricts a transactions query to a single campaign when `campaign_uuid` is present
+     * in the validated filters (see {@see DashboardTrendRequest}). No-op otherwise.
+     *
+     * @param  Builder<Transaction>  $query
+     * @param  array<string, mixed>  $filters
+     */
+    private function applyCampaignFilter(Builder $query, array $filters): void
+    {
+        $campaignUuid = $filters['campaign_uuid'] ?? null;
+        if (is_string($campaignUuid) && $campaignUuid !== '') {
+            $query->where('campaign_uuid', $campaignUuid);
+        }
     }
 
     /**
