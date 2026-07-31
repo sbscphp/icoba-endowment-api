@@ -47,6 +47,7 @@ final class PermissionModuleMapper
             'certificate_templates' => 'certificate_template',
             'roles', 'admins' => 'user_management',
             'content_management' => 'content_management',
+            'events' => 'content_management',
             'contact_submissions' => 'contact_submissions',
             'reports' => 'reports',
             'email_campaigns' => 'email_campaigns',
