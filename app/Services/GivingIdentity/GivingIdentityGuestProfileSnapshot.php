@@ -44,7 +44,7 @@ final class GivingIdentityGuestProfileSnapshot
             if ($identity->corporateCategory !== null) {
                 $profile['corporate_category_name'] = $identity->corporateCategory->name;
             }
-        } elseif (in_array($slug, [DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value], true)) {
+        } elseif (in_array($slug, [DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value, DonorTypeSlug::WIVES_OF_ICOBA->value], true)) {
             $profile['firstname'] = GivingIdentityNormalizer::text($identity->firstname);
             $profile['lastname'] = GivingIdentityNormalizer::text($identity->lastname);
         }

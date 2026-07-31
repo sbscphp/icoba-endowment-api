@@ -90,7 +90,7 @@ final class GivingIdentityLockService
                     $blocked[] = $field;
                 }
             }
-        } elseif (in_array($slug, [\App\Enums\DonorTypeSlug::FRIENDS_OF_ICOBA->value, \App\Enums\DonorTypeSlug::RELATIVES_OF_ICOBA->value], true)) {
+        } elseif (in_array($slug, [\App\Enums\DonorTypeSlug::FRIENDS_OF_ICOBA->value, \App\Enums\DonorTypeSlug::RELATIVES_OF_ICOBA->value, \App\Enums\DonorTypeSlug::WIVES_OF_ICOBA->value], true)) {
             foreach (['firstname', 'lastname'] as $field) {
                 if (array_key_exists($field, $data) && ! GivingIdentityNormalizer::compareText($data[$field], $identity->{$field})) {
                     $blocked[] = $field;
