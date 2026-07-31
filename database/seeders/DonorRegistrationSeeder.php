@@ -19,6 +19,7 @@ class DonorRegistrationSeeder extends Seeder
             ['id' => 2, 'slug' => DonorTypeSlug::CORPORATE_DONOR->value, 'label' => DonorTypeSlug::CORPORATE_DONOR->label(), 'description' => DonorTypeSlug::CORPORATE_DONOR->description(), 'created_at' => $now, 'updated_at' => $now],
             ['id' => 3, 'slug' => DonorTypeSlug::FRIENDS_OF_ICOBA->value, 'label' => DonorTypeSlug::FRIENDS_OF_ICOBA->label(), 'description' => DonorTypeSlug::FRIENDS_OF_ICOBA->description(), 'created_at' => $now, 'updated_at' => $now],
             ['id' => 4, 'slug' => DonorTypeSlug::RELATIVES_OF_ICOBA->value, 'label' => DonorTypeSlug::RELATIVES_OF_ICOBA->label(), 'description' => DonorTypeSlug::RELATIVES_OF_ICOBA->description(), 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 5, 'slug' => DonorTypeSlug::WIVES_OF_ICOBA->value, 'label' => DonorTypeSlug::WIVES_OF_ICOBA->label(), 'description' => DonorTypeSlug::WIVES_OF_ICOBA->description(), 'created_at' => $now, 'updated_at' => $now],
         ];
 
         foreach ($donorTypes as &$row) {
@@ -50,7 +51,7 @@ class DonorRegistrationSeeder extends Seeder
             ['id' => 15, 'name' => 'Franchise', 'created_at' => $now, 'updated_at' => $now],
             ['id' => 16, 'name' => 'Joint Venture', 'created_at' => $now, 'updated_at' => $now],
             ['id' => 17, 'name' => 'Holding Company', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 18, 'name' => 'Nonprofit Organization', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 18, 'name' => 'Non-Profit Organization', 'created_at' => $now, 'updated_at' => $now],
             ['id' => 19, 'name' => 'Other', 'created_at' => $now, 'updated_at' => $now],
         ];
 
