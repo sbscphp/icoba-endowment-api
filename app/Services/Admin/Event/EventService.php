@@ -222,9 +222,9 @@ class EventService
         if ($search !== '') {
             $like = '%'.strtolower($search).'%';
             $query->where(function (Builder $builder) use ($like): void {
-                $builder->whereRaw('LOWER(title) LIKE ?', [$like])
-                    ->orWhereRaw('LOWER(event_id) LIKE ?', [$like])
-                    ->orWhereRaw('LOWER(short_description) LIKE ?', [$like]);
+                $builder->whereRaw('LOWER(title) LIKE ?', [$like]);
+                    // ->orWhereRaw('LOWER(event_id) LIKE ?', [$like])
+                    // ->orWhereRaw('LOWER(short_description) LIKE ?', [$like]);
             });
         }
 
