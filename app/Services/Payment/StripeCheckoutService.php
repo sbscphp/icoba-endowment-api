@@ -13,6 +13,8 @@ use Stripe\StripeClient;
 
 final class StripeCheckoutService
 {
+    public const PLATFORM_PREFIX = 'ICB-ENMT-';
+
     /** @var list<string> */
     private const ZERO_DECIMAL = ['bif', 'clp', 'djf', 'gnf', 'jpy', 'kmf', 'krw', 'mga', 'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf'];
 
@@ -58,17 +60,19 @@ final class StripeCheckoutService
             $frontendUrl,
         );
 
+        $referenceId = self::PLATFORM_PREFIX.$transaction->uuid;
+
         $params = [
             'mode' => 'payment',
-            'client_reference_id' => $transaction->uuid,
+            'client_reference_id' => $referenceId,
             'success_url' => $redirects['success_url'],
             'cancel_url' => $redirects['failed_url'],
             'metadata' => [
-                'transaction_uuid' => $transaction->uuid,
+                'transaction_uuid' => $referenceId,
             ],
             'payment_intent_data' => [
                 'metadata' => [
-                    'transaction_uuid' => $transaction->uuid,
+                    'transaction_uuid' => $referenceId,
                 ],
             ],
             'line_items' => [
@@ -80,7 +84,7 @@ final class StripeCheckoutService
                         'product_data' => [
                             'name' => $transaction->pledge_uuid !== null ? 'Pledge payment' : 'Donation',
                             'metadata' => [
-                                'transaction_uuid' => $transaction->uuid,
+                                'transaction_uuid' => $referenceId,
                             ],
                         ],
                     ],

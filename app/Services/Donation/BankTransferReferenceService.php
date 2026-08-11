@@ -7,12 +7,12 @@ use App\Models\Transaction;
 
 class BankTransferReferenceService
 {
-    public const PREFIX = 'REF-';
+    public const PREFIX = 'ICB-ENMT-REF-';
 
-    public const PATTERN = '/REF-[A-Za-z0-9]{6,12}/';
+    public const PATTERN = '/ICB-ENMT-REF-[A-Za-z0-9]{6,12}/';
 
     /**
-     * Generate a unique narration reference (e.g. REF-82Re93GHA).
+     * Generate a unique narration reference (e.g. ICB-ENMT-REF-82Re93GHA).
      */
     public function generateUniqueReference(int $length = 10): string
     {
