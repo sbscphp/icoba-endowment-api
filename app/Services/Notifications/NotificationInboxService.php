@@ -30,6 +30,7 @@ class NotificationInboxService
     public function inboxCounts(Model $recipient, array $validated = []): array
     {
         $counts = $this->scopedQuery($recipient, $validated)
+            ->reorder()
             ->toBase()
             ->selectRaw('COALESCE(SUM(CASE WHEN read_at IS NULL THEN 1 ELSE 0 END), 0) as unread_count')
             ->selectRaw('COALESCE(SUM(CASE WHEN read_at IS NOT NULL THEN 1 ELSE 0 END), 0) as read_count')
