@@ -44,3 +44,17 @@ Schedule::command('sets:sync')
     ->cron('0 2 */3 * *') // Every 3 days at 2:00 AM
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/sets-sync.log'));
+
+// Certificate safety net: issuance and image generation are normally event-driven
+// (EvaluateDonorTierRecognitionJob -> GenerateCertificateImageJob on successful
+// transactions). These sweeps catch anything missed due to queue downtime or
+// exhausted job retries. Both commands only act on recognitions that are missing.
+Schedule::command('recognitions:backfill')
+    ->dailyAt('03:00')
+    ->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/recognitions-backfill.log'));
+
+Schedule::command('recognitions:generate-certificate-images')
+    ->dailyAt('03:30')
+    ->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/recognitions-generate-certificate-images.log'));

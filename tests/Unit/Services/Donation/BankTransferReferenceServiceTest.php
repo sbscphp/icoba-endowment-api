@@ -16,17 +16,17 @@ class BankTransferReferenceServiceTest extends TestCase
 
         $reference = $service->generateUniqueReference(10);
 
-        $this->assertStringStartsWith('REF-', $reference);
-        $this->assertGreaterThan(strlen('REF-'), strlen($reference));
+        $this->assertStringStartsWith('ICB-ENMT-REF-', $reference);
+        $this->assertGreaterThan(strlen('ICB-ENMT-REF-'), strlen($reference));
     }
 
     public function test_extract_pulls_reference_from_narration(): void
     {
         $service = new BankTransferReferenceService;
 
-        $reference = $service->extractFromNarration('Transfer from John Doe REF-82Re93GHA for endowment');
+        $reference = $service->extractFromNarration('Transfer from John Doe ICB-ENMT-REF-82Re93GHA for endowment');
 
-        $this->assertSame('REF-82Re93GHA', $reference);
+        $this->assertSame('ICB-ENMT-REF-82Re93GHA', $reference);
     }
 
     public function test_extract_returns_null_when_no_reference_present(): void

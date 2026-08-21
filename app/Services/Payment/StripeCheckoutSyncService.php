@@ -129,6 +129,10 @@ final class StripeCheckoutSyncService
             return null;
         }
 
+        if (str_starts_with($uuid, StripeCheckoutService::PLATFORM_PREFIX)) {
+            $uuid = substr($uuid, strlen(StripeCheckoutService::PLATFORM_PREFIX));
+        }
+
         return Transaction::query()->where('uuid', $uuid)->first();
     }
 
