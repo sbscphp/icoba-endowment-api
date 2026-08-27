@@ -4,8 +4,10 @@ namespace App\Services\Admin\ContentManagement;
 
 use App\Enums\ContentPage;
 use App\Enums\EventStatus;
+use App\Models\Ad;
 use App\Models\Event;
 use App\Models\HeroSlide;
+use Illuminate\Support\Carbon;
 
 class ContentPageService
 {
@@ -17,6 +19,7 @@ class ContentPageService
         return [
             $this->heroSliderPageSummary(),
             $this->eventsPageSummary(),
+            $this->adsPageSummary(),
         ];
     }
 
@@ -59,6 +62,32 @@ class ContentPageService
             'last_updated' => $latestEvent?->updated_at,
             'updated_by' => $latestEvent?->updater?->displayName(),
             'status' => $hasPublishedEvent ? 'active' : 'inactive',
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function adsPageSummary(): array
+    {
+        $latestAd = Ad::query()
+            ->with('updater')
+            ->orderByDesc('updated_at')
+            ->first();
+
+        $now = Carbon::now();
+        $hasLiveAd = Ad::query()
+            ->where('is_active', true)
+            ->where('starts_at', '<=', $now)
+            ->where('ends_at', '>=', $now)
+            ->exists();
+
+        return [
+            'page_key' => ContentPage::ADS->value,
+            'page_title' => ContentPage::ADS->label(),
+            'last_updated' => $latestAd?->updated_at,
+            'updated_by' => $latestAd?->updater?->displayName(),
+            'status' => $hasLiveAd ? 'active' : 'inactive',
         ];
     }
 }

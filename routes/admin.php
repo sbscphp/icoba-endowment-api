@@ -5,6 +5,7 @@ use App\Http\Controllers\v1\Admin\Auth\AdminLoginController;
 use App\Http\Controllers\v1\Admin\Auth\PasswordController as AdminPasswordController;
 use App\Http\Controllers\v1\Admin\Campaign\CampaignController;
 use App\Http\Controllers\v1\Admin\Campaign\CampaignUpdateReportController;
+use App\Http\Controllers\v1\Admin\ContentManagement\AdController;
 use App\Http\Controllers\v1\Admin\ContentManagement\ContentPageController;
 use App\Http\Controllers\v1\Admin\ContentManagement\HeroSlideController;
 use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateController;
@@ -338,6 +339,33 @@ Route::prefix('v1/admin')->group(function () {
                     ->middleware(['permission:content_management.update']);
                 Route::delete('/{slideId}', [HeroSlideController::class, 'destroy'])
                     ->middleware(['permission:content_management.delete']);
+            });
+
+            Route::prefix('ads')->group(function () {
+                Route::get('/settings', [AdController::class, 'settings'])
+                    ->middleware(['permission:content_management.read']);
+                Route::patch('/settings', [AdController::class, 'updateSettings'])
+                    ->middleware(['permission:content_management.update']);
+
+                Route::get('/', [AdController::class, 'index'])
+                    ->middleware(['permission:content_management.read']);
+                Route::post('/', [AdController::class, 'store'])
+                    ->middleware(['permission:content_management.create']);
+                Route::get('/{adId}', [AdController::class, 'show'])
+                    ->middleware(['permission:content_management.read']);
+                Route::patch('/{adId}', [AdController::class, 'update'])
+                    ->middleware(['permission:content_management.update']);
+                Route::patch('/{adId}/archive', [AdController::class, 'archive'])
+                    ->middleware(['permission:content_management.update']);
+                Route::patch('/{adId}/reactivate', [AdController::class, 'reactivate'])
+                    ->middleware(['permission:content_management.update']);
+                Route::delete('/{adId}', [AdController::class, 'destroy'])
+                    ->middleware(['permission:content_management.delete']);
+
+                Route::put('/{adId}/images', [AdController::class, 'syncImages'])
+                    ->middleware(['permission:content_management.update']);
+                Route::delete('/{adId}/images/{imageId}', [AdController::class, 'destroyImage'])
+                    ->middleware(['permission:content_management.update']);
             });
         });
 
