@@ -11,7 +11,7 @@ Artisan::command('inspire', function () {
 Schedule::command('campaigns:auto-complete')
     ->everyThirtyMinutes()
     ->withoutOverlapping();
-    // ->appendOutputTo(storage_path('logs/campaigns-auto-complete.log'));
+// ->appendOutputTo(storage_path('logs/campaigns-auto-complete.log'));
 
 Schedule::command('contact-submissions:auto-close')
     ->daily()
@@ -27,6 +27,11 @@ Schedule::command('pledges:send-pause-resume-reminders')
     ->dailyAt('08:00')
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/pledges-send-pause-resume-reminders.log'));
+
+Schedule::command('reports:send-daily-digest')
+    ->dailyAt((string) config('reports.daily_digest.send_at', '07:00'))
+    ->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/reports-daily-digest.log'));
 
 Schedule::command('sms:check-balance --scheduled')
     ->dailyAt('09:00')

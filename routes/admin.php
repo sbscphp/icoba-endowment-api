@@ -5,11 +5,11 @@ use App\Http\Controllers\v1\Admin\Auth\AdminLoginController;
 use App\Http\Controllers\v1\Admin\Auth\PasswordController as AdminPasswordController;
 use App\Http\Controllers\v1\Admin\Campaign\CampaignController;
 use App\Http\Controllers\v1\Admin\Campaign\CampaignUpdateReportController;
+use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateController;
+use App\Http\Controllers\v1\Admin\ContactSubmission\ContactSubmissionController;
 use App\Http\Controllers\v1\Admin\ContentManagement\AdController;
 use App\Http\Controllers\v1\Admin\ContentManagement\ContentPageController;
 use App\Http\Controllers\v1\Admin\ContentManagement\HeroSlideController;
-use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateController;
-use App\Http\Controllers\v1\Admin\ContactSubmission\ContactSubmissionController;
 use App\Http\Controllers\v1\Admin\Dashboard\DashboardController;
 use App\Http\Controllers\v1\Admin\EmailCampaign\EmailCampaignController;
 use App\Http\Controllers\v1\Admin\Event\EventController;
@@ -19,6 +19,7 @@ use App\Http\Controllers\v1\Admin\Notification\NotificationController;
 use App\Http\Controllers\v1\Admin\Pledge\PledgeController;
 use App\Http\Controllers\v1\Admin\Reconciliation\FcmbImportController;
 use App\Http\Controllers\v1\Admin\Reconciliation\ReconciliationController;
+use App\Http\Controllers\v1\Admin\Report\DailyDigestReportController;
 use App\Http\Controllers\v1\Admin\Report\ReportController;
 use App\Http\Controllers\v1\Admin\Settings\SettingsController;
 use App\Http\Controllers\v1\Admin\TierConfiguration\TierConfigurationController;
@@ -305,6 +306,8 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:reports.read']);
             Route::get('/generate', [ReportController::class, 'generate'])
                 ->middleware(['permission:reports.read']);
+            Route::get('/daily-digest', [DailyDigestReportController::class, 'show'])
+                ->middleware(['permission:reports.read']);
         });
 
         Route::prefix('dashboard')->group(function () {
@@ -385,7 +388,7 @@ Route::prefix('v1/admin')->group(function () {
         Route::prefix('email-campaigns')->group(function () {
             Route::get('/dropdown/{status?}', [EmailCampaignController::class, 'dropdown'])
                 ->where('status', 'draft|queued|sent|partially_sent|failed|all');
-                // ->middleware(['permission:email_campaigns.read']);
+            // ->middleware(['permission:email_campaigns.read']);
             Route::get('/design-templates/options', [EmailCampaignController::class, 'designTemplateOptions'])
                 ->middleware(['permission:email_campaigns.read']);
             Route::get('/audiences/options', [EmailCampaignController::class, 'audienceOptions'])
