@@ -10,7 +10,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 /**
- * @property array{pledge: Pledge, fulfilled_amount: string, remaining_amount: string, ledger: LengthAwarePaginator<int, Transaction>} $resource
+ * @property array{pledge: Pledge, fulfilled_amount: string, remaining_amount: string, schedule?: array<string, mixed>, summary?: array<string, mixed>, payment_summary?: array<string, mixed>, reminders?: array<string, mixed>, ledger: LengthAwarePaginator<int, Transaction>} $resource
  */
 class PledgeDetailResource extends JsonResource
 {
@@ -33,10 +33,23 @@ class PledgeDetailResource extends JsonResource
             'schedule_view',
             $this->resource['schedule'] ?? app(PledgeScheduleService::class)->buildForPledge($pledge)
         );
+        if (isset($this->resource['summary']) && is_array($this->resource['summary'])) {
+            $pledge->setAttribute('schedule_summary', $this->resource['summary']);
+        }
 
-        return [
+        $payload = [
             'pledge' => PledgeListResource::make($pledge)->resolve(),
             'ledger' => $paginatorArray,
         ];
+
+        if (isset($this->resource['payment_summary'])) {
+            $payload['payment_summary'] = $this->resource['payment_summary'];
+        }
+
+        if (isset($this->resource['reminders'])) {
+            $payload['reminders'] = $this->resource['reminders'];
+        }
+
+        return $payload;
     }
 }

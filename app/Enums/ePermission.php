@@ -28,6 +28,7 @@ enum ePermission: string
 
     // 5. Pledges
     case PLEDGES_READ = 'pledges.read';
+    case PLEDGES_REMIND = 'pledges.remind';
     // case PLEDGES_CREATE = 'pledges.create';
 
     // 6. Reconciliation

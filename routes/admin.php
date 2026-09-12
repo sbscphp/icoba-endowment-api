@@ -265,6 +265,8 @@ Route::prefix('v1/admin')->group(function () {
             //     ->middleware(['permission:pledges.create']);
             Route::get('/{pledgeUuid}', [PledgeController::class, 'show'])
                 ->middleware(['permission:pledges.read']);
+            Route::post('/{pledgeUuid}/remind', [PledgeController::class, 'remind'])
+                ->middleware(['permission:pledges.remind']);
         });
 
         Route::prefix('reconciliation')->group(function () {
