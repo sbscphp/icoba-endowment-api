@@ -2,18 +2,27 @@
 
 namespace App\Http\Controllers\v1\Admin\Pledge;
 
+use App\Enums\AuditActionEnum;
+use App\Enums\GivingIdentitySource;
+use App\Enums\ModuleEnums;
 use App\Enums\PledgeStatus;
+use App\Enums\UserTypeEnum;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Pledge\PledgeListRequest;
+use App\Http\Requests\Admin\Pledge\PledgeReminderRequest;
 use App\Http\Requests\Admin\Pledge\PledgeStatsRequest;
 use App\Http\Requests\Admin\Pledge\PledgeStoreRequest;
 use App\Http\Resources\PledgeDetailResource;
 use App\Http\Resources\PledgeListResource;
+use App\Models\Admin;
+use App\Models\Pledge;
+use App\Models\User;
 use App\Responser\JsonResponser;
 use App\Services\Admin\Pledge\PledgeService;
 use App\Services\GivingIdentity\GivingIdentityResolver;
 use App\Services\Pledge\PledgeCommittedNgnResolver;
+use App\Services\Pledge\PledgeManualReminderService;
 use App\Services\Pledge\PledgeScheduleInput;
 use App\Services\Pledge\PledgeScheduleService;
 use Illuminate\Http\Request;
@@ -24,6 +33,7 @@ class PledgeController extends Controller
         private readonly PledgeService $pledgeService,
         private readonly PledgeScheduleService $pledgeScheduleService,
         private readonly GivingIdentityResolver $givingIdentityResolver,
+        private readonly PledgeManualReminderService $manualReminderService,
     ) {}
 
     public function stats(PledgeStatsRequest $request)
@@ -66,7 +76,7 @@ class PledgeController extends Controller
 
             $user = null;
             if (! empty($v['user_uuid'])) {
-                $user = \App\Models\User::query()->where('uuid', $v['user_uuid'])->first();
+                $user = User::query()->where('uuid', $v['user_uuid'])->first();
             }
 
             $identity = $this->givingIdentityResolver->resolveForPledgeData([
@@ -75,7 +85,7 @@ class PledgeController extends Controller
                 'graduation_set_uuid' => $v['graduation_set_uuid'] ?? null,
                 'metadata' => $scheduleStorage['metadata'] ?? null,
                 'donor_name' => $v['donor_name'] ?? null,
-            ], $user, \App\Enums\GivingIdentitySource::ADMIN);
+            ], $user, GivingIdentitySource::ADMIN);
 
             $data = [
                 'campaign_uuid' => $campaignUuid,
@@ -125,6 +135,53 @@ class PledgeController extends Controller
             return JsonResponser::send(false, 'Pledge retrieved.', PledgeDetailResource::make($detail)->resolve());
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Admin\Pledge\PledgeController@show');
+        }
+    }
+
+    /**
+     * Send a payment reminder email (and in-app notification) to the pledge donor.
+     */
+    public function remind(PledgeReminderRequest $request, string $pledgeUuid)
+    {
+        try {
+            $admin = $request->user();
+            if (! $admin instanceof Admin) {
+                abort(403, 'Forbidden.');
+            }
+
+            $v = $request->validated();
+            $force = (bool) ($v['force'] ?? false);
+            $pledge = $this->pledgeService->findByUuid($pledgeUuid);
+
+            $result = $this->manualReminderService->send($pledge, $admin, [
+                'schedule_item_id' => $v['schedule_item_id'] ?? null,
+                'note' => $v['note'] ?? null,
+                'force' => $force,
+            ]);
+
+            GeneralHelper::storeAuditLog(
+                UserTypeEnum::ADMIN,
+                AuditActionEnum::PLEDGE_REMINDER_SENT,
+                $request,
+                $admin->uuid,
+                [
+                    'pledge_uuid' => $pledge->uuid,
+                    'recipient_email' => $result['recipient_email'],
+                    'schedule_item_id' => $result['installment']['id'] ?? null,
+                    'due_date' => $result['installment']['due_date'] ?? null,
+                    'is_overdue' => $result['is_overdue'],
+                    'forced' => $force,
+                ],
+                'Pledge payment reminder sent to '.$result['recipient_email'].'.',
+                Pledge::class,
+                $pledge->uuid,
+                ModuleEnums::pledges,
+                200,
+            );
+
+            return JsonResponser::send(false, 'Pledge reminder sent.', $result);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\Pledge\PledgeController@remind');
         }
     }
 }

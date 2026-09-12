@@ -40,6 +40,8 @@ enum AuditActionEnum: string
     case ROLE_STATUS_TOGGLED = 'ROLE_STATUS_TOGGLED';
     case ROLE_DELETED = 'ROLE_DELETED';
 
+    case PLEDGE_REMINDER_SENT = 'PLEDGE_REMINDER_SENT';
+
     /**
      * @return list<string>
      */

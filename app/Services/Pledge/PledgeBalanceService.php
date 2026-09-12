@@ -35,6 +35,48 @@ class PledgeBalanceService
     }
 
     /**
+     * Fulfilled amounts for many pledges in one query, keyed by pledge uuid.
+     * Pledges without any counted payment are omitted from the result.
+     *
+     * @param  list<string>  $pledgeUuids
+     * @return array<string, string>
+     */
+    public function fulfilledAmountsFor(array $pledgeUuids): array
+    {
+        $pledgeUuids = array_values(array_filter(array_unique(array_map('strval', $pledgeUuids))));
+        if ($pledgeUuids === []) {
+            return [];
+        }
+
+        $rows = Transaction::query()
+            ->whereIn('pledge_uuid', $pledgeUuids)
+            ->where('status', TransactionStatus::SUCCESSFUL)
+            ->where(function (Builder $b): void {
+                $b->whereNull('application_type')
+                    ->orWhereNotIn('application_type', [
+                        TransactionApplicationType::PLEDGE_PLACEHOLDER->value,
+                    ]);
+            })
+            ->selectRaw('pledge_uuid, SUM(amount) as fulfilled')
+            ->groupBy('pledge_uuid')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(string) $row->pledge_uuid] = (string) ($row->fulfilled ?? '0');
+        }
+
+        return $out;
+    }
+
+    public function remainingFromFulfilled(Pledge $pledge, string $fulfilled): string
+    {
+        $remaining = max(0, (float) $pledge->committed_amount - (float) $fulfilled);
+
+        return number_format($remaining, 2, '.', '');
+    }
+
+    /**
      * @return Builder<Transaction>
      */
     public function basePaymentQuery(Pledge $pledge): Builder
