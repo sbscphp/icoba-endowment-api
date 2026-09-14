@@ -9,6 +9,8 @@ use App\Services\Pledge\PledgeBalanceService;
 use App\Services\Pledge\PledgeScheduleService;
 use App\Services\Pledge\PledgeScheduleSummaryBuilder;
 use Carbon\Carbon;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 final class PledgeScheduleSummaryBuilderTest extends TestCase
@@ -89,6 +91,65 @@ final class PledgeScheduleSummaryBuilderTest extends TestCase
         $this->assertSame('2026-09-10T08:00:00+00:00', $summary['last_reminder_sent_at']);
         $this->assertNull($summary['next_installment']);
         $this->assertSame(0, $summary['installments_total']);
+    }
+
+    public function test_summary_exposes_number_of_transactions(): void
+    {
+        Schema::create('transactions', function (Blueprint $table): void {
+            $table->id();
+            $table->uuid('uuid')->unique();
+            $table->string('transaction_id', 48)->unique();
+            $table->uuid('campaign_uuid');
+            $table->uuid('user_uuid')->nullable();
+            $table->string('donor_name')->nullable();
+            $table->string('donor_email')->nullable();
+            $table->string('donor_phone', 32)->nullable();
+            $table->boolean('is_anonymous')->default(false);
+            $table->decimal('amount', 18, 2);
+            $table->string('currency', 8);
+            $table->decimal('amount_in_naira', 18, 2)->nullable();
+            $table->string('status', 20)->default('pending');
+            $table->string('gateway')->nullable();
+            $table->uuid('pledge_uuid')->nullable();
+            $table->timestamps();
+        });
+
+        $pledge = $this->activePledge(['uuid' => 'pledge-summary-transaction-count']);
+
+        $pledge->transactions()->create([
+            'transaction_id' => 'TRN-001',
+            'campaign_uuid' => 'campaign-uuid',
+            'user_uuid' => null,
+            'donor_name' => 'Jane Doe',
+            'donor_email' => 'jane@example.com',
+            'donor_phone' => '08030000001',
+            'amount' => 100,
+            'currency' => 'NGN',
+            'amount_in_naira' => 100,
+            'status' => 'successful',
+            'gateway' => 'paystack',
+            'pledge_uuid' => $pledge->uuid,
+        ]);
+
+        $pledge->transactions()->create([
+            'transaction_id' => 'TRN-002',
+            'campaign_uuid' => 'campaign-uuid',
+            'user_uuid' => null,
+            'donor_name' => 'Jane Doe',
+            'donor_email' => 'jane@example.com',
+            'donor_phone' => '08030000001',
+            'amount' => 150,
+            'currency' => 'NGN',
+            'amount_in_naira' => 150,
+            'status' => 'pending',
+            'gateway' => 'paystack',
+            'pledge_uuid' => $pledge->uuid,
+        ]);
+
+        $summary = $this->builder->build($pledge, $this->scheduleView([]), null, Carbon::parse('2026-09-12'));
+        $summary['number_of_transactions'] = 2;
+
+        $this->assertSame(2, $summary['number_of_transactions']);
     }
 
     /**

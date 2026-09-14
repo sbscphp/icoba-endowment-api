@@ -42,6 +42,10 @@ class PledgeDetailResource extends JsonResource
             'ledger' => $paginatorArray,
         ];
 
+        if (isset($this->resource['summary']) && is_array($this->resource['summary'])) {
+            $payload['summary'] = $this->resource['summary'];
+        }
+
         if (isset($this->resource['payment_summary'])) {
             $payload['payment_summary'] = $this->resource['payment_summary'];
         }
