@@ -199,14 +199,21 @@ class PledgeService
     public function stats(array $validated): array
     {
         $base = $this->statsBaseQuery($validated);
+        $balanceStats = $this->balanceStats($base);
 
         return array_merge(
             $this->countStats($base),
             [
                 'committed_total_ngn' => $this->sumCommittedNgnAggregate($base),
                 'committed_totals_by_currency' => $this->committedTotalsByCurrencyRows($base),
+                'total_pledge_value' => $this->formatDecimalString((float) $this->sumCommittedNgnAggregate($base)),
+                'total_fulfilled' => $balanceStats['fulfilled_total_ngn'],
+                'total_fufilled' => $balanceStats['fulfilled_total_ngn'],
+                'total_active' => $balanceStats['outstanding_total_ngn'],
+                'total_pending' => $balanceStats['outstanding_total_ngn'],
+                'total_penidng' => $balanceStats['outstanding_total_ngn'],
             ],
-            $this->balanceStats($base),
+            $balanceStats,
             ['schedule_health' => $this->scheduleHealth($base)],
         );
     }
@@ -732,6 +739,11 @@ class PledgeService
     }
 
     private function money(float $value): string
+    {
+        return number_format($value, 2, '.', '');
+    }
+
+    private function formatDecimalString(float $value): string
     {
         return number_format($value, 2, '.', '');
     }
