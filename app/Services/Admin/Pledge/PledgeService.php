@@ -573,6 +573,11 @@ class PledgeService
         $lastPayments = $this->lastPaymentDates([$pledge->uuid]);
         $summary = $this->summaryBuilder->build($pledge, $schedule, $lastPayments[$pledge->uuid] ?? null);
 
+        $summary['number_of_transactions'] = (int) Transaction::query()
+            ->where('pledge_uuid', $pledge->uuid)
+            ->whereNotIn('status', [TransactionStatus::SUPERSEDED->value])
+            ->count();
+
         return [
             'pledge' => $pledge,
             'fulfilled_amount' => $fulfilled,
