@@ -26,6 +26,7 @@ class PledgeListResource extends JsonResource
 
         $row = [
             'pledge_uuid' => $this->uuid,
+            'pledge_id' => $this->pledge_id,
             'campaign' => $this->campaign !== null ? [
                 'uuid' => $this->campaign->uuid,
                 'name' => $this->campaign->name,
@@ -42,6 +43,7 @@ class PledgeListResource extends JsonResource
             'currency' => $this->currency,
             'payment_plan_type' => $this->payment_plan_type instanceof \BackedEnum ? $this->payment_plan_type->value : $this->payment_plan_type,
             'installment_count' => $this->installment_count,
+            'transaction_count' => $this->transaction_count,
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
             'is_paused' => $scheduleService->isPledgePaused($this->resource),
             'paused_at' => $scheduleService->pledgePausedAt($this->resource),
@@ -51,7 +53,7 @@ class PledgeListResource extends JsonResource
             'amount_fufiled' => $this->resource->getAttribute('fulfilled_amount'),
             'remaining_amount' => $this->resource->getAttribute('remaining_amount'),
             'amount_pending' => $this->resource->getAttribute('remaining_amount'),
-            'amount_penidng' => $this->resource->getAttribute('remaining_amount'),
+            // 'amount_penidng' => $this->resource->getAttribute('remaining_amount'),
             'summary' => is_array($summary) ? $summary : null,
             'schedule' => is_array($schedule) ? $schedule : null,
             'is_anonymous' => (bool) $this->is_anonymous,
