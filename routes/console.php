@@ -28,10 +28,15 @@ Schedule::command('pledges:send-pause-resume-reminders')
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/pledges-send-pause-resume-reminders.log'));
 
-Schedule::command('reports:send-daily-digest')
-    ->dailyAt((string) config('reports.daily_digest.send_at', '07:00'))
+// Weekly digest covers the previous Monday–Sunday week; sent on the configured
+// day (default Monday) so the full week is in.
+$weeklyDigestDays = ['sunday' => 0, 'monday' => 1, 'tuesday' => 2, 'wednesday' => 3, 'thursday' => 4, 'friday' => 5, 'saturday' => 6];
+$weeklyDigestDay = $weeklyDigestDays[strtolower(trim((string) config('reports.weekly_digest.send_day', 'monday')))] ?? 1;
+
+Schedule::command('reports:send-weekly-digest')
+    ->weeklyOn($weeklyDigestDay, (string) config('reports.weekly_digest.send_at', '07:00'))
     ->withoutOverlapping()
-    ->appendOutputTo(storage_path('logs/reports-daily-digest.log'));
+    ->appendOutputTo(storage_path('logs/reports-weekly-digest.log'));
 
 Schedule::command('sms:check-balance --scheduled')
     ->dailyAt('09:00')

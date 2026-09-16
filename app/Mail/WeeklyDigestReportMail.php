@@ -3,7 +3,7 @@
 namespace App\Mail;
 
 use App\Models\Theme;
-use App\Services\Admin\Report\DailyDigest\DailyDigestReportService;
+use App\Services\Admin\Report\WeeklyDigest\WeeklyDigestReportService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Attachment;
 use Illuminate\Mail\Mailable;
@@ -11,7 +11,7 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class DailyDigestReportMail extends Mailable
+class WeeklyDigestReportMail extends Mailable
 {
     use Queueable, SerializesModels;
 
@@ -27,17 +27,17 @@ class DailyDigestReportMail extends Mailable
 
     public function envelope(): Envelope
     {
-        $date = (string) ($this->report['report_date_label'] ?? $this->report['report_date'] ?? '');
+        $period = (string) ($this->report['period_label'] ?? $this->report['period_end'] ?? '');
 
         return new Envelope(
-            subject: 'Daily donations & pledges digest — '.$date,
+            subject: 'Weekly donations & pledges digest — '.$period,
         );
     }
 
     public function content(): Content
     {
         return new Content(
-            view: 'emails.reports.daily-digest',
+            view: 'emails.reports.weekly-digest',
             with: [
                 'report' => $this->report,
                 'theme' => $this->mailTheme,
@@ -50,12 +50,13 @@ class DailyDigestReportMail extends Mailable
      */
     public function attachments(): array
     {
-        $date = (string) ($this->report['report_date'] ?? now()->toDateString());
+        $end = (string) ($this->report['period_end'] ?? now()->toDateString());
+        $start = (string) ($this->report['period_start'] ?? $end);
 
         return [
-            Attachment::fromData(fn (): string => $this->pdfContents, DailyDigestReportService::pdfFilename($date))
+            Attachment::fromData(fn (): string => $this->pdfContents, WeeklyDigestReportService::pdfFilename($start, $end))
                 ->withMime('application/pdf'),
-            Attachment::fromData(fn (): string => $this->csvContents, DailyDigestReportService::csvFilename($date))
+            Attachment::fromData(fn (): string => $this->csvContents, WeeklyDigestReportService::csvFilename($end))
                 ->withMime('text/csv'),
         ];
     }

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services\Admin\Report\DailyDigest;
+namespace App\Services\Admin\Report\WeeklyDigest;
 
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -10,18 +10,18 @@ use Illuminate\Support\Str;
 /**
  * Turns the digest dataset into the PDF and CSV attachments.
  */
-class DailyDigestDocumentRenderer
+class WeeklyDigestDocumentRenderer
 {
     /**
      * @param  array<string, mixed>  $report
      */
     public function renderPdf(array $report): string
     {
-        $html = view('pdf.admin-daily-digest', [
+        $html = view('pdf.admin-weekly-digest', [
             'report' => $report,
             'logoBase64' => $this->logoBase64(),
-            'maxOverdueDonors' => max(1, (int) config('reports.daily_digest.pdf_max_overdue_donors', 200)),
-            'maxListRows' => max(1, (int) config('reports.daily_digest.pdf_max_list_rows', 50)),
+            'maxOverdueDonors' => max(1, (int) config('reports.weekly_digest.pdf_max_overdue_donors', 200)),
+            'maxListRows' => max(1, (int) config('reports.weekly_digest.pdf_max_list_rows', 50)),
         ])->render();
 
         $options = new Options;
