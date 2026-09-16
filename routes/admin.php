@@ -19,8 +19,8 @@ use App\Http\Controllers\v1\Admin\Notification\NotificationController;
 use App\Http\Controllers\v1\Admin\Pledge\PledgeController;
 use App\Http\Controllers\v1\Admin\Reconciliation\FcmbImportController;
 use App\Http\Controllers\v1\Admin\Reconciliation\ReconciliationController;
-use App\Http\Controllers\v1\Admin\Report\DailyDigestReportController;
 use App\Http\Controllers\v1\Admin\Report\ReportController;
+use App\Http\Controllers\v1\Admin\Report\WeeklyDigestReportController;
 use App\Http\Controllers\v1\Admin\Settings\SettingsController;
 use App\Http\Controllers\v1\Admin\TierConfiguration\TierConfigurationController;
 use App\Http\Controllers\v1\Admin\Transaction\TransactionController;
@@ -306,7 +306,7 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:reports.read']);
             Route::get('/generate', [ReportController::class, 'generate'])
                 ->middleware(['permission:reports.read']);
-            Route::get('/daily-digest', [DailyDigestReportController::class, 'show'])
+            Route::get('/weekly-digest', [WeeklyDigestReportController::class, 'show'])
                 ->middleware(['permission:reports.read']);
         });
 

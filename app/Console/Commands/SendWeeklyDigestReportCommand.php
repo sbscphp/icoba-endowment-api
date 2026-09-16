@@ -2,35 +2,35 @@
 
 namespace App\Console\Commands;
 
-use App\Jobs\SendDailyDigestReportJob;
-use App\Services\Admin\Report\DailyDigest\DailyDigestReportService;
+use App\Jobs\SendWeeklyDigestReportJob;
+use App\Services\Admin\Report\WeeklyDigest\WeeklyDigestReportService;
 use Illuminate\Console\Command;
 
-class SendDailyDigestReportCommand extends Command
+class SendWeeklyDigestReportCommand extends Command
 {
-    protected $signature = 'reports:send-daily-digest
-        {--date= : Report date (Y-m-d). Defaults to yesterday in the app timezone}
+    protected $signature = 'reports:send-weekly-digest
+        {--date= : Any date (Y-m-d) inside the week to report on. Defaults to the most recently completed Monday–Sunday week}
         {--to=* : Send only to these addresses instead of all active admins}
         {--dry-run : Build the report and print the summary and recipients without sending}
         {--save-only : Generate and store the PDF/CSV without emailing}
         {--sync : Run inline instead of dispatching the queued job}';
 
-    protected $description = 'Generate the daily donations & pledges digest (PDF + overdue CSV) and email it to active admins.';
+    protected $description = 'Generate the weekly donations & pledges digest (PDF + overdue CSV) and email it to active admins.';
 
-    public function handle(DailyDigestReportService $service): int
+    public function handle(WeeklyDigestReportService $service): int
     {
-        if (! (bool) config('reports.daily_digest.enabled', true) && ! $this->option('dry-run') && ! $this->option('save-only')) {
-            $this->warn('Daily digest is disabled (reports.daily_digest.enabled). Nothing sent.');
+        if (! (bool) config('reports.weekly_digest.enabled', true) && ! $this->option('dry-run') && ! $this->option('save-only')) {
+            $this->warn('Weekly digest is disabled (reports.weekly_digest.enabled). Nothing sent.');
 
             return self::SUCCESS;
         }
 
-        $reportDate = DailyDigestReportService::resolveReportDate($this->option('date'));
+        $periodEnd = WeeklyDigestReportService::resolvePeriodEnd($this->option('date'));
         $to = array_values(array_filter(array_map('trim', (array) $this->option('to'))));
         $recipients = $to !== [] ? $to : null;
 
         if ((bool) $this->option('dry-run')) {
-            $generated = $service->generate($reportDate, store: false);
+            $generated = $service->generate($periodEnd, store: false);
             $this->printSummary($generated['report']);
             $resolved = $recipients ?? $service->recipients();
             $this->line('Recipients ('.count($resolved).'): '.($resolved === [] ? '(none)' : implode(', ', $resolved)));
@@ -40,7 +40,7 @@ class SendDailyDigestReportCommand extends Command
         }
 
         if ((bool) $this->option('save-only')) {
-            $generated = $service->generate($reportDate, store: true);
+            $generated = $service->generate($periodEnd, store: true);
             $this->printSummary($generated['report']);
             $this->info('Stored: '.($generated['pdf_path'] ?? '(store failed)').' and '.($generated['csv_path'] ?? '(store failed)'));
 
@@ -48,10 +48,11 @@ class SendDailyDigestReportCommand extends Command
         }
 
         if ((bool) $this->option('sync')) {
-            $result = $service->generateAndSend($reportDate, $recipients);
+            $result = $service->generateAndSend($periodEnd, $recipients);
             $this->info(sprintf(
-                'Daily digest for %s %s to %d recipient(s). Overdue donors: %d. Stored: %s',
-                $result['report_date'],
+                'Weekly digest for %s to %s %s to %d recipient(s). Overdue donors: %d. Stored: %s',
+                $result['period_start'],
+                $result['period_end'],
                 $result['sent'] ? 'sent' : 'NOT sent',
                 count($result['recipients']),
                 $result['overdue_donors'],
@@ -61,8 +62,8 @@ class SendDailyDigestReportCommand extends Command
             return $result['sent'] ? self::SUCCESS : self::FAILURE;
         }
 
-        SendDailyDigestReportJob::dispatch($reportDate->toDateString(), $recipients);
-        $this->info('Queued daily digest job for '.$reportDate->toDateString().'.');
+        SendWeeklyDigestReportJob::dispatch($periodEnd->toDateString(), $recipients);
+        $this->info('Queued weekly digest job for the week ending '.$periodEnd->toDateString().'.');
 
         return self::SUCCESS;
     }
@@ -73,15 +74,15 @@ class SendDailyDigestReportCommand extends Command
     private function printSummary(array $report): void
     {
         $s = $report['summary'];
-        $this->line('Report date: '.$report['report_date_label']);
+        $this->line('Report period: '.$report['period_label']);
         $this->table(['Metric', 'Value'], [
-            ['Donations yesterday', '₦'.number_format((float) $s['donations_yesterday']['amount'], 2).' ('.$s['donations_yesterday']['count'].')'],
+            ['Donations this week', '₦'.number_format((float) $s['donations_this_week']['amount'], 2).' ('.$s['donations_this_week']['count'].')'],
             ['Month to date', '₦'.number_format((float) $s['donations_mtd']['amount'], 2).' ('.$s['donations_mtd']['count'].')'],
             ['Year to date', '₦'.number_format((float) $s['donations_ytd']['amount'], 2)],
             ['Active pledges', $s['active_pledges']['count'].' ('.$s['active_pledges']['collection_rate'].'% collected)'],
             ['Overdue', '₦'.number_format((float) $s['overdue']['amount_ngn'], 2).' across '.$s['overdue']['donors'].' donor(s), '.$s['overdue']['pledges'].' pledge(s)'],
-            ['New pledges yesterday', (string) $s['new_pledges_yesterday']['count']],
-            ['Fulfilled yesterday', (string) $s['pledges_fulfilled_yesterday']],
+            ['New pledges this week', (string) $s['new_pledges_this_week']['count']],
+            ['Fulfilled this week', (string) $s['pledges_fulfilled_this_week']],
             ['Paused pledges', (string) $s['paused_pledges']],
             ['Awaiting bank verification', $s['awaiting_bank_verification']['count'].' (₦'.number_format((float) $s['awaiting_bank_verification']['amount_ngn'], 2).')'],
         ]);

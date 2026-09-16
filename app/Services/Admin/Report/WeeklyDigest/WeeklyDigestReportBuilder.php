@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services\Admin\Report\DailyDigest;
+namespace App\Services\Admin\Report\WeeklyDigest;
 
 use App\Enums\CampaignStatus;
 use App\Enums\Currency;
@@ -19,18 +19,23 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Builds the full dataset for the admin daily digest report.
+ * Builds the full dataset for the admin weekly digest report.
+ *
+ * The report period is a full Monday–Sunday week. Donation activity, new and
+ * fulfilled pledges are counted within that week; pledge balances, overdue
+ * installments and campaign totals are taken "as of" the end of the week
+ * (the Sunday), so a report for a past week is reproducible.
  *
  * All money figures are naira (NGN) unless the key says otherwise. Donation
  * figures use `transactions.created_at` and `amount_in_naira`, matching the
  * admin dashboard. Pledge figures come from the pledge schedule (installments),
  * so "honored" and "pending" match what donors see on their own pledge pages.
  *
- * Overdue definition: an installment whose due date is on or before the report
- * date and still has a remaining balance, on an active pledge that is not paused.
- * Partially paid installments count as overdue.
+ * Overdue definition: an installment whose due date is on or before the end of
+ * the report week and still has a remaining balance, on an active pledge that
+ * is not paused. Partially paid installments count as overdue.
  */
-class DailyDigestReportBuilder
+class WeeklyDigestReportBuilder
 {
     private const EPSILON = 0.00001;
 
@@ -39,63 +44,75 @@ class DailyDigestReportBuilder
     ) {}
 
     /**
+     * @param  CarbonInterface|null  $periodEnd  Any date inside the week to report on. Defaults to the most recently completed week.
      * @return array<string, mixed>
      */
-    public function build(?CarbonInterface $reportDate = null): array
+    public function build(?CarbonInterface $periodEnd = null): array
     {
         $timezone = (string) config('app.timezone', 'UTC');
-        $reportDate = ($reportDate?->copy() ?? now($timezone)->subDay())->setTimezone($timezone)->startOfDay();
-        $reportDayEnd = $reportDate->copy()->endOfDay();
+        $periodEnd = ($periodEnd?->copy() ?? now($timezone)->startOfWeek(CarbonInterface::MONDAY)->subDay())
+            ->setTimezone($timezone)
+            ->endOfWeek(CarbonInterface::SUNDAY)
+            ->startOfDay();
+        $periodStart = $periodEnd->copy()->subDays(6)->startOfDay();
+        $periodEndOfDay = $periodEnd->copy()->endOfDay();
 
-        $trendDays = max(7, (int) config('reports.daily_digest.trend_days', 14));
-        $trendMonths = max(1, (int) config('reports.daily_digest.trend_months', 6));
-        $upcomingDays = max(1, (int) config('reports.daily_digest.upcoming_days', 7));
+        $trendWeeks = max(4, (int) config('reports.weekly_digest.trend_weeks', 12));
+        $trendMonths = max(1, (int) config('reports.weekly_digest.trend_months', 6));
+        $upcomingDays = max(1, (int) config('reports.weekly_digest.upcoming_days', 7));
 
-        $dailySeries = $this->dailyDonationSeries($reportDate, $trendDays, $trendMonths);
-        $pledgeWalk = $this->walkActivePledges($reportDate, $upcomingDays);
-        $campaigns = $this->campaignRows($reportDate, $pledgeWalk['by_campaign']);
+        $series = $this->donationSeries($periodStart, $periodEnd, $trendWeeks, $trendMonths);
+        $pledgeWalk = $this->walkActivePledges($periodEnd, $upcomingDays);
+        $campaigns = $this->campaignRows($periodStart, $periodEnd, $pledgeWalk['by_campaign']);
 
-        $yesterday = $this->donationTotals($reportDate, $reportDayEnd);
-        $mtd = $this->donationTotals($reportDate->copy()->startOfMonth(), $reportDayEnd);
-        $ytd = $this->donationTotals($reportDate->copy()->startOfYear(), $reportDayEnd);
-        $allTime = $this->donationTotals(null, $reportDayEnd);
+        $thisWeek = $this->donationTotals($periodStart, $periodEndOfDay);
+        $mtd = $this->donationTotals($periodEnd->copy()->startOfMonth(), $periodEndOfDay);
+        $ytd = $this->donationTotals($periodEnd->copy()->startOfYear(), $periodEndOfDay);
+        $allTime = $this->donationTotals(null, $periodEndOfDay);
 
         return [
-            'report_date' => $reportDate->toDateString(),
-            'report_date_label' => $reportDate->format('l, F j, Y'),
+            'period_start' => $periodStart->toDateString(),
+            'period_end' => $periodEnd->toDateString(),
+            'period_label' => $this->periodLabel($periodStart, $periodEnd),
+            'iso_week' => (int) $periodEnd->isoWeek,
+            'iso_year' => (int) $periodEnd->isoWeekYear,
+            // Balances and overdue figures are "as of" this date (the Sunday ending the week).
+            'report_date' => $periodEnd->toDateString(),
             'generated_at' => now($timezone),
             'timezone' => $timezone,
             'currency' => Currency::NGN->value,
             'summary' => [
-                'donations_yesterday' => $yesterday,
+                'donations_this_week' => $thisWeek,
                 'donations_mtd' => $mtd,
                 'donations_ytd' => $ytd,
                 'donations_all_time' => $allTime,
-                'new_pledges_yesterday' => $this->newPledgeTotals($reportDate, $reportDayEnd),
-                'pledges_fulfilled_yesterday' => $this->fulfilledPledgeCount($reportDate, $reportDayEnd),
+                'new_pledges_this_week' => $this->newPledgeTotals($periodStart, $periodEndOfDay),
+                'pledges_fulfilled_this_week' => $this->fulfilledPledgeCount($periodStart, $periodEndOfDay),
                 'active_pledges' => $pledgeWalk['active_totals'],
                 'overdue' => $pledgeWalk['overdue']['totals'],
                 'paused_pledges' => count($pledgeWalk['paused']),
-                'awaiting_bank_verification' => $this->awaitingBankVerification($reportDayEnd),
+                'awaiting_bank_verification' => $this->awaitingBankVerification($periodEndOfDay),
             ],
             'trend' => [
-                'daily' => $dailySeries['daily'],
-                'monthly' => $dailySeries['monthly'],
-                'daily_average' => $this->money($this->average(array_column($dailySeries['daily'], 'amount_numeric'))),
-                'peak_day' => $this->peak($dailySeries['daily']),
+                'weekly' => $series['weekly'],
+                'daily' => $series['daily'],
+                'monthly' => $series['monthly'],
+                'weekly_average' => $this->money($this->average(array_column($series['weekly'], 'amount_numeric'))),
+                'peak_week' => $this->peak($series['weekly']),
+                'peak_day' => $this->peak($series['daily']),
             ],
-            'variance' => $this->variance($reportDate, $dailySeries['by_date'], $mtd),
+            'variance' => $this->variance($periodStart, $periodEnd, $series['weekly'], $mtd),
             'campaigns' => $campaigns,
             'breakdowns' => [
-                'payment_method' => $this->breakdownByPaymentMethod($reportDate, $reportDayEnd),
-                'currency' => $this->breakdownByCurrency($reportDate, $reportDayEnd),
-                'donor_type' => $this->breakdownByDonorType($reportDate, $reportDayEnd),
+                'payment_method' => $this->breakdownByPaymentMethod($periodStart, $periodEndOfDay),
+                'currency' => $this->breakdownByCurrency($periodStart, $periodEndOfDay),
+                'donor_type' => $this->breakdownByDonorType($periodStart, $periodEndOfDay),
             ],
             'overdue' => $pledgeWalk['overdue'],
             'upcoming' => $pledgeWalk['upcoming'],
             'paused' => $pledgeWalk['paused'],
-            'new_pledges' => $this->newPledgeRows($reportDate, $reportDayEnd),
-            'fulfilled_pledges' => $this->fulfilledPledgeRows($reportDate, $reportDayEnd),
+            'new_pledges' => $this->newPledgeRows($periodStart, $periodEndOfDay),
+            'fulfilled_pledges' => $this->fulfilledPledgeRows($periodStart, $periodEndOfDay),
         ];
     }
 
@@ -150,20 +167,19 @@ class DailyDigestReportBuilder
     }
 
     /**
-     * One query grouped by calendar day covering the monthly window; daily and
-     * monthly series are derived from it in PHP so the SQL stays portable.
+     * One query grouped by calendar day covering the longest of the weekly and
+     * monthly windows; the weekly, daily (report week only) and monthly series
+     * are derived from it in PHP so the SQL stays portable.
      *
-     * @return array{daily:list<array<string,mixed>>, monthly:list<array<string,mixed>>, by_date:array<string,array{count:int,amount:float}>}
+     * @return array{weekly:list<array<string,mixed>>, daily:list<array<string,mixed>>, monthly:list<array<string,mixed>>}
      */
-    private function dailyDonationSeries(CarbonInterface $reportDate, int $trendDays, int $trendMonths): array
+    private function donationSeries(CarbonInterface $periodStart, CarbonInterface $periodEnd, int $trendWeeks, int $trendMonths): array
     {
-        $monthlyStart = $reportDate->copy()->startOfMonth()->subMonths($trendMonths - 1);
-        $dailyStart = $reportDate->copy()->subDays($trendDays - 1);
-        $windowStart = $monthlyStart->lt($dailyStart) ? $monthlyStart : $dailyStart;
-        // Include one extra week before the daily window so "same weekday last week" can be read from the same map.
-        $windowStart = $windowStart->copy()->subDays(7)->startOfDay();
+        $monthlyStart = $periodEnd->copy()->startOfMonth()->subMonths($trendMonths - 1)->startOfDay();
+        $weeklyStart = $periodStart->copy()->subWeeks($trendWeeks - 1)->startOfDay();
+        $windowStart = $monthlyStart->lt($weeklyStart) ? $monthlyStart : $weeklyStart;
 
-        $rows = $this->revenueQuery($windowStart, $reportDate->copy()->endOfDay())
+        $rows = $this->revenueQuery($windowStart, $periodEnd->copy()->endOfDay())
             ->selectRaw('DATE(transactions.created_at) as day, COUNT(*) as tx_count, SUM(amount_in_naira) as total')
             ->groupBy(DB::raw('DATE(transactions.created_at)'))
             ->get();
@@ -173,9 +189,32 @@ class DailyDigestReportBuilder
             $byDate[(string) $row->day] = ['count' => (int) $row->tx_count, 'amount' => (float) $row->total];
         }
 
+        $weekly = [];
+        for ($i = $trendWeeks - 1; $i >= 0; $i--) {
+            $weekStart = $periodStart->copy()->subWeeks($i);
+            $weekEnd = $weekStart->copy()->addDays(6);
+            $count = 0;
+            $amount = 0.0;
+            // Reassign on each step: the app uses CarbonImmutable, so addDay() returns a new instance.
+            for ($day = $weekStart->copy(); $day->lte($weekEnd); $day = $day->addDay()) {
+                $key = $day->toDateString();
+                $count += $byDate[$key]['count'] ?? 0;
+                $amount += $byDate[$key]['amount'] ?? 0.0;
+            }
+            $weekly[] = [
+                'week_start' => $weekStart->toDateString(),
+                'week_end' => $weekEnd->toDateString(),
+                'iso_week' => (int) $weekStart->isoWeek,
+                'label' => $this->shortRangeLabel($weekStart, $weekEnd),
+                'count' => $count,
+                'amount' => $this->money($amount),
+                'amount_numeric' => $amount,
+                'is_current' => $i === 0,
+            ];
+        }
+
         $daily = [];
-        for ($i = $trendDays - 1; $i >= 0; $i--) {
-            $day = $reportDate->copy()->subDays($i);
+        for ($day = $periodStart->copy(); $day->lte($periodEnd); $day = $day->addDay()) {
             $key = $day->toDateString();
             $amount = $byDate[$key]['amount'] ?? 0.0;
             $daily[] = [
@@ -189,7 +228,7 @@ class DailyDigestReportBuilder
 
         $monthly = [];
         for ($i = $trendMonths - 1; $i >= 0; $i--) {
-            $month = $reportDate->copy()->startOfMonth()->subMonths($i);
+            $month = $periodEnd->copy()->startOfMonth()->subMonths($i);
             $prefix = $month->format('Y-m');
             $count = 0;
             $amount = 0.0;
@@ -205,62 +244,65 @@ class DailyDigestReportBuilder
                 'count' => $count,
                 'amount' => $this->money($amount),
                 'amount_numeric' => $amount,
-                'is_partial' => $prefix === $reportDate->format('Y-m'),
+                'is_partial' => $prefix === $periodEnd->format('Y-m'),
             ];
         }
 
-        return ['daily' => $daily, 'monthly' => $monthly, 'by_date' => $byDate];
+        return ['weekly' => $weekly, 'daily' => $daily, 'monthly' => $monthly];
     }
 
     /**
-     * @param  array<string,array{count:int,amount:float}>  $byDate
+     * @param  list<array<string,mixed>>  $weekly  Weekly series ending on the report week.
      * @param  array{count:int, amount:string, amount_numeric:float, donors:int}  $mtd
      * @return array<string, array<string, mixed>>
      */
-    private function variance(CarbonInterface $reportDate, array $byDate, array $mtd): array
+    private function variance(CarbonInterface $periodStart, CarbonInterface $periodEnd, array $weekly, array $mtd): array
     {
-        $amountOn = fn (CarbonInterface $day): float => $byDate[$day->toDateString()]['amount'] ?? 0.0;
-        $countOn = fn (CarbonInterface $day): int => $byDate[$day->toDateString()]['count'] ?? 0;
+        $current = $weekly[count($weekly) - 1] ?? ['amount_numeric' => 0.0, 'count' => 0];
+        $previous = $weekly[count($weekly) - 2] ?? ['amount_numeric' => 0.0, 'count' => 0, 'label' => ''];
 
-        $current = $amountOn($reportDate);
-        $previousDay = $reportDate->copy()->subDay();
-        $sameWeekdayLastWeek = $reportDate->copy()->subWeek();
+        // Average of the four weeks before the report week.
+        $baseline = array_slice($weekly, max(0, count($weekly) - 5), max(0, min(4, count($weekly) - 1)));
+        $baselineAverage = $this->average(array_column($baseline, 'amount_numeric'));
+        $baselineCountAverage = (int) round($this->average(array_column($baseline, 'count')));
+        $baselineLabel = $baseline === []
+            ? ''
+            : $this->shortRangeLabel(Carbon::parse($baseline[0]['week_start']), Carbon::parse($baseline[count($baseline) - 1]['week_end']));
 
-        $sevenDayWindow = [];
-        for ($i = 1; $i <= 7; $i++) {
-            $sevenDayWindow[] = $amountOn($reportDate->copy()->subDays($i));
-        }
-        $sevenDayAverage = $this->average($sevenDayWindow);
+        // Same ISO week last year.
+        $lastYearStart = $periodStart->copy()->setISODate((int) $periodStart->isoWeekYear - 1, (int) $periodStart->isoWeek, 1)->startOfDay();
+        $lastYearEnd = $lastYearStart->copy()->addDays(6)->endOfDay();
+        $lastYear = $this->donationTotals($lastYearStart, $lastYearEnd);
 
         // Previous month to date: same day-of-month span, clamped to the shorter month.
-        $previousMonthStart = $reportDate->copy()->subMonthNoOverflow()->startOfMonth();
-        $previousMonthEnd = $previousMonthStart->copy()->day(min($reportDate->day, $previousMonthStart->daysInMonth))->endOfDay();
+        $previousMonthStart = $periodEnd->copy()->subMonthNoOverflow()->startOfMonth();
+        $previousMonthEnd = $previousMonthStart->copy()->day(min($periodEnd->day, $previousMonthStart->daysInMonth))->endOfDay();
         $previousMtd = $this->donationTotals($previousMonthStart, $previousMonthEnd);
 
         return [
-            'vs_previous_day' => $this->compare(
-                'Yesterday vs. the day before',
-                $current,
-                $amountOn($previousDay),
-                $countOn($reportDate),
-                $countOn($previousDay),
-                $previousDay->format('D j M'),
+            'vs_previous_week' => $this->compare(
+                'This week vs. previous week',
+                (float) $current['amount_numeric'],
+                (float) $previous['amount_numeric'],
+                (int) $current['count'],
+                (int) $previous['count'],
+                (string) $previous['label'],
             ),
-            'vs_7_day_average' => $this->compare(
-                'Yesterday vs. 7-day daily average',
-                $current,
-                $sevenDayAverage,
-                $countOn($reportDate),
-                (int) round($this->average(array_map(fn (int $i): int => $countOn($reportDate->copy()->subDays($i)), range(1, 7)))),
-                $reportDate->copy()->subDays(7)->format('j M').' – '.$previousDay->format('j M'),
+            'vs_4_week_average' => $this->compare(
+                'This week vs. 4-week weekly average',
+                (float) $current['amount_numeric'],
+                $baselineAverage,
+                (int) $current['count'],
+                $baselineCountAverage,
+                $baselineLabel,
             ),
-            'vs_same_weekday_last_week' => $this->compare(
-                'Yesterday vs. same weekday last week',
-                $current,
-                $amountOn($sameWeekdayLastWeek),
-                $countOn($reportDate),
-                $countOn($sameWeekdayLastWeek),
-                $sameWeekdayLastWeek->format('D j M'),
+            'vs_same_week_last_year' => $this->compare(
+                'This week vs. same week last year',
+                (float) $current['amount_numeric'],
+                $lastYear['amount_numeric'],
+                (int) $current['count'],
+                $lastYear['count'],
+                $this->shortRangeLabel($lastYearStart, $lastYearEnd).' '.$lastYearEnd->format('Y'),
             ),
             'mtd_vs_previous_mtd' => $this->compare(
                 'Month to date vs. previous month to date',
@@ -296,13 +338,13 @@ class DailyDigestReportBuilder
     }
 
     // ---------------------------------------------------------------------
-    // Breakdowns (yesterday + month to date)
+    // Breakdowns (report week + month to date)
     // ---------------------------------------------------------------------
 
     /**
      * @return list<array<string,mixed>>
      */
-    private function breakdownByPaymentMethod(CarbonInterface $reportDate, CarbonInterface $reportDayEnd): array
+    private function breakdownByPaymentMethod(CarbonInterface $periodStart, CarbonInterface $periodEndOfDay): array
     {
         $label = function (?string $gateway, mixed $applicationType): string {
             $applicationType = $applicationType instanceof \BackedEnum ? $applicationType->value : $applicationType;
@@ -335,15 +377,15 @@ class DailyDigestReportBuilder
         };
 
         return $this->mergeBreakdown(
-            $fetch($reportDate, $reportDayEnd),
-            $fetch($reportDate->copy()->startOfMonth(), $reportDayEnd),
+            $fetch($periodStart, $periodEndOfDay),
+            $fetch($periodEndOfDay->copy()->startOfMonth(), $periodEndOfDay),
         );
     }
 
     /**
      * @return list<array<string,mixed>>
      */
-    private function breakdownByCurrency(CarbonInterface $reportDate, CarbonInterface $reportDayEnd): array
+    private function breakdownByCurrency(CarbonInterface $periodStart, CarbonInterface $periodEndOfDay): array
     {
         $fetch = function (CarbonInterface $from, CarbonInterface $to): array {
             $out = [];
@@ -364,15 +406,15 @@ class DailyDigestReportBuilder
         };
 
         return $this->mergeBreakdown(
-            $fetch($reportDate, $reportDayEnd),
-            $fetch($reportDate->copy()->startOfMonth(), $reportDayEnd),
+            $fetch($periodStart, $periodEndOfDay),
+            $fetch($periodEndOfDay->copy()->startOfMonth(), $periodEndOfDay),
         );
     }
 
     /**
      * @return list<array<string,mixed>>
      */
-    private function breakdownByDonorType(CarbonInterface $reportDate, CarbonInterface $reportDayEnd): array
+    private function breakdownByDonorType(CarbonInterface $periodStart, CarbonInterface $periodEndOfDay): array
     {
         $fetch = function (CarbonInterface $from, CarbonInterface $to): array {
             $out = [];
@@ -398,33 +440,33 @@ class DailyDigestReportBuilder
         };
 
         return $this->mergeBreakdown(
-            $fetch($reportDate, $reportDayEnd),
-            $fetch($reportDate->copy()->startOfMonth(), $reportDayEnd),
+            $fetch($periodStart, $periodEndOfDay),
+            $fetch($periodEndOfDay->copy()->startOfMonth(), $periodEndOfDay),
         );
     }
 
     /**
-     * @param  array<string, array{count:int, amount:float, native_amount?:float}>  $yesterday
+     * @param  array<string, array{count:int, amount:float, native_amount?:float}>  $week
      * @param  array<string, array{count:int, amount:float, native_amount?:float}>  $mtd
      * @return list<array<string,mixed>>
      */
-    private function mergeBreakdown(array $yesterday, array $mtd): array
+    private function mergeBreakdown(array $week, array $mtd): array
     {
-        $labels = array_unique(array_merge(array_keys($yesterday), array_keys($mtd)));
+        $labels = array_unique(array_merge(array_keys($week), array_keys($mtd)));
         $rows = [];
         foreach ($labels as $label) {
-            $y = $yesterday[$label] ?? ['count' => 0, 'amount' => 0.0];
+            $w = $week[$label] ?? ['count' => 0, 'amount' => 0.0];
             $m = $mtd[$label] ?? ['count' => 0, 'amount' => 0.0];
             $row = [
                 'label' => $label,
-                'yesterday_count' => $y['count'],
-                'yesterday_amount' => $this->money($y['amount']),
+                'week_count' => $w['count'],
+                'week_amount' => $this->money($w['amount']),
                 'mtd_count' => $m['count'],
                 'mtd_amount' => $this->money($m['amount']),
                 'mtd_amount_numeric' => $m['amount'],
             ];
-            if (array_key_exists('native_amount', $y) || array_key_exists('native_amount', $m)) {
-                $row['yesterday_native_amount'] = $this->money($y['native_amount'] ?? 0.0);
+            if (array_key_exists('native_amount', $w) || array_key_exists('native_amount', $m)) {
+                $row['week_native_amount'] = $this->money($w['native_amount'] ?? 0.0);
                 $row['mtd_native_amount'] = $this->money($m['native_amount'] ?? 0.0);
             }
             $rows[] = $row;
@@ -442,13 +484,14 @@ class DailyDigestReportBuilder
     /**
      * Single pass over active pledges producing the overdue list (grouped by
      * donor), campaign pledge aggregates, upcoming installments and paused list.
+     * Everything is evaluated as of $asOf (the last day of the report week).
      *
      * @return array<string, mixed>
      */
-    private function walkActivePledges(CarbonInterface $reportDate, int $upcomingDays): array
+    private function walkActivePledges(CarbonInterface $asOf, int $upcomingDays): array
     {
-        $reportDateString = $reportDate->toDateString();
-        $upcomingEnd = $reportDate->copy()->addDays($upcomingDays)->toDateString();
+        $asOfString = $asOf->toDateString();
+        $upcomingEnd = $asOf->copy()->addDays($upcomingDays)->toDateString();
 
         $donorGroups = [];
         $byCampaign = [];
@@ -475,9 +518,9 @@ class DailyDigestReportBuilder
             ])
             ->orderBy('id')
             ->chunkById(200, function (EloquentCollection $pledges) use (
-                $reportDateString,
+                $asOfString,
                 $upcomingEnd,
-                $reportDate,
+                $asOf,
                 &$donorGroups,
                 &$byCampaign,
                 &$upcoming,
@@ -530,7 +573,7 @@ class DailyDigestReportBuilder
                             continue;
                         }
 
-                        if ($due <= $reportDateString) {
+                        if ($due <= $asOfString) {
                             $byCampaign[$campaignKey]['scheduled_to_date'] += (float) $item['pledged_amount_ngn'];
                         }
 
@@ -538,8 +581,8 @@ class DailyDigestReportBuilder
                             continue;
                         }
 
-                        if (! $isPaused && $due <= $reportDateString) {
-                            $daysOverdue = (int) Carbon::parse($due)->startOfDay()->diffInDays($reportDate) + 1;
+                        if (! $isPaused && $due <= $asOfString) {
+                            $daysOverdue = (int) Carbon::parse($due)->startOfDay()->diffInDays($asOf) + 1;
                             $overdueItems[] = [
                                 'sequence' => (int) $item['sequence'],
                                 'due_date' => $due,
@@ -553,7 +596,7 @@ class DailyDigestReportBuilder
                             $overdueNgn += $remainingNgn;
                             $overdueNative += $remaining;
                             $this->addToAging($aging, $daysOverdue, $remainingNgn);
-                        } elseif (! $isPaused && $due > $reportDateString && $due <= $upcomingEnd) {
+                        } elseif (! $isPaused && $due > $asOfString && $due <= $upcomingEnd) {
                             $upcoming[] = [
                                 'due_date' => $due,
                                 'sequence' => (int) $item['sequence'],
@@ -819,6 +862,7 @@ class DailyDigestReportBuilder
                 'payment_plan' => $pledge->payment_plan_type instanceof \BackedEnum ? $pledge->payment_plan_type->value : (string) $pledge->payment_plan_type,
                 'installment_count' => $pledge->installment_count,
                 'status' => $pledge->status instanceof \BackedEnum ? $pledge->status->value : (string) $pledge->status,
+                'pledged_on' => $pledge->created_at?->toDateString(),
             ])
             ->values()
             ->all();
@@ -877,7 +921,7 @@ class DailyDigestReportBuilder
      * @param  array<string, array<string, float|int>>  $pledgesByCampaign
      * @return list<array<string,mixed>>
      */
-    private function campaignRows(CarbonInterface $reportDate, array $pledgesByCampaign): array
+    private function campaignRows(CarbonInterface $periodStart, CarbonInterface $periodEnd, array $pledgesByCampaign): array
     {
         $campaigns = Campaign::query()
             ->where(function (Builder $b) use ($pledgesByCampaign): void {
@@ -893,20 +937,21 @@ class DailyDigestReportBuilder
             return [];
         }
 
+        $periodEndOfDay = $periodEnd->copy()->endOfDay();
         $uuids = $campaigns->pluck('uuid')->all();
-        $raisedRows = $this->revenueQuery(null, $reportDate->copy()->endOfDay())
+        $raisedRows = $this->revenueQuery(null, $periodEndOfDay)
             ->whereIn('campaign_uuid', $uuids)
             ->selectRaw('campaign_uuid, COUNT(*) as tx_count, SUM(amount_in_naira) as total')
             ->groupBy('campaign_uuid')
             ->get()
             ->keyBy('campaign_uuid');
-        $yesterdayRows = $this->revenueQuery($reportDate, $reportDate->copy()->endOfDay())
+        $weekRows = $this->revenueQuery($periodStart, $periodEndOfDay)
             ->whereIn('campaign_uuid', $uuids)
             ->selectRaw('campaign_uuid, COUNT(*) as tx_count, SUM(amount_in_naira) as total')
             ->groupBy('campaign_uuid')
             ->get()
             ->keyBy('campaign_uuid');
-        $mtdRows = $this->revenueQuery($reportDate->copy()->startOfMonth(), $reportDate->copy()->endOfDay())
+        $mtdRows = $this->revenueQuery($periodEnd->copy()->startOfMonth(), $periodEndOfDay)
             ->whereIn('campaign_uuid', $uuids)
             ->selectRaw('campaign_uuid, COUNT(*) as tx_count, SUM(amount_in_naira) as total')
             ->groupBy('campaign_uuid')
@@ -937,8 +982,8 @@ class DailyDigestReportBuilder
                 'progress_percent' => $target > 0 ? round($raised / $target * 100, 1) : null,
                 'remaining_to_target_ngn' => $target > 0 ? $this->money(max(0, $target - $raised)) : null,
                 'donations_count' => (int) ($raisedRows[$campaign->uuid]->tx_count ?? 0),
-                'yesterday_count' => (int) ($yesterdayRows[$campaign->uuid]->tx_count ?? 0),
-                'yesterday_ngn' => $this->money((float) ($yesterdayRows[$campaign->uuid]->total ?? 0)),
+                'week_count' => (int) ($weekRows[$campaign->uuid]->tx_count ?? 0),
+                'week_ngn' => $this->money((float) ($weekRows[$campaign->uuid]->total ?? 0)),
                 'mtd_count' => (int) ($mtdRows[$campaign->uuid]->tx_count ?? 0),
                 'mtd_ngn' => $this->money((float) ($mtdRows[$campaign->uuid]->total ?? 0)),
                 'active_pledges' => (int) $pledged['pledges'],
@@ -978,15 +1023,39 @@ class DailyDigestReportBuilder
     }
 
     /**
-     * @param  list<array<string,mixed>>  $daily
+     * "Mon 7 Sep – Sun 13 Sep 2026", or with the years spelled out on both sides when the week straddles a year boundary.
+     */
+    private function periodLabel(CarbonInterface $start, CarbonInterface $end): string
+    {
+        if ($start->year !== $end->year) {
+            return $start->format('D j M Y').' – '.$end->format('D j M Y');
+        }
+
+        return $start->format('D j M').' – '.$end->format('D j M Y');
+    }
+
+    /**
+     * "7–13 Sep", or "28 Sep – 4 Oct" when the range crosses a month boundary.
+     */
+    private function shortRangeLabel(CarbonInterface $start, CarbonInterface $end): string
+    {
+        if ($start->month === $end->month && $start->year === $end->year) {
+            return $start->format('j').'–'.$end->format('j M');
+        }
+
+        return $start->format('j M').' – '.$end->format('j M');
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $series
      * @return array<string,mixed>|null
      */
-    private function peak(array $daily): ?array
+    private function peak(array $series): ?array
     {
         $peak = null;
-        foreach ($daily as $day) {
-            if ($peak === null || $day['amount_numeric'] > $peak['amount_numeric']) {
-                $peak = $day;
+        foreach ($series as $point) {
+            if ($peak === null || $point['amount_numeric'] > $peak['amount_numeric']) {
+                $peak = $point;
             }
         }
 

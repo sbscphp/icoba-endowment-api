@@ -4,51 +4,51 @@ namespace App\Http\Controllers\v1\Admin\Report;
 
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\Report\DailyDigestReportRequest;
+use App\Http\Requests\Admin\Report\WeeklyDigestReportRequest;
 use App\Responser\JsonResponser;
-use App\Services\Admin\Report\DailyDigest\DailyDigestDocumentRenderer;
-use App\Services\Admin\Report\DailyDigest\DailyDigestReportBuilder;
-use App\Services\Admin\Report\DailyDigest\DailyDigestReportService;
+use App\Services\Admin\Report\WeeklyDigest\WeeklyDigestDocumentRenderer;
+use App\Services\Admin\Report\WeeklyDigest\WeeklyDigestReportBuilder;
+use App\Services\Admin\Report\WeeklyDigest\WeeklyDigestReportService;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * On-demand version of the emailed daily digest. Same builder, so the numbers
+ * On-demand version of the emailed weekly digest. Same builder, so the numbers
  * always match what admins received by email.
  */
-class DailyDigestReportController extends Controller
+class WeeklyDigestReportController extends Controller
 {
     public function __construct(
-        private readonly DailyDigestReportBuilder $builder,
-        private readonly DailyDigestDocumentRenderer $renderer,
+        private readonly WeeklyDigestReportBuilder $builder,
+        private readonly WeeklyDigestDocumentRenderer $renderer,
     ) {}
 
-    public function show(DailyDigestReportRequest $request)
+    public function show(WeeklyDigestReportRequest $request)
     {
         try {
             $validated = $request->validated();
-            $reportDate = DailyDigestReportService::resolveReportDate($validated['date'] ?? null);
+            $periodEnd = WeeklyDigestReportService::resolvePeriodEnd($validated['date'] ?? null);
             $export = $validated['export'] ?? null;
 
             if ($export !== null && $export !== '') {
                 $this->ensureCanExport($request);
             }
 
-            $report = $this->builder->build($reportDate);
+            $report = $this->builder->build($periodEnd);
 
             return match ($export) {
                 'pdf' => new Response($this->renderer->renderPdf($report), 200, [
                     'Content-Type' => 'application/pdf',
-                    'Content-Disposition' => 'attachment; filename="'.DailyDigestReportService::pdfFilename($report['report_date']).'"',
+                    'Content-Disposition' => 'attachment; filename="'.WeeklyDigestReportService::pdfFilename($report['period_start'], $report['period_end']).'"',
                 ]),
                 'csv' => new Response($this->renderer->renderOverdueCsv($report), 200, [
                     'Content-Type' => 'text/csv; charset=UTF-8',
-                    'Content-Disposition' => 'attachment; filename="'.DailyDigestReportService::csvFilename($report['report_date']).'"',
+                    'Content-Disposition' => 'attachment; filename="'.WeeklyDigestReportService::csvFilename($report['period_end']).'"',
                 ]),
-                default => JsonResponser::send(false, 'Daily digest report generated.', $report),
+                default => JsonResponser::send(false, 'Weekly digest report generated.', $report),
             };
         } catch (\Throwable $th) {
-            return GeneralHelper::handleControllerThrowable($th, 'Admin\Report\DailyDigestReportController@show');
+            return GeneralHelper::handleControllerThrowable($th, 'Admin\Report\WeeklyDigestReportController@show');
         }
     }
 

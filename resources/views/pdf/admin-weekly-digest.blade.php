@@ -2,42 +2,44 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Daily digest — {{ $report['report_date'] }}</title>
+    <title>Weekly digest — {{ $report['period_start'] }} to {{ $report['period_end'] }}</title>
     @php
         $ngn = fn ($v) => '₦'.number_format((float) $v, 2);
         $ngn0 = fn ($v) => '₦'.number_format((float) $v, 0);
         $pct = fn ($v) => $v === null ? 'n/a' : number_format((float) $v, 1).'%';
         $summary = $report['summary'];
         $overdue = $report['overdue'];
+        $weekly = $report['trend']['weekly'];
         $daily = $report['trend']['daily'];
         $monthly = $report['trend']['monthly'];
         $dirClass = fn (string $d) => $d === 'increase' ? 'up' : ($d === 'decrease' ? 'down' : 'flat');
         $dirSign = fn (string $d) => $d === 'increase' ? '▲' : ($d === 'decrease' ? '▼' : '•');
         $dash = fn ($v) => ($v === null || $v === '') ? '—' : $v;
+        $upcomingDays = (int) config('reports.weekly_digest.upcoming_days', 7);
 
-        // Bar chart: built as an SVG document and embedded as an <img> data URI,
-        // which dompdf renders reliably (inline <svg> is not supported).
+        // Bar chart of weekly totals: built as an SVG document and embedded as an
+        // <img> data URI, which dompdf renders reliably (inline <svg> is not supported).
         $chartW = 540; $chartH = 150; $padL = 8; $padB = 26; $padT = 12;
-        $maxDaily = max(1.0, (float) max(array_column($daily, 'amount_numeric') ?: [0]));
-        $n = max(1, count($daily));
+        $maxWeekly = max(1.0, (float) max(array_column($weekly, 'amount_numeric') ?: [0]));
+        $n = max(1, count($weekly));
         $slot = ($chartW - $padL * 2) / $n;
         $barW = max(4, $slot * 0.6);
         $plotH = $chartH - $padB - $padT;
         $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'.$chartW.'" height="'.$chartH.'" viewBox="0 0 '.$chartW.' '.$chartH.'">';
         $svg .= '<rect x="0" y="0" width="'.$chartW.'" height="'.$chartH.'" fill="#ffffff"/>';
         $svg .= '<line x1="'.$padL.'" y1="'.($chartH - $padB).'" x2="'.($chartW - $padL).'" y2="'.($chartH - $padB).'" stroke="#9ca3af" stroke-width="1"/>';
-        foreach ($daily as $i => $day) {
-            $h = $day['amount_numeric'] > 0 ? max(1.5, ($day['amount_numeric'] / $maxDaily) * $plotH) : 0;
+        foreach ($weekly as $i => $week) {
+            $h = $week['amount_numeric'] > 0 ? max(1.5, ($week['amount_numeric'] / $maxWeekly) * $plotH) : 0;
             $x = $padL + $i * $slot + ($slot - $barW) / 2;
             $y = $chartH - $padB - $h;
             $cx = round($x + $barW / 2, 1);
-            $fill = $i === count($daily) - 1 ? '#111827' : '#4f46e5';
+            $fill = $week['is_current'] ? '#111827' : '#4f46e5';
             if ($h > 0) {
                 $svg .= '<rect x="'.round($x, 1).'" y="'.round($y, 1).'" width="'.round($barW, 1).'" height="'.round($h, 1).'" rx="1.5" fill="'.$fill.'"/>';
-                $svg .= '<text x="'.$cx.'" y="'.round(max($padT - 2, $y - 3), 1).'" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="6.5" fill="#374151">'.number_format($day['amount_numeric'] / 1000, 0).'k</text>';
+                $svg .= '<text x="'.$cx.'" y="'.round(max($padT - 2, $y - 3), 1).'" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="6.5" fill="#374151">'.number_format($week['amount_numeric'] / 1000, 0).'k</text>';
             }
-            $svg .= '<text x="'.$cx.'" y="'.($chartH - $padB + 10).'" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="6.5" fill="#6b7280">'.\Carbon\Carbon::parse($day['date'])->format('d').'</text>';
-            $svg .= '<text x="'.$cx.'" y="'.($chartH - $padB + 19).'" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="6.5" fill="#6b7280">'.\Carbon\Carbon::parse($day['date'])->format('D').'</text>';
+            $svg .= '<text x="'.$cx.'" y="'.($chartH - $padB + 10).'" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="6.5" fill="#6b7280">'.\Carbon\Carbon::parse($week['week_start'])->format('j M').'</text>';
+            $svg .= '<text x="'.$cx.'" y="'.($chartH - $padB + 19).'" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="6.5" fill="#6b7280">W'.$week['iso_week'].'</text>';
         }
         $svg .= '</svg>';
         $chartSrc = 'data:image/svg+xml;base64,'.base64_encode($svg);
@@ -77,6 +79,7 @@
         .grid th, .grid td { border: 1px solid #e5e7eb; padding: 4px 5px; vertical-align: top; }
         .grid th { background: #111827; color: #fff; font-size: 7.5px; text-align: left; }
         .grid tbody tr:nth-child(even) td { background: #f9fafb; }
+        .grid tbody tr.current td { background: #eef2ff; font-weight: bold; }
         .grid tfoot td { font-weight: bold; background: #eef2ff; }
         .donor-block { border: 1px solid #d1d5db; border-radius: 8px; margin: 0 0 8px; page-break-inside: avoid; }
         .donor-head td { padding: 6px 8px; background: #f3f4f6; border-bottom: 1px solid #d1d5db; }
@@ -94,7 +97,7 @@
 <body>
     <div class="footer">
         <table><tr>
-            <td>{{ config('app.name') }} · Daily digest for {{ $report['report_date'] }} · Confidential — contains donor contact details</td>
+            <td>{{ config('app.name') }} · Weekly digest for {{ $report['period_start'] }} to {{ $report['period_end'] }} · Confidential — contains donor contact details</td>
             <td class="right">Page <span class="page"></span></td>
         </tr></table>
     </div>
@@ -111,9 +114,9 @@
                 <div class="muted small" style="margin-top: 4px;">{{ config('endowment.foundation_name') }}</div>
             </td>
             <td class="right">
-                <h1>Daily Donations &amp; Pledges Digest</h1>
-                <div class="muted">Report for <strong>{{ $report['report_date_label'] }}</strong></div>
-                <div class="muted small">Generated {{ $report['generated_at']->format('Y-m-d H:i') }} ({{ $report['timezone'] }}) · All amounts in NGN unless stated</div>
+                <h1>Weekly Donations &amp; Pledges Digest</h1>
+                <div class="muted">Week {{ $report['iso_week'] }} · <strong>{{ $report['period_label'] }}</strong></div>
+                <div class="muted small">Generated {{ $report['generated_at']->format('Y-m-d H:i') }} ({{ $report['timezone'] }}) · Balances as of {{ $report['period_end'] }} · All amounts in NGN unless stated</div>
             </td>
         </tr>
     </table>
@@ -122,9 +125,9 @@
     <table class="kpis">
         <tr>
             <td><div class="kpi">
-                <div class="label">Donations yesterday</div>
-                <div class="value">{{ $ngn0($summary['donations_yesterday']['amount']) }}</div>
-                <div class="sub">{{ $summary['donations_yesterday']['count'] }} donations · {{ $summary['donations_yesterday']['donors'] }} donors</div>
+                <div class="label">Donations this week</div>
+                <div class="value">{{ $ngn0($summary['donations_this_week']['amount']) }}</div>
+                <div class="sub">{{ $summary['donations_this_week']['count'] }} donations · {{ $summary['donations_this_week']['donors'] }} donors</div>
             </div></td>
             <td><div class="kpi">
                 <div class="label">Month to date</div>
@@ -159,9 +162,9 @@
                 <div class="sub">{{ $ngn0($summary['active_pledges']['honored_ngn']) }} honored · {{ $ngn0($summary['active_pledges']['pending_ngn']) }} pending</div>
             </div></td>
             <td><div class="kpi">
-                <div class="label">Pledge activity yesterday</div>
-                <div class="value">{{ $summary['new_pledges_yesterday']['count'] }} new</div>
-                <div class="sub">{{ $ngn0($summary['new_pledges_yesterday']['committed_ngn']) }} committed · {{ $summary['pledges_fulfilled_yesterday'] }} fulfilled · {{ $summary['paused_pledges'] }} paused</div>
+                <div class="label">Pledge activity this week</div>
+                <div class="value">{{ $summary['new_pledges_this_week']['count'] }} new</div>
+                <div class="sub">{{ $ngn0($summary['new_pledges_this_week']['committed_ngn']) }} committed · {{ $summary['pledges_fulfilled_this_week'] }} fulfilled · {{ $summary['paused_pledges'] }} paused</div>
             </div></td>
         </tr>
     </table>
@@ -175,33 +178,47 @@
 
     {{-- ============================ TREND ============================ --}}
     <h2>2. Donation trend</h2>
-    <h3>Daily donations — last {{ count($daily) }} days (NGN)</h3>
-    <img src="{{ $chartSrc }}" width="{{ $chartW }}" height="{{ $chartH }}" alt="Daily donations chart" style="display:block;">
-    @if((float) max(array_column($daily, 'amount_numeric') ?: [0]) <= 0)
+    <h3>Weekly donations — last {{ count($weekly) }} weeks (NGN)</h3>
+    <img src="{{ $chartSrc }}" width="{{ $chartW }}" height="{{ $chartH }}" alt="Weekly donations chart" style="display:block;">
+    @if((float) max(array_column($weekly, 'amount_numeric') ?: [0]) <= 0)
         <p class="muted small">No donations were recorded in this window.</p>
     @endif
-    <p class="muted small">Bar labels are in thousands of naira. Dark bar is the report date. Daily average over the window: {{ $ngn($report['trend']['daily_average']) }}@if($report['trend']['peak_day']); best day: {{ $report['trend']['peak_day']['label'] }} ({{ $ngn($report['trend']['peak_day']['amount']) }})@endif.</p>
+    <p class="muted small">Bar labels are in thousands of naira; each bar is a Monday–Sunday week labelled by its first day and ISO week number. Dark bar is the report week. Weekly average over the window: {{ $ngn($report['trend']['weekly_average']) }}@if($report['trend']['peak_week']); best week: {{ $report['trend']['peak_week']['label'] }} ({{ $ngn($report['trend']['peak_week']['amount']) }})@endif.</p>
 
     <table>
         <tr>
-            <td style="width: 58%; padding-right: 8px; vertical-align: top;">
-                <h3>Daily detail</h3>
+            <td style="width: 50%; padding-right: 8px; vertical-align: top;">
+                <h3>This week by day</h3>
                 <table class="grid">
                     <thead><tr><th>Date</th><th class="right">Donations</th><th class="right">Amount (NGN)</th></tr></thead>
                     <tbody>
-                        @foreach(array_reverse($daily) as $day)
+                        @foreach($daily as $day)
                             <tr><td>{{ \Carbon\Carbon::parse($day['date'])->format('D, j M Y') }}</td><td class="right">{{ $day['count'] }}</td><td class="right">{{ $ngn($day['amount']) }}</td></tr>
                         @endforeach
                     </tbody>
+                    <tfoot><tr><td>Week total</td><td class="right">{{ $summary['donations_this_week']['count'] }}</td><td class="right">{{ $ngn($summary['donations_this_week']['amount']) }}</td></tr></tfoot>
                 </table>
-            </td>
-            <td style="width: 42%; vertical-align: top;">
+                @if($report['trend']['peak_day'])
+                    <p class="muted small" style="margin-top: 4px;">Best day this week: {{ $report['trend']['peak_day']['label'] }} ({{ $ngn($report['trend']['peak_day']['amount']) }}).</p>
+                @endif
+
                 <h3>Monthly detail</h3>
                 <table class="grid">
                     <thead><tr><th>Month</th><th class="right">Donations</th><th class="right">Amount (NGN)</th></tr></thead>
                     <tbody>
                         @foreach(array_reverse($monthly) as $m)
                             <tr><td>{{ $m['label'] }}@if($m['is_partial']) <span class="muted small">(to date)</span>@endif</td><td class="right">{{ $m['count'] }}</td><td class="right">{{ $ngn($m['amount']) }}</td></tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </td>
+            <td style="width: 50%; vertical-align: top;">
+                <h3>Weekly detail</h3>
+                <table class="grid">
+                    <thead><tr><th>Week</th><th>Dates</th><th class="right">Donations</th><th class="right">Amount (NGN)</th></tr></thead>
+                    <tbody>
+                        @foreach(array_reverse($weekly) as $w)
+                            <tr class="{{ $w['is_current'] ? 'current' : '' }}"><td class="nowrap">W{{ $w['iso_week'] }}</td><td class="nowrap">{{ $w['label'] }}</td><td class="right">{{ $w['count'] }}</td><td class="right">{{ $ngn($w['amount']) }}</td></tr>
                         @endforeach
                     </tbody>
                 </table>
@@ -232,7 +249,7 @@
     <p class="muted small">"n/a" means the baseline was zero, so a percentage change cannot be computed.</p>
 
     <h3>Pledge schedule variance by campaign (expected vs. honored)</h3>
-    <p class="muted small">"Scheduled to date" is the sum of all installments that fell due on or before the report date across active pledges. "Gap" is how far behind schedule collections are; the collection rate is honored ÷ scheduled.</p>
+    <p class="muted small">"Scheduled to date" is the sum of all installments that fell due on or before {{ $report['period_end'] }} across active pledges. "Gap" is how far behind schedule collections are; the collection rate is honored ÷ scheduled.</p>
     <table class="grid">
         <thead>
             <tr><th>Campaign</th><th class="right">Active pledges</th><th class="right">Committed</th><th class="right">Scheduled to date</th><th class="right">Honored</th><th class="right">Gap</th><th class="right">Collection</th><th class="right">Overdue</th></tr>
@@ -261,7 +278,7 @@
     <h2>4. Campaign performance</h2>
     <table class="grid">
         <thead>
-            <tr><th>Campaign</th><th>Status</th><th class="right">Target</th><th class="right">Raised</th><th class="right">Progress</th><th class="right">To target</th><th class="right">Yesterday</th><th class="right">Month to date</th><th class="right">Pledged outstanding</th><th>Ends</th></tr>
+            <tr><th>Campaign</th><th>Status</th><th class="right">Target</th><th class="right">Raised</th><th class="right">Progress</th><th class="right">To target</th><th class="right">This week</th><th class="right">Month to date</th><th class="right">Pledged outstanding</th><th>Ends</th></tr>
         </thead>
         <tbody>
             @forelse($report['campaigns'] as $c)
@@ -272,7 +289,7 @@
                     <td class="right">{{ $ngn0($c['raised_ngn']) }}<br><span class="muted small">{{ $c['donations_count'] }} donations</span></td>
                     <td class="right">{{ $pct($c['progress_percent']) }}</td>
                     <td class="right">{{ $c['remaining_to_target_ngn'] !== null ? $ngn0($c['remaining_to_target_ngn']) : '—' }}</td>
-                    <td class="right">{{ $ngn0($c['yesterday_ngn']) }}<br><span class="muted small">{{ $c['yesterday_count'] }}</span></td>
+                    <td class="right">{{ $ngn0($c['week_ngn']) }}<br><span class="muted small">{{ $c['week_count'] }}</span></td>
                     <td class="right">{{ $ngn0($c['mtd_ngn']) }}<br><span class="muted small">{{ $c['mtd_count'] }}</span></td>
                     <td class="right">{{ $ngn0($c['pledged_pending_ngn']) }}</td>
                     <td class="nowrap">{{ $dash($c['end_date']) }}</td>
@@ -284,16 +301,16 @@
     </table>
 
     {{-- ============================ BREAKDOWNS ============================ --}}
-    <h2>5. Breakdowns (yesterday and month to date)</h2>
+    <h2>5. Breakdowns (this week and month to date)</h2>
     <table>
         <tr>
             <td style="width: 50%; padding-right: 6px; vertical-align: top;">
                 <h3>By payment method</h3>
                 <table class="grid">
-                    <thead><tr><th>Method</th><th class="right">Yesterday</th><th class="right">MTD</th></tr></thead>
+                    <thead><tr><th>Method</th><th class="right">This week</th><th class="right">MTD</th></tr></thead>
                     <tbody>
                         @forelse($report['breakdowns']['payment_method'] as $r)
-                            <tr><td>{{ $r['label'] }}</td><td class="right">{{ $ngn0($r['yesterday_amount']) }} <span class="muted small">({{ $r['yesterday_count'] }})</span></td><td class="right">{{ $ngn0($r['mtd_amount']) }} <span class="muted small">({{ $r['mtd_count'] }})</span></td></tr>
+                            <tr><td>{{ $r['label'] }}</td><td class="right">{{ $ngn0($r['week_amount']) }} <span class="muted small">({{ $r['week_count'] }})</span></td><td class="right">{{ $ngn0($r['mtd_amount']) }} <span class="muted small">({{ $r['mtd_count'] }})</span></td></tr>
                         @empty
                             <tr><td colspan="3" class="muted center">No donations this month.</td></tr>
                         @endforelse
@@ -303,10 +320,10 @@
             <td style="width: 50%; vertical-align: top;">
                 <h3>By donor type</h3>
                 <table class="grid">
-                    <thead><tr><th>Donor type</th><th class="right">Yesterday</th><th class="right">MTD</th></tr></thead>
+                    <thead><tr><th>Donor type</th><th class="right">This week</th><th class="right">MTD</th></tr></thead>
                     <tbody>
                         @forelse($report['breakdowns']['donor_type'] as $r)
-                            <tr><td>{{ $r['label'] }}</td><td class="right">{{ $ngn0($r['yesterday_amount']) }} <span class="muted small">({{ $r['yesterday_count'] }})</span></td><td class="right">{{ $ngn0($r['mtd_amount']) }} <span class="muted small">({{ $r['mtd_count'] }})</span></td></tr>
+                            <tr><td>{{ $r['label'] }}</td><td class="right">{{ $ngn0($r['week_amount']) }} <span class="muted small">({{ $r['week_count'] }})</span></td><td class="right">{{ $ngn0($r['mtd_amount']) }} <span class="muted small">({{ $r['mtd_count'] }})</span></td></tr>
                         @empty
                             <tr><td colspan="3" class="muted center">No donations this month.</td></tr>
                         @endforelse
@@ -317,13 +334,13 @@
     </table>
     <h3>By currency</h3>
     <table class="grid">
-        <thead><tr><th>Currency</th><th class="right">Yesterday (native)</th><th class="right">Yesterday (NGN)</th><th class="right">MTD (native)</th><th class="right">MTD (NGN)</th></tr></thead>
+        <thead><tr><th>Currency</th><th class="right">This week (native)</th><th class="right">This week (NGN)</th><th class="right">MTD (native)</th><th class="right">MTD (NGN)</th></tr></thead>
         <tbody>
             @forelse($report['breakdowns']['currency'] as $r)
                 <tr>
                     <td>{{ $r['label'] }}</td>
-                    <td class="right">{{ number_format((float) $r['yesterday_native_amount'], 2) }} <span class="muted small">({{ $r['yesterday_count'] }})</span></td>
-                    <td class="right">{{ $ngn0($r['yesterday_amount']) }}</td>
+                    <td class="right">{{ number_format((float) $r['week_native_amount'], 2) }} <span class="muted small">({{ $r['week_count'] }})</span></td>
+                    <td class="right">{{ $ngn0($r['week_amount']) }}</td>
                     <td class="right">{{ number_format((float) $r['mtd_native_amount'], 2) }} <span class="muted small">({{ $r['mtd_count'] }})</span></td>
                     <td class="right">{{ $ngn0($r['mtd_amount']) }}</td>
                 </tr>
@@ -335,10 +352,10 @@
 
     {{-- ============================ OVERDUE FOLLOW-UP ============================ --}}
     <h2 class="page-break">6. Overdue pledges — follow-up list</h2>
-    <p class="muted small">Overdue means an installment was due on or before {{ $report['report_date'] }} and still has a balance. Partially paid installments are included. Paused pledges are excluded here and listed in section 8. Sorted by overdue amount, largest first. "Anonymous" marks pledges hidden from public displays; contact details are shown here for internal follow-up only.</p>
+    <p class="muted small">Overdue means an installment was due on or before {{ $report['period_end'] }} (the last day of the report week) and still has a balance. Partially paid installments are included. Paused pledges are excluded here and listed in section 8. Sorted by overdue amount, largest first. "Anonymous" marks pledges hidden from public displays; contact details are shown here for internal follow-up only.</p>
 
     @if(empty($overdue['donors']))
-        <div class="ok">No overdue pledge installments. Nothing to follow up today.</div>
+        <div class="ok">No overdue pledge installments. Nothing to follow up this week.</div>
     @else
         <table>
             <tr>
@@ -425,7 +442,7 @@
     @endif
 
     {{-- ============================ UPCOMING ============================ --}}
-    <h2>7. Installments due in the next {{ (int) config('reports.daily_digest.upcoming_days', 7) }} days</h2>
+    <h2>7. Installments due in the {{ $upcomingDays }} days after {{ $report['period_end'] }}</h2>
     @if(empty($report['upcoming']))
         <p class="muted">No installments fall due in this window.</p>
     @else
@@ -474,16 +491,18 @@
     @endif
 
     {{-- ============================ NEW / FULFILLED ============================ --}}
-    <h2>9. Pledge activity on {{ $report['report_date'] }}</h2>
+    <h2>9. Pledge activity during the week ({{ $report['period_label'] }})</h2>
     <h3>New pledges ({{ count($report['new_pledges']) }})</h3>
     @if(empty($report['new_pledges']))
-        <p class="muted">No new pledges.</p>
+        <p class="muted">No new pledges this week.</p>
     @else
+        @if(count($report['new_pledges']) > $maxListRows)<div class="callout">Showing the largest {{ $maxListRows }} of {{ count($report['new_pledges']) }} new pledges.</div>@endif
         <table class="grid">
-            <thead><tr><th>Donor</th><th>Email</th><th>Phone</th><th>Campaign</th><th>Plan</th><th class="right">Committed</th><th class="right">NGN</th></tr></thead>
+            <thead><tr><th>Pledged on</th><th>Donor</th><th>Email</th><th>Phone</th><th>Campaign</th><th>Plan</th><th class="right">Committed</th><th class="right">NGN</th></tr></thead>
             <tbody>
                 @foreach(array_slice($report['new_pledges'], 0, $maxListRows) as $p)
                     <tr>
+                        <td class="nowrap">{{ $dash($p['pledged_on']) }}</td>
                         <td>{{ $p['donor']['name'] }}@if($p['donor']['is_anonymous']) <span class="tag tag-warn">Anon</span>@endif</td>
                         <td>{{ $dash($p['donor']['email']) }}</td>
                         <td>{{ $dash($p['donor']['phone']) }}</td>
@@ -499,13 +518,15 @@
 
     <h3>Pledges fulfilled ({{ count($report['fulfilled_pledges']) }})</h3>
     @if(empty($report['fulfilled_pledges']))
-        <p class="muted">No pledges were completed.</p>
+        <p class="muted">No pledges were completed this week.</p>
     @else
+        @if(count($report['fulfilled_pledges']) > $maxListRows)<div class="callout">Showing the largest {{ $maxListRows }} of {{ count($report['fulfilled_pledges']) }} fulfilled pledges.</div>@endif
         <table class="grid">
-            <thead><tr><th>Donor</th><th>Email</th><th>Campaign</th><th class="right">Committed</th><th class="right">NGN</th><th>Pledged on</th></tr></thead>
+            <thead><tr><th>Fulfilled on</th><th>Donor</th><th>Email</th><th>Campaign</th><th class="right">Committed</th><th class="right">NGN</th><th>Pledged on</th></tr></thead>
             <tbody>
                 @foreach(array_slice($report['fulfilled_pledges'], 0, $maxListRows) as $p)
                     <tr>
+                        <td class="nowrap">{{ $dash($p['fulfilled_at']) }}</td>
                         <td>{{ $p['donor']['name'] }}</td>
                         <td>{{ $dash($p['donor']['email']) }}</td>
                         <td>{{ $dash($p['campaign']) }}</td>
@@ -518,6 +539,6 @@
         </table>
     @endif
 
-    <p class="muted small" style="margin-top: 14px;">Notes: donation figures count successful transactions by the date they were created and use the naira value recorded at the time. Pledge figures come from each pledge's installment schedule; foreign-currency pledges are converted at the rate captured when the pledge was made.</p>
+    <p class="muted small" style="margin-top: 14px;">Notes: donation figures count successful transactions by the date they were created and use the naira value recorded at the time. Pledge figures come from each pledge's installment schedule; foreign-currency pledges are converted at the rate captured when the pledge was made. Balances, overdue amounts and campaign totals are as of {{ $report['period_end'] }}.</p>
 </body>
 </html>
