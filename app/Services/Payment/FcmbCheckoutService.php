@@ -53,14 +53,6 @@ final class FcmbCheckoutService
         ?string $legacyCancelUrl = null,
         ?string $frontendUrl = null,
     ): array {
-        $currency = strtoupper((string) $transaction->currency);
-        $this->assertCurrencyAllowed($currency);
-
-        $email = $this->resolveDonorEmail($transaction, $donorUser);
-        $invoiceRequestReference = (string) $transaction->uuid;
-        $amount = (float) $transaction->amount;
-        [$firstName, $lastName] = $this->splitDonorName($transaction);
-
         $redirects = $this->redirectResolver->resolve(
             'fcmb',
             $successUrl,
@@ -69,33 +61,8 @@ final class FcmbCheckoutService
             $frontendUrl,
         );
 
-        $payload = [
-            'amount' => $amount,
-            'description' => 'ICOBA Endowment Donation',
-            'currency' => $currency,
-            'firstName' => $firstName,
-            'lastName' => $lastName,
-            'email' => $email,
-            'invoiceRequestReference' => $invoiceRequestReference,
-            'isVatEnabled' => false,
-            'customFields' => [
-                [
-                    'label' => 'transaction_uuid',
-                    'value' => $transaction->uuid,
-                ],
-            ],
-            'hash' => $this->hashInitializePayment($amount, $email, $invoiceRequestReference),
-        ];
-
-        $settlements = $this->buildSettlements($currency);
-        if ($settlements !== null) {
-            $payload['settlements'] = $settlements;
-        }
-
-        $phone = $this->resolveDonorPhone($transaction, $donorUser);
-        if ($phone !== null) {
-            $payload['phoneNumber'] = $phone;
-        }
+        $payload = $this->buildInitializePayload($transaction, $donorUser, $redirects['success_url']);
+        $invoiceRequestReference = $payload['invoiceRequestReference'];
 
         $response = $this->client()->post('/api/v1/public/pay', $payload);
 
@@ -137,6 +104,67 @@ final class FcmbCheckoutService
             'success_url' => $redirects['success_url'],
             'failed_url' => $redirects['failed_url'],
         ];
+    }
+
+    /**
+     * Build the CLNX `POST /api/v1/public/pay` request body.
+     *
+     * CLNX accepts a single `returnUrl` for both outcomes, so the success URL is used as the
+     * landing page with the gateway and reference appended; the frontend then calls the verify
+     * endpoint, which returns the final success/failed redirect.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildInitializePayload(Transaction $transaction, ?User $donorUser, string $returnBaseUrl): array
+    {
+        $currency = strtoupper((string) $transaction->currency);
+        $this->assertCurrencyAllowed($currency);
+
+        $email = $this->resolveDonorEmail($transaction, $donorUser);
+        $invoiceRequestReference = (string) $transaction->uuid;
+        $amount = (float) $transaction->amount;
+        [$firstName, $lastName] = $this->splitDonorName($transaction);
+
+        $payload = [
+            'amount' => $amount,
+            'description' => 'ICOBA Endowment Donation',
+            'currency' => $currency,
+            'firstName' => $firstName,
+            'lastName' => $lastName,
+            'email' => $email,
+            'invoiceRequestReference' => $invoiceRequestReference,
+            'isVatEnabled' => false,
+            'customFields' => [
+                [
+                    'label' => 'transaction_uuid',
+                    'value' => $transaction->uuid,
+                ],
+            ],
+            'returnUrl' => $this->buildReturnUrl($returnBaseUrl, $invoiceRequestReference),
+            'hash' => $this->hashInitializePayment($amount, $email, $invoiceRequestReference),
+        ];
+
+        $settlements = $this->buildSettlements($currency);
+        if ($settlements !== null) {
+            $payload['settlements'] = $settlements;
+        }
+
+        $phone = $this->resolveDonorPhone($transaction, $donorUser);
+        if ($phone !== null) {
+            $payload['phoneNumber'] = $phone;
+        }
+
+        return $payload;
+    }
+
+    private function buildReturnUrl(string $baseUrl, string $invoiceRequestReference): string
+    {
+        $query = http_build_query([
+            'payment_gateway' => 'fcmb',
+            'reference' => $invoiceRequestReference,
+        ]);
+
+        return rtrim($baseUrl, '?&').(str_contains($baseUrl, '?') ? '&' : '?').$query;
     }
 
     /**
