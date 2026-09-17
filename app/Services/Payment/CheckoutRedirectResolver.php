@@ -5,10 +5,14 @@ namespace App\Services\Payment;
 use App\Models\Transaction;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Resolves post-checkout redirect targets for hosted gateways.
+ *
+ * Precedence: explicit request URL → request frontend_url + path → gateway env override
+ * (STRIPE_SUCCESS_URL, PAYSTACK_CALLBACK_URL, FCMB_SUCCESS_URL, …) → FRONTEND_URL + path.
+ */
 final class CheckoutRedirectResolver
 {
-    private const DEFAULT_FRONTEND_URL = 'https://icoba-endowment.netlify.app';
-
     /**
      * @return array{success_url: string, failed_url: string}
      */
@@ -64,12 +68,12 @@ final class CheckoutRedirectResolver
             ?? $this->urlFromFrontendBase($frontendUrl, '/donate/success')
             ?? $this->configuredUrl($gateway, 'success_url')
             ?? $this->configuredUrl($gateway, 'callback_url')
-            ?? self::DEFAULT_FRONTEND_URL.'/donate/success';
+            ?? $this->urlFromFrontendBase($this->appFrontendUrl(), '/donate/success');
 
         if (! is_string($base) || trim($base) === '') {
-            Log::warning("{$gateway} checkout: falling back to default frontend URL for success URL.");
+            Log::warning("{$gateway} checkout: no success redirect URL could be resolved; set FRONTEND_URL.");
 
-            $base = self::DEFAULT_FRONTEND_URL.'/donate/success';
+            $base = '/donate/success';
         }
 
         if ($gateway === 'stripe') {
@@ -90,13 +94,26 @@ final class CheckoutRedirectResolver
             ?? $this->urlFromFrontendBase($frontendUrl, '/donate/failed')
             ?? $this->configuredUrl($gateway, 'failed_url')
             ?? $this->configuredUrl($gateway, 'cancel_url')
-            ?? self::DEFAULT_FRONTEND_URL.'/donate/failed';
+            ?? $this->urlFromFrontendBase($this->appFrontendUrl(), '/donate/failed');
 
         if (! is_string($base) || trim($base) === '') {
-            $base = self::DEFAULT_FRONTEND_URL.'/donate/failed';
+            Log::warning("{$gateway} checkout: no failed redirect URL could be resolved; set FRONTEND_URL.");
+
+            $base = '/donate/failed';
         }
 
         return $base;
+    }
+
+    private function appFrontendUrl(): ?string
+    {
+        $url = config('app.frontend_url');
+
+        if (! is_string($url) || trim($url) === '') {
+            return null;
+        }
+
+        return $url;
     }
 
     private function urlFromFrontendBase(?string $frontendUrl, string $path): ?string
