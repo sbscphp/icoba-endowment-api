@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\PledgePaymentPlanType;
 use App\Enums\PledgeStatus;
+use App\Support\PaymentMode;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,9 +17,19 @@ class Pledge extends Model
 
     protected $guarded = ['id', 'uuid'];
 
+    protected static function booted(): void
+    {
+        static::creating(function (Pledge $pledge): void {
+            if (! array_key_exists('is_test', $pledge->getAttributes())) {
+                $pledge->is_test = PaymentMode::isTest();
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return [
+            'is_test' => 'boolean',
             'committed_amount' => 'decimal:2',
             'committed_amount_ngn' => 'decimal:2',
             'exchange_rate_to_naira' => 'decimal:6',

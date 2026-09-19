@@ -451,6 +451,11 @@ class PledgeService
             $truthy = in_array($anonymous, ['1', 1, true, 'true'], true);
             $query->where('pledges.is_anonymous', $truthy);
         }
+
+        $isTest = data_get($validated, 'filters.is_test');
+        if ($isTest !== null && $isTest !== '') {
+            $query->where('pledges.is_test', in_array($isTest, ['1', 1, true, 'true'], true));
+        }
     }
 
     /**

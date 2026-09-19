@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\PaymentGateway;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
+use App\Support\PaymentMode;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -19,6 +20,31 @@ class Transaction extends Model
 
     protected $guarded = ['id', 'uuid'];
 
+    protected static function booted(): void
+    {
+        // Every creation path (checkout intents, placeholders, admin manual, bank feed) is tagged here.
+        // A payment against a test pledge is always test; otherwise the payment mode decides.
+        static::creating(function (Transaction $transaction): void {
+            if (array_key_exists('is_test', $transaction->getAttributes())) {
+                return;
+            }
+
+            if ($transaction->pledge_uuid !== null
+                && Pledge::withTrashed()->where('uuid', $transaction->pledge_uuid)->value('is_test')) {
+                $transaction->is_test = true;
+
+                return;
+            }
+
+            // Offline transfers land in the real ICOBA accounts whatever the CLNX checkout host is.
+            $gateway = $transaction->application_type === TransactionApplicationType::BANK_TRANSFER
+                ? null
+                : $transaction->gateway;
+
+            $transaction->is_test = PaymentMode::isTest($gateway);
+        });
+    }
+
     protected function casts(): array
     {
         return [
@@ -26,6 +52,7 @@ class Transaction extends Model
             'exchange_rate_to_naira' => 'decimal:6',
             'amount_in_naira' => 'decimal:2',
             'is_anonymous' => 'boolean',
+            'is_test' => 'boolean',
             'status' => TransactionStatus::class,
             'application_type' => TransactionApplicationType::class,
             'metadata' => 'array',

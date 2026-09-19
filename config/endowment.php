@@ -33,6 +33,24 @@ return [
         'Thank you for your generous contribution to the ICOBA Endowment Foundation. Your support helps us continue our mission of legacy and transformation projects for Igbobi College.'
     ),
 
+    /*
+    | Test vs live tagging for pledges and transactions (is_test column, see App\Support\PaymentMode).
+    |
+    | PAYMENTS_TEST_MODE unset => auto: test outside production, or when the transaction's gateway is
+    |                             configured with test credentials (Stripe/Paystack sk_test_, FCMB test host).
+    | PAYMENTS_TEST_MODE=true  => everything created is tagged test (e.g. a UAT round on the live server).
+    | PAYMENTS_TEST_MODE=false => everything created is tagged live.
+    */
+    'payments' => [
+        'test_mode' => env('PAYMENTS_TEST_MODE') === null || env('PAYMENTS_TEST_MODE') === ''
+            ? null
+            : filter_var(env('PAYMENTS_TEST_MODE'), FILTER_VALIDATE_BOOL),
+        'fcmb_test_hosts' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('FCMB_CLNX_TEST_HOSTS', 'dev.clnx.io'))
+        ))),
+    ],
+
     'exchange_rate' => [
         // free = open.er-api.com (no key). paid = v6.exchangerate-api.com (requires EXCHANGE_RATE_API_KEY).
         'tier' => env('EXCHANGE_RATE_API_TIER', 'free'),

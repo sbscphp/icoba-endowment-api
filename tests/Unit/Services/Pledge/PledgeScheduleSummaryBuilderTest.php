@@ -109,6 +109,7 @@ final class PledgeScheduleSummaryBuilderTest extends TestCase
             $table->string('currency', 8);
             $table->decimal('amount_in_naira', 18, 2)->nullable();
             $table->string('status', 20)->default('pending');
+            $table->boolean('is_test')->default(false);
             $table->string('gateway')->nullable();
             $table->uuid('pledge_uuid')->nullable();
             $table->timestamps();

@@ -47,6 +47,14 @@ return [
     'otp_flow_debug' => filter_var(env('OTP_FLOW_DEBUG', false), FILTER_VALIDATE_BOOL),
 
     /*
+    | Support fallback: write the plain OTP sent to customers to the dedicated "otp" log channel
+    | (storage/logs/otp-YYYY-MM-DD.log) so support can read a code out when email/SMS is not delivered.
+    | Admin OTPs are never logged. Anyone who can read that file can complete a customer's login or
+    | password reset, so keep it off unless needed and restrict access to the log directory.
+    */
+    'otp_log_codes' => filter_var(env('OTP_LOG_CODES', false), FILTER_VALIDATE_BOOL),
+
+    /*
     |--------------------------------------------------------------------------
     | Global Auth Error Opacity Override
     |--------------------------------------------------------------------------
