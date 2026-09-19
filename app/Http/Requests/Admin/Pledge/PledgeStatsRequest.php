@@ -36,6 +36,7 @@ class PledgeStatsRequest extends ApiFormRequest
                 'filters.currency' => ['sometimes', 'nullable', Rule::in(Currency::values())],
                 'filters.payment_plan_type' => ['sometimes', 'nullable', Rule::in(PledgePaymentPlanType::values())],
                 'filters.is_anonymous' => ['sometimes', 'nullable', Rule::in(['0', '1', 0, 1, true, false, 'true', 'false'])],
+                'filters.is_test' => ['sometimes', 'nullable', Rule::in(['0', '1', 0, 1, true, false, 'true', 'false'])],
             ]
         );
     }

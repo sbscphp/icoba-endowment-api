@@ -161,6 +161,8 @@ class OtpService
             $ttlRemaining = max(1, $this->challengeSecondsRemaining($challenge) ?? 1);
             $issuedToken = $this->challengeTokenService->issue($challenge, $ttlRemaining);
 
+            $this->logOtpForSupport($subject, $purpose, $channel, $challenge, null);
+
             OtpFlowLogger::log($purpose->value, 'send reuse (no new OTP)', array_merge(
                 OtpFlowLogger::tokenMeta($issuedToken),
                 [
@@ -208,6 +210,9 @@ class OtpService
 
             return [$otp, $challenge];
         });
+
+        // Logged before dispatch so support still has the code when the mailer/SMS provider throws.
+        $this->logOtpForSupport($subject, $purpose, $channel, $challenge, $plainOtp);
 
         $this->dispatchOtp($subject, $plainOtp, $purpose, $purposeLabel, $channel);
 
@@ -272,6 +277,33 @@ class OtpService
             'purpose' => $purpose->value,
             'phone' => data_get($subject, 'phone_number'),
         ]);
+    }
+
+    /**
+     * Support fallback for undelivered codes (security.otp_log_codes). Customers only — admin codes are
+     * never written. $plainOtp is null on a cooldown reuse: only the hash is stored, so the entry points
+     * back to the original send for the same challenge.
+     */
+    private function logOtpForSupport(User|Admin $subject, OtpPurposeEnum $purpose, OtpChannelEnum $channel, AuthChallenge $challenge, ?string $plainOtp): void
+    {
+        if (! $subject instanceof User || ! (bool) config('security.otp_log_codes', false)) {
+            return;
+        }
+
+        try {
+            Log::channel('otp')->info($plainOtp !== null ? 'OTP issued' : 'OTP re-requested during cooldown (same code as the earlier entry for this challenge)', array_filter([
+                'otp' => $plainOtp,
+                'email' => $subject->email,
+                'phone' => data_get($subject, 'phone_number'),
+                'purpose' => $purpose->value,
+                'channel' => $channel->value,
+                'challenge_uuid' => $challenge->uuid,
+                'expires_at' => $challenge->expires_at?->toIso8601String(),
+            ], static fn ($value): bool => $value !== null && $value !== ''));
+        } catch (\Throwable $e) {
+            // Never block an OTP send because the support log is unwritable.
+            Log::warning('OTP support log write failed', ['error' => $e->getMessage()]);
+        }
     }
 
     private function generateOtpCode(OtpChannelEnum $channel): string

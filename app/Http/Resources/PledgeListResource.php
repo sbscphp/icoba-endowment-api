@@ -57,6 +57,7 @@ class PledgeListResource extends JsonResource
             'summary' => is_array($summary) ? $summary : null,
             'schedule' => is_array($schedule) ? $schedule : null,
             'is_anonymous' => (bool) $this->is_anonymous,
+            'is_test' => (bool) $this->is_test,
             'fulfilled_at' => $this->fulfilled_at,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

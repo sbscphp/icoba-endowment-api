@@ -22,6 +22,7 @@ class TransactionListResource extends JsonResource
             'donor_name' => $this->resolveDonorName(),
             'donor_email' => $this->donor_email ?? $this->donor?->email,
             'is_anonymous' => (bool) $this->is_anonymous,
+            'is_test' => (bool) $this->is_test,
             'linked_campaign' => $this->campaign !== null ? [
                 'campaign_id' => $this->campaign->uuid,
                 'public_campaign_code' => $this->campaign->campaign_id,

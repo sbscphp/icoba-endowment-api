@@ -73,6 +73,15 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Plain customer OTP codes for support (see security.otp_log_codes). Short retention on purpose.
+        'otp' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/otp.log'),
+            'level' => 'info',
+            'days' => env('LOG_OTP_DAYS', 3),
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

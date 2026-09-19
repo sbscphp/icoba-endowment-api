@@ -218,6 +218,11 @@ class TransactionService
             $query->where('is_anonymous', $truthy);
         }
 
+        $isTest = data_get($validated, 'filters.is_test');
+        if ($isTest !== null && $isTest !== '') {
+            $query->where('is_test', in_array($isTest, ['1', 1, true, 'true'], true));
+        }
+
         $minAmount = data_get($validated, 'filters.min_amount');
         if (is_numeric($minAmount)) {
             $query->where('amount_in_naira', '>=', (float) $minAmount);
