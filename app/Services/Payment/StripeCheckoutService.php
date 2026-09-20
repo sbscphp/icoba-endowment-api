@@ -103,7 +103,18 @@ final class StripeCheckoutService
         }
 
         try {
-            $session = $this->stripe->checkout->sessions->create($params);
+            try {
+                $session = $this->stripe->checkout->sessions->create($params);
+            } catch (InvalidRequestException $e) {
+                if ($donorUser === null || ! $this->isMissingCustomer($e)) {
+                    throw $e;
+                }
+
+                // Stored customer id is unusable with this key (test-mode id, deleted customer, …): replace it and retry once.
+                $donorUser->forceFill(['stripe_customer_id' => null])->save();
+                $params['customer'] = $this->resolveStripeCustomerId($donorUser);
+                $session = $this->stripe->checkout->sessions->create($params);
+            }
         } catch (InvalidRequestException $e) {
             if ($this->isUnsupportedCheckoutAmount($e)) {
                 throw ValidationException::withMessages([
@@ -169,6 +180,12 @@ final class StripeCheckoutService
         }
 
         return (int) round($amount * 100);
+    }
+
+    private function isMissingCustomer(InvalidRequestException $exception): bool
+    {
+        return $exception->getStripeCode() === 'resource_missing'
+            && $exception->getStripeParam() === 'customer';
     }
 
     private function isUnsupportedCheckoutAmount(InvalidRequestException $exception): bool
