@@ -9,6 +9,7 @@ use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateControl
 use App\Http\Controllers\v1\Admin\ContactSubmission\ContactSubmissionController;
 use App\Http\Controllers\v1\Admin\ContentManagement\AdController;
 use App\Http\Controllers\v1\Admin\ContentManagement\ContentPageController;
+use App\Http\Controllers\v1\Admin\ContentManagement\FaqController;
 use App\Http\Controllers\v1\Admin\ContentManagement\HeroSlideController;
 use App\Http\Controllers\v1\Admin\Dashboard\DashboardController;
 use App\Http\Controllers\v1\Admin\EmailCampaign\EmailCampaignController;
@@ -371,6 +372,21 @@ Route::prefix('v1/admin')->group(function () {
                     ->middleware(['permission:content_management.update']);
                 Route::delete('/{adId}/images/{imageId}', [AdController::class, 'destroyImage'])
                     ->middleware(['permission:content_management.update']);
+            });
+
+            Route::prefix('faqs')->group(function () {
+                Route::get('/', [FaqController::class, 'index'])
+                    ->middleware(['permission:content_management.read']);
+                Route::post('/', [FaqController::class, 'store'])
+                    ->middleware(['permission:content_management.create']);
+                Route::get('/{faqId}', [FaqController::class, 'show'])
+                    ->middleware(['permission:content_management.read']);
+                Route::patch('/{faqId}', [FaqController::class, 'update'])
+                    ->middleware(['permission:content_management.update']);
+                Route::patch('/{faqId}/toggle-status', [FaqController::class, 'toggleStatus'])
+                    ->middleware(['permission:content_management.update']);
+                Route::delete('/{faqId}', [FaqController::class, 'destroy'])
+                    ->middleware(['permission:content_management.delete']);
             });
         });
 

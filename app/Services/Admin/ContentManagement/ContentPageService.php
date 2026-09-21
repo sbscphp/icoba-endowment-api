@@ -6,6 +6,7 @@ use App\Enums\ContentPage;
 use App\Enums\EventStatus;
 use App\Models\Ad;
 use App\Models\Event;
+use App\Models\Faq;
 use App\Models\HeroSlide;
 use Illuminate\Support\Carbon;
 
@@ -20,6 +21,28 @@ class ContentPageService
             $this->heroSliderPageSummary(),
             $this->eventsPageSummary(),
             $this->adsPageSummary(),
+            $this->faqPageSummary(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function faqPageSummary(): array
+    {
+        $latestFaq = Faq::query()
+            ->with('updatedByAdmin')
+            ->orderByDesc('updated_at')
+            ->first();
+
+        $hasActiveFaq = Faq::query()->where('is_active', true)->exists();
+
+        return [
+            'page_key' => ContentPage::FAQ->value,
+            'page_title' => ContentPage::FAQ->label(),
+            'last_updated' => $latestFaq?->updated_at,
+            'updated_by' => $latestFaq?->updatedByAdmin?->displayName(),
+            'status' => $hasActiveFaq ? 'active' : 'inactive',
         ];
     }
 

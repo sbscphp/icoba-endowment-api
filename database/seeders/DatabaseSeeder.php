@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
             ThemeSeeder::class,
             TierConfigurationSeeder::class,
             HeroSlideSeeder::class,
+            FaqSeeder::class,
             CertificateTemplateSeeder::class,
             ApiUserSeeder::class,
         ]);

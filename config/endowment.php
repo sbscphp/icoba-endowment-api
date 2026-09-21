@@ -19,10 +19,6 @@ return [
 
     'website' => env('ENDOWMENT_WEBSITE', 'www.icobaendowment.org'),
 
-    'executive_director_name' => env('ENDOWMENT_EXECUTIVE_DIRECTOR', 'Dr. Sarah Johnson'),
-
-    'executive_director_title' => env('ENDOWMENT_EXECUTIVE_DIRECTOR_TITLE', 'Executive Director'),
-
     'tax_deductibility_statement' => env(
         'ENDOWMENT_TAX_DEDUCTIBILITY_STATEMENT',
         'ICOBA Endowment Foundation is a registered 501(c)(3) nonprofit organization. Your contribution is tax-deductible to the full extent allowed by law. No goods or services were provided in exchange for this donation. Please retain this receipt for your tax records.'
