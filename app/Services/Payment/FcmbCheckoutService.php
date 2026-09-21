@@ -6,6 +6,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 final class FcmbCheckoutService
@@ -178,7 +179,23 @@ final class FcmbCheckoutService
             ['hash' => $hash],
         );
 
-        if ($response->status() === 404 || ! $response->json('status')) {
+        if (! $response->successful() || ! $response->json('status')) {
+            Log::warning('FCMB checkout status lookup failed.', [
+                'invoice_request_reference' => $invoiceRequestReference,
+                'http_status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+        }
+
+        // 401/403 means CLNX rejected the hash or business id — not that the reference is unknown.
+        if (in_array($response->status(), [401, 403], true)) {
+            throw new RuntimeException(
+                'FCMB rejected the status lookup (HTTP '.$response->status().'): '
+                .($response->json('message') ?? 'authentication failed'),
+            );
+        }
+
+        if ($response->status() === 404 || ($response->successful() && ! $response->json('status'))) {
             throw new RuntimeException('Invalid FCMB checkout reference.');
         }
 
