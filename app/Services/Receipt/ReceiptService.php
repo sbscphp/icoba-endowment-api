@@ -296,8 +296,6 @@ class ReceiptService
             'taxId' => config('endowment.tax_id'),
             'contactEmail' => config('endowment.contact_email'),
             'website' => config('endowment.website'),
-            'executiveDirectorName' => config('endowment.executive_director_name'),
-            'executiveDirectorTitle' => config('endowment.executive_director_title'),
             'taxStatement' => config('endowment.tax_deductibility_statement'),
             'thankYouMessage' => config('endowment.receipt_thank_you'),
             'logoDataUri' => $this->logoDataUri(),

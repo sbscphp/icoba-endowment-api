@@ -26,7 +26,6 @@
         .tax-text { font-size: 10px; color: #78350f; line-height: 1.6; margin: 0; }
         .thank-you { font-size: 10px; color: #374151; line-height: 1.6; margin: 16px 0 24px 0; }
         .signature-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        .signature-name { font-family: DejaVu Sans, sans-serif; font-size: 18px; font-style: italic; color: #122168; margin: 0 0 4px 0; }
         .signature-meta { font-size: 10px; color: #6b7280; line-height: 1.5; }
         .footer { margin-top: 24px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 9px; color: #9ca3af; text-align: center; line-height: 1.5; }
         .logo { max-width: 90px; max-height: 48px; margin-bottom: 8px; }
@@ -108,14 +107,7 @@
 
     <table class="signature-table">
         <tr>
-            <td style="width: 60%;">
-                <p class="signature-name">{{ $executiveDirectorName }}</p>
-                <div class="signature-meta">
-                    {{ $executiveDirectorTitle }}<br>
-                    {{ $foundationName }}
-                </div>
-            </td>
-            <td style="width: 40%; text-align: right; vertical-align: bottom;">
+            <td style="text-align: right; vertical-align: bottom;">
                 <div class="signature-meta"><strong>Date of Issue</strong><br>{{ $issuedAt }}</div>
             </td>
         </tr>
