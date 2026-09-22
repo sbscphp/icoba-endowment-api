@@ -213,9 +213,15 @@ final class FcmbCheckoutService
     }
 
     /**
+     * Validate a CLNX notification: sha512(amount|reference|invoiceRequestReference|transactionDate|secretKey).
+     *
+     * CLNX serialises `amount` as a fixed-scale decimal (e.g. `109.5000`), and its hash is computed on
+     * that rendering. PHP's json_decode collapses it to a float, so when the raw request body is
+     * available the literal is taken from it verbatim; otherwise common renderings are tried.
+     *
      * @param  array<string, mixed>  $payload
      */
-    public function verifyWebhookHash(array $payload): bool
+    public function verifyWebhookHash(array $payload, ?string $rawBody = null): bool
     {
         $received = $payload['hash'] ?? null;
         if (! is_string($received) || $received === '') {
@@ -233,15 +239,71 @@ final class FcmbCheckoutService
             return false;
         }
 
-        $plain = implode('|', [
-            $this->hashableScalar($amount),
-            $reference,
-            $invoiceRequestReference,
-            $transactionDate,
-            $this->secretKey,
-        ]);
+        if (! is_float($amount) && ! is_int($amount) && ! is_string($amount)) {
+            return false;
+        }
 
-        return hash_equals(hash('sha512', $plain), $received);
+        foreach ($this->webhookAmountCandidates($amount, $rawBody) as $amountString) {
+            $plain = implode('|', [
+                $amountString,
+                $reference,
+                $invoiceRequestReference,
+                $transactionDate,
+                $this->secretKey,
+            ]);
+
+            if (hash_equals(hash('sha512', $plain), $received)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Amount renderings to try when reproducing a CLNX notification hash, most likely first.
+     *
+     * @return list<string>
+     */
+    private function webhookAmountCandidates(float|int|string $amount, ?string $rawBody): array
+    {
+        $candidates = [];
+
+        $literal = $this->extractRawAmountLiteral($rawBody);
+        if ($literal !== null) {
+            $candidates[] = $literal;
+        }
+
+        if (is_string($amount)) {
+            $candidates[] = $amount;
+            $numeric = is_numeric($amount) ? (float) $amount : null;
+        } else {
+            $numeric = (float) $amount;
+        }
+
+        if ($numeric !== null) {
+            $candidates[] = sprintf('%.4F', $numeric);
+            $candidates[] = $this->hashableScalar($numeric);
+            $candidates[] = sprintf('%.2F', $numeric);
+        }
+
+        return array_values(array_unique($candidates));
+    }
+
+    /**
+     * Pull the top-level `amount` literal out of the raw JSON body exactly as CLNX wrote it.
+     */
+    private function extractRawAmountLiteral(?string $rawBody): ?string
+    {
+        if ($rawBody === null || $rawBody === '') {
+            return null;
+        }
+
+        if (preg_match('/"amount"\s*:\s*"?(-?\d+(?:\.\d+)?)"?/', $rawBody, $matches) !== 1) {
+            return null;
+        }
+
+        return $matches[1];
     }
 
     private function hashInitializePayment(float $amount, string $email, string $invoiceRequestReference): string

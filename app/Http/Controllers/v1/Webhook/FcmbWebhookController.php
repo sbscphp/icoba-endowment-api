@@ -7,6 +7,7 @@ use App\Services\Payment\FcmbCheckoutService;
 use App\Services\Payment\FcmbPaymentWebhookService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -40,9 +41,14 @@ class FcmbWebhookController extends Controller
         }
 
         try {
-            $this->assertValidWebhook($payload, $fcmbCheckoutService);
+            $this->assertValidWebhook($payload, $request->getContent(), $fcmbCheckoutService);
         } catch (RuntimeException $e) {
-            Log::notice('FCMB CLNX webhook verification failed.', ['error' => $e->getMessage()]);
+            // Log the hashed inputs (never the secret) so a mismatch can be reproduced offline.
+            Log::notice('FCMB CLNX webhook verification failed.', [
+                'error' => $e->getMessage(),
+                'hash_inputs' => Arr::only($payload, ['amount', 'reference', 'invoiceRequestReference', 'transactionDate']),
+                'received_hash' => $payload['hash'] ?? null,
+            ]);
 
             return response()->json(['message' => 'Invalid webhook'], 400);
         }
@@ -65,9 +71,9 @@ class FcmbWebhookController extends Controller
      *
      * @throws RuntimeException
      */
-    private function assertValidWebhook(array $payload, FcmbCheckoutService $fcmbCheckoutService): void
+    private function assertValidWebhook(array $payload, string $rawBody, FcmbCheckoutService $fcmbCheckoutService): void
     {
-        if (! $fcmbCheckoutService->verifyWebhookHash($payload)) {
+        if (! $fcmbCheckoutService->verifyWebhookHash($payload, $rawBody)) {
             if (app()->environment('production')) {
                 throw new RuntimeException('FCMB webhook hash mismatch.');
             }
