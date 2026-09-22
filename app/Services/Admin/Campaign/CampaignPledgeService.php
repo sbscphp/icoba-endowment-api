@@ -57,11 +57,14 @@ class CampaignPledgeService
         $query = Pledge::query()
             ->where('campaign_uuid', $campaign->uuid)
             ->with([
-                'donor:uuid,firstname,lastname,email,phone_number,graduation_set_uuid,donor_type_uuid',
+                'donor:uuid,firstname,lastname,email,phone_number,graduation_set_uuid,donor_type_uuid,house,affiliated_graduation_set_uuid,is_igbobian_owned',
                 'donor.graduationSet:uuid,name,set_number',
+                'donor.affiliatedGraduationSet:uuid,name,set_number',
                 'donor.donorType:uuid,slug,label',
                 'donorType:uuid,slug,label',
                 'graduationSet:uuid,name,set_number',
+                'givingIdentity:uuid,house,affiliated_graduation_set_uuid,is_igbobian_owned',
+                'givingIdentity.affiliatedGraduationSet:uuid,name,set_number',
             ]);
 
         ListingFilterRules::applyResolvedDateRange($query, $validated);
@@ -99,6 +102,23 @@ class CampaignPledgeService
             $query->where(function (Builder $builder) use ($setUuid): void {
                 $builder->where('graduation_set_uuid', $setUuid)
                     ->orWhereHas('donor', fn (Builder $donor) => $donor->where('graduation_set_uuid', $setUuid));
+            });
+        }
+
+        $affiliatedSetUuid = data_get($validated, 'filters.affiliated_graduation_set_uuid');
+        if (is_string($affiliatedSetUuid) && $affiliatedSetUuid !== '') {
+            $query->where(function (Builder $builder) use ($affiliatedSetUuid): void {
+                $builder->whereHas('donor', fn (Builder $donor) => $donor->where('affiliated_graduation_set_uuid', $affiliatedSetUuid))
+                    ->orWhereHas('givingIdentity', fn (Builder $identity) => $identity->where('affiliated_graduation_set_uuid', $affiliatedSetUuid));
+            });
+        }
+
+        $house = data_get($validated, 'filters.house');
+        if (is_string($house) && $house !== '') {
+            $house = strtolower($house);
+            $query->where(function (Builder $builder) use ($house): void {
+                $builder->whereHas('donor', fn (Builder $donor) => $donor->where('house', $house))
+                    ->orWhereHas('givingIdentity', fn (Builder $identity) => $identity->where('house', $house));
             });
         }
 

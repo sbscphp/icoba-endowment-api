@@ -2,6 +2,7 @@
 
 namespace App\Services\Admin\Report;
 
+use App\Enums\House;
 use App\Enums\ReportType;
 use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\Admin;
@@ -80,13 +81,30 @@ class ReportService
     private function baseQuery(ReportType $type, array $validated): Builder
     {
         $query = match ($type) {
-            ReportType::TRANSACTIONS => Transaction::query()->with(['campaign:uuid,name,campaign_id', 'donor:uuid,firstname,lastname,email']),
+            ReportType::TRANSACTIONS => Transaction::query()->with([
+                'campaign:uuid,name,campaign_id',
+                'donor:uuid,firstname,lastname,email,graduation_set_uuid,house,affiliated_graduation_set_uuid',
+                'donor.graduationSet:uuid,name,set_number',
+                'donor.affiliatedGraduationSet:uuid,name,set_number',
+                'givingIdentity:uuid,house,affiliated_graduation_set_uuid',
+                'givingIdentity.affiliatedGraduationSet:uuid,name,set_number',
+                'pledge:uuid,graduation_set_uuid',
+                'pledge.graduationSet:uuid,name,set_number',
+            ]),
             ReportType::TIER_CONFIGURATIONS => TierConfiguration::query(),
             ReportType::ADMIN_USERS => Admin::query()->with('roles:id,name'),
             ReportType::ROLES => Role::query()->where('guard_name', 'api')->withCount('admins as users_count'),
             ReportType::CAMPAIGNS => Campaign::query(),
             ReportType::EMAIL_CAMPAIGNS => CampaignEmail::query()->with('campaign:uuid,name,campaign_id'),
-            ReportType::PLEDGES => Pledge::query()->with(['campaign:uuid,name,campaign_id', 'donor:uuid,firstname,lastname,email']),
+            ReportType::PLEDGES => Pledge::query()->with([
+                'campaign:uuid,name,campaign_id',
+                'donor:uuid,firstname,lastname,email,graduation_set_uuid,house,affiliated_graduation_set_uuid',
+                'donor.graduationSet:uuid,name,set_number',
+                'donor.affiliatedGraduationSet:uuid,name,set_number',
+                'givingIdentity:uuid,house,affiliated_graduation_set_uuid',
+                'givingIdentity.affiliatedGraduationSet:uuid,name,set_number',
+                'graduationSet:uuid,name,set_number',
+            ]),
         };
 
         $this->applyDateRange($query, $validated);
@@ -108,6 +126,9 @@ class ReportService
                 'date' => $row->created_at?->toDateTimeString(),
                 'donor_name' => (bool) $row->is_anonymous ? 'Anonymous' : ($row->donor_name ?? trim((string) (($row->donor?->firstname ?? '').' '.($row->donor?->lastname ?? '')))),
                 'donor_email' => $row->donor_email ?? $row->donor?->email,
+                'set' => $this->setNumber($row->donor?->graduationSet ?? $row->pledge?->graduationSet),
+                'affiliated_set' => $this->setNumber($row->donor?->affiliatedGraduationSet ?? $row->givingIdentity?->affiliatedGraduationSet),
+                'house' => $this->houseLabel($row->donor?->house ?? $row->givingIdentity?->house),
                 'campaign' => $row->campaign?->name,
                 'amount' => (string) $row->amount,
                 'currency' => $row->currency,
@@ -157,6 +178,9 @@ class ReportService
                 'donor_name' => (bool) $row->is_anonymous ? 'Anonymous' : ($row->donor_name ?? trim((string) (($row->donor?->firstname ?? '').' '.($row->donor?->lastname ?? '')))),
                 'donor_email' => $row->donor_email ?? $row->donor?->email,
                 'donor_phone' => $row->donor_phone,
+                'set' => $this->setNumber($row->donor?->graduationSet ?? $row->graduationSet),
+                'affiliated_set' => $this->setNumber($row->donor?->affiliatedGraduationSet ?? $row->givingIdentity?->affiliatedGraduationSet),
+                'house' => $this->houseLabel($row->donor?->house ?? $row->givingIdentity?->house),
                 'campaign' => $row->campaign?->name,
                 'committed_amount' => (string) $row->committed_amount,
                 'currency' => $row->currency,
@@ -189,6 +213,16 @@ class ReportService
         return array_values($data);
     }
 
+    private function setNumber(mixed $set): string
+    {
+        return (string) ($set?->set_number ?? '');
+    }
+
+    private function houseLabel(?string $house): string
+    {
+        return (string) (House::payload($house)['label'] ?? '');
+    }
+
     private function formatExportField(string $key, mixed $value): mixed
     {
         if (in_array($key, ['active', 'is_active'], true) && is_bool($value)) {
@@ -212,13 +246,13 @@ class ReportService
     private function headersFor(ReportType $type): array
     {
         return match ($type) {
-            ReportType::TRANSACTIONS => ['ID', 'Date', 'Donor Name', 'Donor Email', 'Campaign', 'Amount', 'Currency', 'Status'],
+            ReportType::TRANSACTIONS => ['ID', 'Date', 'Donor Name', 'Donor Email', 'Set', 'Affiliated Set', 'House', 'Campaign', 'Amount', 'Currency', 'Status'],
             ReportType::TIER_CONFIGURATIONS => ['Name', 'Min Amount', 'Max Amount', 'Sort Order', 'Active', 'Created At'],
             ReportType::ADMIN_USERS => ['Name', 'Email', 'Role', 'Active', 'Last Active At', 'Created At'],
             ReportType::ROLES => ['Name', 'Description', 'Users Count', 'Active', 'Created At'],
             ReportType::CAMPAIGNS => ['Campaign ID', 'Name', 'Status', 'Target Amount', 'Base Currency', 'Created At'],
             ReportType::EMAIL_CAMPAIGNS => ['Title', 'Campaign', 'Status', 'Is Active', 'Recipients', 'Created At'],
-            ReportType::PLEDGES => ['ID', 'Donor Name', 'Donor Email', 'Donor Phone', 'Campaign', 'Committed Amount', 'Currency', 'Committed Amount (NGN)', 'FX to NGN', 'Payment Plan', 'Installments', 'Status', 'Anonymous', 'Created At'],
+            ReportType::PLEDGES => ['ID', 'Donor Name', 'Donor Email', 'Donor Phone', 'Set', 'Affiliated Set', 'House', 'Campaign', 'Committed Amount', 'Currency', 'Committed Amount (NGN)', 'FX to NGN', 'Payment Plan', 'Installments', 'Status', 'Anonymous', 'Created At'],
         };
     }
 

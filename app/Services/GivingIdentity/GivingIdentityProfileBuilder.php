@@ -2,7 +2,7 @@
 
 namespace App\Services\GivingIdentity;
 
-use App\Enums\DonorTypeSlug;
+use App\Enums\House;
 use App\Models\DonorType;
 use App\Models\GivingIdentity;
 use App\Models\GraduationSet;
@@ -55,7 +55,31 @@ final class GivingIdentityProfileBuilder
             alumniIdentifier: filled($guestProfile['alumni_identifier'] ?? $data['alumni_identifier'] ?? null)
                 ? (string) ($guestProfile['alumni_identifier'] ?? $data['alumni_identifier'])
                 : null,
+            house: House::normalize($guestProfile['house'] ?? $data['house'] ?? null),
+            affiliatedGraduationSetUuid: self::resolveAffiliatedSetUuid($guestProfile, $data),
+            isIgbobianOwned: filter_var($guestProfile['is_igbobian_owned'] ?? $data['is_igbobian_owned'] ?? false, FILTER_VALIDATE_BOOLEAN),
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $guestProfile
+     * @param  array<string, mixed>  $data
+     */
+    private static function resolveAffiliatedSetUuid(array $guestProfile, array $data): ?string
+    {
+        $uuid = $guestProfile['affiliated_graduation_set_uuid'] ?? ($data['affiliated_graduation_set_uuid'] ?? null);
+        if (is_string($uuid) && $uuid !== '') {
+            return $uuid;
+        }
+
+        $setNumber = $guestProfile['affiliated_set_number'] ?? ($data['affiliated_set_number'] ?? null);
+        if (! filled($setNumber)) {
+            return null;
+        }
+
+        $resolved = GraduationSet::query()->where('set_number', (string) $setNumber)->value('uuid');
+
+        return is_string($resolved) ? $resolved : null;
     }
 
     public static function fromUser(User $user): GivingIdentityProfile
@@ -73,6 +97,9 @@ final class GivingIdentityProfileBuilder
             firstname: GivingIdentityNormalizer::text($user->firstname),
             lastname: GivingIdentityNormalizer::text($user->lastname),
             alumniIdentifier: filled($user->alumni_identifier) ? (string) $user->alumni_identifier : null,
+            house: House::normalize($user->house),
+            affiliatedGraduationSetUuid: $user->affiliated_graduation_set_uuid,
+            isIgbobianOwned: (bool) $user->is_igbobian_owned,
         );
     }
 
@@ -107,6 +134,9 @@ final class GivingIdentityProfileBuilder
             alumniIdentifier: filled($guestProfile['alumni_identifier'] ?? null)
                 ? (string) $guestProfile['alumni_identifier']
                 : null,
+            house: House::normalize($guestProfile['house'] ?? null),
+            affiliatedGraduationSetUuid: self::resolveAffiliatedSetUuid($guestProfile, []),
+            isIgbobianOwned: filter_var($guestProfile['is_igbobian_owned'] ?? false, FILTER_VALIDATE_BOOLEAN),
         );
     }
 
@@ -125,6 +155,9 @@ final class GivingIdentityProfileBuilder
             firstname: $identity->firstname,
             lastname: $identity->lastname,
             alumniIdentifier: $identity->alumni_identifier,
+            house: House::normalize($identity->house),
+            affiliatedGraduationSetUuid: $identity->affiliated_graduation_set_uuid,
+            isIgbobianOwned: (bool) $identity->is_igbobian_owned,
         );
     }
 

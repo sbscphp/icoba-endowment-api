@@ -61,6 +61,9 @@ class CompleteReconciliationRequest extends ApiFormRequest
         return array_merge(parent::messages(), [
             'donor_phone.regex' => 'Please enter a valid phone number for the selected country.',
             'set_number.exists' => 'I couldn\'t find that set. Please double-check the graduation year.',
+            'house.in' => 'Please select a valid house.',
+            'affiliated_set_number.exists' => 'We could not find that set. Please double-check the set and try again.',
+            'affiliated_set_number.required_if' => 'Please select the set of the Igbobian this organization belongs to.',
             'donor_type.prohibited' => 'Provide either user_uuid or donor profile fields, not both.',
             'donor_email.prohibited' => 'Provide either user_uuid or donor profile fields, not both.',
             'user_identity.prohibited' => 'Provide either user_identity, user_uuid, or donor profile fields, not more than one.',
@@ -138,6 +141,9 @@ class CompleteReconciliationRequest extends ApiFormRequest
             'corporate_category_uuid' => $prohibited,
             'rc_number' => $prohibited,
             'tin' => $prohibited,
+            'house' => $prohibited,
+            'affiliated_set_number' => $prohibited,
+            'is_igbobian_owned' => $prohibited,
         ];
     }
 

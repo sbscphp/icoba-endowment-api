@@ -250,12 +250,16 @@ Route::prefix('v1/admin')->group(function () {
         });
 
         Route::prefix('transactions')->group(function () {
+            Route::get('/houses/options', [TransactionController::class, 'houseOptions'])
+                ->middleware(['permission:transactions.read']);
             Route::get('/stats', [TransactionController::class, 'stats'])
                 ->middleware(['permission:transactions.read']);
             Route::get('/', [TransactionController::class, 'index'])
                 ->middleware(['permission:transactions.read']);
             Route::get('/{transactionId}', [TransactionController::class, 'show'])
                 ->middleware(['permission:transactions.read']);
+            Route::post('/{transactionId}/verify', [TransactionController::class, 'verify'])
+                ->middleware(['permission:transactions.verify']);
         });
 
         Route::prefix('pledges')->group(function () {

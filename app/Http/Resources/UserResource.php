@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Enums\CustomerRegistrationStepEnum;
 use App\Enums\DonorTypeSlug;
+use App\Enums\House;
 use App\Services\Customer\CustomerTierService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -54,6 +55,7 @@ class UserResource extends JsonResource
         $donorType = $this->relationLoaded('donorType') ? $this->donorType : $this->donorType()->first();
         $graduationSet = $this->relationLoaded('graduationSet') ? $this->graduationSet : $this->graduationSet()->first();
         $corporateCategory = $this->relationLoaded('corporateCategory') ? $this->corporateCategory : $this->corporateCategory()->first();
+        $affiliatedSet = $this->relationLoaded('affiliatedGraduationSet') ? $this->affiliatedGraduationSet : $this->affiliatedGraduationSet()->first();
 
         $type = null;
 
@@ -83,6 +85,11 @@ class UserResource extends JsonResource
             'set' => $graduationSet !== null
                 ? $graduationSet->only(['uuid', 'name', 'set_number', 'public_id'])
                 : null,
+            'house' => House::payload($this->house),
+            'affiliated_set' => $affiliatedSet !== null
+                ? $affiliatedSet->only(['uuid', 'name', 'set_number', 'public_id'])
+                : null,
+            'is_igbobian_owned' => (bool) $this->is_igbobian_owned,
             'corporate_category' => $corporateCategory !== null
                 ? $corporateCategory->only(['uuid', 'name'])
                 : null,

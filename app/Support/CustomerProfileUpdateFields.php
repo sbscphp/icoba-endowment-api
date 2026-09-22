@@ -36,6 +36,13 @@ final class CustomerProfileUpdateFields
         'set',
         'alumni_identifier',
         'graduation_set_uuid',
+        'house',
+    ];
+
+    /** @var list<string> */
+    public const WIVES = [
+        'affiliated_set_number',
+        'house',
     ];
 
     /** @var list<string> */
@@ -44,6 +51,9 @@ final class CustomerProfileUpdateFields
         'rc_number',
         'tin',
         'corporate_category_uuid',
+        'is_igbobian_owned',
+        'affiliated_set_number',
+        'house',
     ];
 
     /** @var list<string> */
@@ -62,6 +72,10 @@ final class CustomerProfileUpdateFields
         'rc_number',
         'tin',
         'corporate_category_uuid',
+        'house',
+        'affiliated_set_number',
+        'affiliated_graduation_set_uuid',
+        'is_igbobian_owned',
     ];
 
     /**
@@ -72,8 +86,9 @@ final class CustomerProfileUpdateFields
         $contact = self::CONTACT;
 
         return match ($donorTypeSlug) {
-            DonorTypeSlug::ICOBA_ALUMNI->value => array_merge($contact, self::PERSON, ['set_number', 'alumni_identifier']),
+            DonorTypeSlug::ICOBA_ALUMNI->value => array_merge($contact, self::PERSON, ['set_number', 'alumni_identifier', 'house']),
             DonorTypeSlug::CORPORATE_DONOR->value => array_merge($contact, self::CORPORATE),
+            DonorTypeSlug::WIVES_OF_ICOBA->value => array_merge($contact, self::PERSON, self::WIVES),
             DonorTypeSlug::FRIENDS_OF_ICOBA->value,
             DonorTypeSlug::RELATIVES_OF_ICOBA->value => array_merge($contact, self::PERSON),
             default => $contact,

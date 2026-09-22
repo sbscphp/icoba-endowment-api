@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Repositories\Contracts\User\UserRepositoryInterface;
 use App\Services\GivingIdentity\GivingIdentityResolver;
 use App\Services\Phone\PhoneNumberService;
+use App\Support\DonorAffiliation;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -107,6 +108,8 @@ final class ReconciliationDonorUserService
             'is_active' => true,
             'can_login' => false,
         ];
+
+        $row = array_merge($row, DonorAffiliation::columnsFor($donorType->slug, $data));
 
         return match ($donorType->slug) {
             DonorTypeSlug::ICOBA_ALUMNI->value => array_merge($row, [

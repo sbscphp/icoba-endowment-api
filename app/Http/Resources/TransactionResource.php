@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\House;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
 use App\Models\GivingIdentity;
@@ -24,6 +25,7 @@ class TransactionResource extends JsonResource
     public function toArray(Request $request): array
     {
         $set = $this->donor?->graduationSet;
+        $affiliatedSet = $this->donor?->affiliatedGraduationSet ?? $this->givingIdentity?->affiliatedGraduationSet;
         /** @var TierConfiguration|null $tier */
         $tier = $this->resource->getAttribute('matched_tier');
 
@@ -83,6 +85,13 @@ class TransactionResource extends JsonResource
                 'name' => $set->name,
                 'set_number' => $set->set_number,
             ] : null,
+            'affiliated_set' => $affiliatedSet !== null ? [
+                'uuid' => $affiliatedSet->uuid,
+                'name' => $affiliatedSet->name,
+                'set_number' => $affiliatedSet->set_number,
+            ] : null,
+            'house' => House::payload($this->donor?->house ?? $this->givingIdentity?->house),
+            'is_igbobian_owned' => (bool) ($this->donor?->is_igbobian_owned ?? $this->givingIdentity?->is_igbobian_owned ?? false),
             'donation_type' => isset($metadata['donation_type']) && $metadata['donation_type'] !== ''
                 ? (string) $metadata['donation_type']
                 : 'One Time Donation',

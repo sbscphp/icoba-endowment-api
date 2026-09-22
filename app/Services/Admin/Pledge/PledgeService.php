@@ -56,11 +56,14 @@ class PledgeService
     {
         $query = Pledge::query()->with([
             'campaign:uuid,name,campaign_id,status,allow_anonymous_donation',
-            'donor:uuid,firstname,lastname,email,phone_number,organization_name,graduation_set_uuid,donor_type_uuid',
+            'donor:uuid,firstname,lastname,email,phone_number,organization_name,graduation_set_uuid,donor_type_uuid,house,affiliated_graduation_set_uuid,is_igbobian_owned',
             'donor.graduationSet:uuid,name,set_number',
+            'donor.affiliatedGraduationSet:uuid,name,set_number',
             'donor.donorType:uuid,slug,label',
             'donorType:uuid,slug,label',
             'graduationSet:uuid,name,set_number',
+            'givingIdentity:uuid,house,affiliated_graduation_set_uuid,is_igbobian_owned',
+            'givingIdentity.affiliatedGraduationSet:uuid,name,set_number',
         ]);
 
         ListingFilterRules::applyResolvedDateRange($query, $validated);
@@ -174,7 +177,10 @@ class PledgeService
         $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 100));
         $query = Pledge::query()->with([
             'campaign:uuid,name,campaign_id,status,allow_anonymous_donation',
-            'donor:uuid,firstname,lastname,email,phone_number',
+            'donor:uuid,firstname,lastname,email,phone_number,house,affiliated_graduation_set_uuid,is_igbobian_owned',
+            'donor.affiliatedGraduationSet:uuid,name,set_number',
+            'givingIdentity:uuid,house,affiliated_graduation_set_uuid,is_igbobian_owned',
+            'givingIdentity.affiliatedGraduationSet:uuid,name,set_number',
         ])->where('user_uuid', $userUuid);
 
         $status = data_get($validated, 'filters.status');
@@ -456,6 +462,23 @@ class PledgeService
         if ($isTest !== null && $isTest !== '') {
             $query->where('pledges.is_test', in_array($isTest, ['1', 1, true, 'true'], true));
         }
+
+        $affiliatedSetUuid = data_get($validated, 'filters.affiliated_graduation_set_uuid');
+        if (is_string($affiliatedSetUuid) && $affiliatedSetUuid !== '') {
+            $query->where(function (Builder $builder) use ($affiliatedSetUuid): void {
+                $builder->whereHas('donor', fn (Builder $donor) => $donor->where('affiliated_graduation_set_uuid', $affiliatedSetUuid))
+                    ->orWhereHas('givingIdentity', fn (Builder $identity) => $identity->where('affiliated_graduation_set_uuid', $affiliatedSetUuid));
+            });
+        }
+
+        $house = data_get($validated, 'filters.house');
+        if (is_string($house) && $house !== '') {
+            $house = strtolower($house);
+            $query->where(function (Builder $builder) use ($house): void {
+                $builder->whereHas('donor', fn (Builder $donor) => $donor->where('house', $house))
+                    ->orWhereHas('givingIdentity', fn (Builder $identity) => $identity->where('house', $house));
+            });
+        }
     }
 
     /**
@@ -485,11 +508,14 @@ class PledgeService
             ->where('uuid', $uuid)
             ->with([
                 'campaign:uuid,name,campaign_id,status,allow_anonymous_donation',
-                'donor:uuid,firstname,lastname,email,phone_number,organization_name,graduation_set_uuid,donor_type_uuid',
+                'donor:uuid,firstname,lastname,email,phone_number,organization_name,graduation_set_uuid,donor_type_uuid,house,affiliated_graduation_set_uuid,is_igbobian_owned',
                 'donor.graduationSet:uuid,name,set_number',
+                'donor.affiliatedGraduationSet:uuid,name,set_number',
                 'donor.donorType:uuid,slug,label',
                 'donorType:uuid,slug,label',
                 'graduationSet:uuid,name,set_number',
+                'givingIdentity:uuid,house,affiliated_graduation_set_uuid,is_igbobian_owned',
+                'givingIdentity.affiliatedGraduationSet:uuid,name,set_number',
             ])
             ->first();
 
