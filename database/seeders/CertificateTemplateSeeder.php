@@ -99,14 +99,14 @@ class CertificateTemplateSeeder extends Seeder
             ],
             'signatories' => [
                 [
-                    'name' => 'Ayanwale Erikina',
-                    'position' => 'Global President',
-                    'signature_url' => 'https://res.cloudinary.com/sbsc/image/upload/v1780135927/uploads/images/30202_2026-05-30_1780135925.png',
+                    'name' => 'Kunle Elebute',
+                    'position' => 'Chairman',
+                    'signature_url' => null,
                 ],
                 [
-                    'name' => 'Adekunle Modupeola',
-                    'position' => 'Head, Endowment Initiative',
-                    'signature_url' => 'https://res.cloudinary.com/sbsc/image/upload/v1780136000/uploads/images/72185_2026-05-30_1780135998.png',
+                    'name' => 'Olawale Abiola',
+                    'position' => 'Secretary',
+                    'signature_url' => null,
                 ],
             ],
         ];

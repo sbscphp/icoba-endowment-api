@@ -44,6 +44,54 @@ class FcmbCheckoutServiceTest extends TestCase
         $this->assertTrue($service->verifyWebhookHash($payload));
     }
 
+    public function test_verify_webhook_hash_accepts_clnx_fixed_scale_amount_from_raw_body(): void
+    {
+        // CLNX serialises amount as 109.5000 and hashes that literal; json_decode collapses it to 109.5.
+        $rawBody = '{"reference":"WTU-c47c8029-59c5-47f8-9c76-c3fa31f2c846","amount":109.5000,"originalAmount":100,'
+            .'"invoiceRequestReference":"1905d354-18ae-428c-849b-ef4d3d93e297","transactionDate":"2025-12-29T03:57:26","hash":"%s"}';
+
+        $hash = hash('sha512', implode('|', [
+            '109.5000',
+            'WTU-c47c8029-59c5-47f8-9c76-c3fa31f2c846',
+            '1905d354-18ae-428c-849b-ef4d3d93e297',
+            '2025-12-29T03:57:26',
+            'test-secret-key',
+        ]));
+        $rawBody = sprintf($rawBody, $hash);
+        $payload = json_decode($rawBody, true);
+
+        $this->assertSame(109.5, $payload['amount']);
+        $this->assertTrue($this->makeService()->verifyWebhookHash($payload, $rawBody));
+    }
+
+    public function test_verify_webhook_hash_accepts_whole_amount_hashed_with_four_decimals_without_raw_body(): void
+    {
+        $payload = [
+            'amount' => 100,
+            'reference' => 'GAT-116e0e07-7572-47fe-81fd-22fb46f2e7f3',
+            'invoiceRequestReference' => 'd6a44168-cf12-4e3f-9b65-04895667a398',
+            'transactionDate' => '2025-12-29T07:20:24',
+        ];
+        $payload['hash'] = hash('sha512', implode('|', [
+            '100.0000',
+            $payload['reference'],
+            $payload['invoiceRequestReference'],
+            $payload['transactionDate'],
+            'test-secret-key',
+        ]));
+
+        $this->assertTrue($this->makeService()->verifyWebhookHash($payload));
+    }
+
+    public function test_verify_webhook_hash_ignores_original_amount_when_reading_raw_body(): void
+    {
+        $rawBody = '{"originalAmount":100,"amount":107.5000,"reference":"GAT-1","invoiceRequestReference":"inv-1","transactionDate":"2025-12-29T07:20:24","hash":"%s"}';
+        $hash = hash('sha512', implode('|', ['107.5000', 'GAT-1', 'inv-1', '2025-12-29T07:20:24', 'test-secret-key']));
+        $rawBody = sprintf($rawBody, $hash);
+
+        $this->assertTrue($this->makeService()->verifyWebhookHash(json_decode($rawBody, true), $rawBody));
+    }
+
     public function test_verify_webhook_hash_rejects_tampered_payload(): void
     {
         $payload = [
