@@ -8,6 +8,7 @@ use App\Models\GivingIdentity;
 use App\Models\GraduationSet;
 use App\Models\Pledge;
 use App\Models\User;
+use App\Support\DonorAffiliation;
 
 final class GivingIdentityProfileBuilder
 {
@@ -40,6 +41,8 @@ final class GivingIdentityProfileBuilder
                 ->value('uuid');
         }
 
+        $affiliation = self::resolveAffiliation(is_string($slug) ? $slug : null, $guestProfile, $data);
+
         return new GivingIdentityProfile(
             donorTypeUuid: is_string($donorTypeUuid) ? $donorTypeUuid : null,
             donorTypeSlug: is_string($slug) ? $slug : null,
@@ -55,10 +58,39 @@ final class GivingIdentityProfileBuilder
             alumniIdentifier: filled($guestProfile['alumni_identifier'] ?? $data['alumni_identifier'] ?? null)
                 ? (string) ($guestProfile['alumni_identifier'] ?? $data['alumni_identifier'])
                 : null,
-            house: House::normalize($guestProfile['house'] ?? $data['house'] ?? null),
-            affiliatedGraduationSetUuid: self::resolveAffiliatedSetUuid($guestProfile, $data),
-            isIgbobianOwned: filter_var($guestProfile['is_igbobian_owned'] ?? $data['is_igbobian_owned'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            house: $affiliation['house'],
+            affiliatedGraduationSetUuid: $affiliation['affiliated_graduation_set_uuid'],
+            isIgbobianOwned: $affiliation['is_igbobian_owned'],
         );
+    }
+
+    /**
+     * Snapshot values win over the raw payload; when the donor type is known, the
+     * per-type rules drop anything that type may not carry (e.g. ownership on individuals).
+     *
+     * @param  array<string, mixed>  $guestProfile
+     * @param  array<string, mixed>  $data
+     * @return array{house: ?string, affiliated_graduation_set_uuid: ?string, is_igbobian_owned: bool}
+     */
+    private static function resolveAffiliation(?string $slug, array $guestProfile, array $data): array
+    {
+        if ($slug === null) {
+            return [
+                'house' => House::normalize($guestProfile['house'] ?? $data['house'] ?? null),
+                'affiliated_graduation_set_uuid' => self::resolveAffiliatedSetUuid($guestProfile, $data),
+                'is_igbobian_owned' => filter_var($guestProfile['is_igbobian_owned'] ?? $data['is_igbobian_owned'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            ];
+        }
+
+        $merged = [];
+        foreach (DonorAffiliation::PAYLOAD_KEYS as $key) {
+            $value = $guestProfile[$key] ?? ($data[$key] ?? null);
+            if ($value !== null && $value !== '') {
+                $merged[$key] = $value;
+            }
+        }
+
+        return DonorAffiliation::columnsFor($slug, $merged);
     }
 
     /**

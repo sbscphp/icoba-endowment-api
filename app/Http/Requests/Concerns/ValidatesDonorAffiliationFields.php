@@ -11,7 +11,7 @@ use Illuminate\Validation\Rule;
  * Per-donor-type rules for house and affiliated-set fields.
  *
  * - ICOBA alumni: optional own `house`.
- * - Wives of ICOBA: optional husband's `affiliated_set_number` and `house`.
+ * - Wives, friends and relatives of ICOBA: optional affiliated Igbobian's `affiliated_set_number` and `house`.
  * - Corporate donors: `is_igbobian_owned`; when true, `affiliated_set_number` is required and `house` stays optional.
  *
  * Shared by registration, profile update, guest checkout/pledge and reconciliation requests.
@@ -55,7 +55,9 @@ trait ValidatesDonorAffiliationFields
             DonorTypeSlug::ICOBA_ALUMNI->value => [
                 'house' => $house,
             ],
-            DonorTypeSlug::WIVES_OF_ICOBA->value => [
+            DonorTypeSlug::WIVES_OF_ICOBA->value,
+            DonorTypeSlug::FRIENDS_OF_ICOBA->value,
+            DonorTypeSlug::RELATIVES_OF_ICOBA->value => [
                 'affiliated_set_number' => $optionalSet,
                 'house' => $house,
             ],

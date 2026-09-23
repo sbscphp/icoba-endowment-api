@@ -32,7 +32,9 @@ final class DonorAffiliation
             DonorTypeSlug::ICOBA_ALUMNI->value => array_merge($empty, [
                 'house' => House::normalize($data['house'] ?? null),
             ]),
-            DonorTypeSlug::WIVES_OF_ICOBA->value => array_merge($empty, [
+            DonorTypeSlug::WIVES_OF_ICOBA->value,
+            DonorTypeSlug::FRIENDS_OF_ICOBA->value,
+            DonorTypeSlug::RELATIVES_OF_ICOBA->value => array_merge($empty, [
                 'house' => House::normalize($data['house'] ?? null),
                 'affiliated_graduation_set_uuid' => self::resolveSetUuid($data),
             ]),

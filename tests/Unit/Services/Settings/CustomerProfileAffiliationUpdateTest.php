@@ -76,20 +76,25 @@ class CustomerProfileAffiliationUpdateTest extends TestCase
         $this->assertNull($fresh->house);
     }
 
-    public function test_friends_cannot_set_affiliation_fields(): void
+    public function test_friends_and_relatives_can_set_affiliated_set_and_house_but_not_ownership(): void
     {
-        $user = $this->userOfType(DonorTypeSlug::FRIENDS_OF_ICOBA);
+        foreach ([DonorTypeSlug::FRIENDS_OF_ICOBA, DonorTypeSlug::RELATIVES_OF_ICOBA] as $slug) {
+            $user = $this->userOfType($slug);
 
-        app(AccountSettingsService::class)->updateCustomerProfile($user, [
-            'house' => 'parker',
-            'affiliated_set_number' => '2002',
-            'is_igbobian_owned' => true,
-        ]);
+            $profile = app(AccountSettingsService::class)->updateCustomerProfile($user, [
+                'house' => 'parker',
+                'affiliated_set_number' => '2002',
+                'is_igbobian_owned' => true,
+            ]);
 
-        $fresh = $user->fresh();
-        $this->assertNull($fresh->house);
-        $this->assertNull($fresh->affiliated_graduation_set_uuid);
-        $this->assertFalse($fresh->is_igbobian_owned);
+            $fresh = $user->fresh();
+            $this->assertSame('parker', $fresh->house);
+            $this->assertSame($this->set->uuid, $fresh->affiliated_graduation_set_uuid);
+            $this->assertNull($fresh->graduation_set_uuid);
+            $this->assertFalse($fresh->is_igbobian_owned);
+            $this->assertSame('2002', $profile['donor']['affiliated_set']['set_number']);
+            $this->assertSame('Parker', $profile['donor']['house']['label']);
+        }
     }
 
     /**

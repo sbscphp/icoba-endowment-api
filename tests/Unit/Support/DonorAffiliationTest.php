@@ -92,7 +92,7 @@ class DonorAffiliationTest extends TestCase
         $this->assertNull($columns['affiliated_graduation_set_uuid']);
     }
 
-    public function test_friends_and_relatives_never_carry_affiliation(): void
+    public function test_friends_and_relatives_keep_house_and_set_but_never_ownership(): void
     {
         foreach ([DonorTypeSlug::FRIENDS_OF_ICOBA, DonorTypeSlug::RELATIVES_OF_ICOBA] as $slug) {
             $columns = DonorAffiliation::columnsFor($slug->value, [
@@ -101,8 +101,8 @@ class DonorAffiliationTest extends TestCase
                 'is_igbobian_owned' => true,
             ]);
 
-            $this->assertNull($columns['house']);
-            $this->assertNull($columns['affiliated_graduation_set_uuid']);
+            $this->assertSame('parker', $columns['house']);
+            $this->assertSame($this->set->uuid, $columns['affiliated_graduation_set_uuid']);
             $this->assertFalse($columns['is_igbobian_owned']);
         }
     }

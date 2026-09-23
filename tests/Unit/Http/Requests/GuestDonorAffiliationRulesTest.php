@@ -69,6 +69,50 @@ class GuestDonorAffiliationRulesTest extends TestCase
         $this->assertFalse($identity['is_igbobian_owned']);
     }
 
+    public function test_guest_friends_and_relatives_can_send_affiliated_set_and_house(): void
+    {
+        foreach ([DonorTypeSlug::FRIENDS_OF_ICOBA, DonorTypeSlug::RELATIVES_OF_ICOBA] as $slug) {
+            [$errors, $data] = $this->validate([
+                'donor_type' => $slug->value,
+                'firstname' => 'Tunde',
+                'lastname' => 'Ola',
+                'affiliated_set_number' => '2002',
+                'house' => 'Oluwole',
+                'is_igbobian_owned' => '1',
+            ]);
+
+            $this->assertArrayNotHasKey('house', $errors);
+            $this->assertArrayNotHasKey('affiliated_set_number', $errors);
+
+            $snapshot = app(GuestDonorProfileSnapshotService::class)->build($data);
+            $profile = $snapshot['guest_donor_profile'];
+
+            $this->assertSame('oluwole', $profile['house']);
+            $this->assertSame('2002', $profile['affiliated_set_number']);
+            $this->assertSame($this->set->uuid, $profile['affiliated_graduation_set_uuid']);
+            $this->assertArrayNotHasKey('is_igbobian_owned', $profile);
+
+            $identity = GivingIdentityProfileBuilder::fromGuestPayload($data, $snapshot)->toIdentityAttributes('tunde@example.com');
+            $this->assertSame('oluwole', $identity['house']);
+            $this->assertSame($this->set->uuid, $identity['affiliated_graduation_set_uuid']);
+            $this->assertFalse($identity['is_igbobian_owned']);
+        }
+    }
+
+    public function test_guest_relatives_affiliated_set_and_house_are_validated(): void
+    {
+        [$errors] = $this->validate([
+            'donor_type' => DonorTypeSlug::RELATIVES_OF_ICOBA->value,
+            'firstname' => 'Tunde',
+            'lastname' => 'Ola',
+            'affiliated_set_number' => '0000',
+            'house' => 'hogwarts',
+        ]);
+
+        $this->assertArrayHasKey('affiliated_set_number', $errors);
+        $this->assertArrayHasKey('house', $errors);
+    }
+
     public function test_guest_owned_corporate_requires_set_and_snapshots_ownership(): void
     {
         [$errors] = $this->validate($this->corporate(['is_igbobian_owned' => '1']));
