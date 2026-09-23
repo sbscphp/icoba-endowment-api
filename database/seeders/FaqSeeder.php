@@ -21,6 +21,10 @@ class FaqSeeder extends Seeder
                 'content' => 'Anyone who wishes to support Igbobi College can donate. You can give as an ICOBA member (old boy), a corporate donor (organization, company or foundation), a friend of ICOBA, a relative of an old boy, or a wife of an old boy. You will be asked to choose the option that best describes you when donating or registering.',
             ],
             [
+                'title' => 'What information is collected for each type of donor?',
+                'content' => 'The details we ask for depend on how you are connected to Igbobi College. ICOBA members (old boys) provide their graduation set and the house they belonged to — Parker, Townsend, Oluwole, Aggrey or Freeman. Wives, relatives and friends of old boys can tell us the graduation set and house of the old boy they are affiliated with, so their giving is recognised alongside that set and house. Corporate donors provide their organisation\'s details and can indicate whether the organisation is Igbobian-owned; if it is, they can also give the owner\'s set and house. Affiliation details are optional and can be updated later from your profile.',
+            ],
+            [
                 'title' => 'How do I donate?',
                 'content' => 'Select "Donate Now", choose the campaign you would like to support, enter your amount and currency, and provide your details. Then choose a payment method — pay online by card, or pay by bank transfer — and complete the payment. Once your payment is confirmed you will receive a confirmation and a receipt by email.',
             ],
@@ -41,6 +45,10 @@ class FaqSeeder extends Seeder
                 'content' => 'Choose "Bank Transfer" at checkout to see the Endowment Fund account details for your currency. Make the transfer from your bank, then return to the platform and confirm your payment. Your donation will be marked as completed once the transfer has been verified, and your receipt will be issued afterwards.',
             ],
             [
+                'title' => 'I paid directly into the FCMB bank account outside the Endowment platform. What should I do?',
+                'content' => 'If you made a transfer directly into the Endowment Fund\'s FCMB account without going through the platform, your payment will not be matched to a donation automatically. Please contact the support team at support@icobaendowment.org with your full name, the amount and date of the transfer, your transfer reference or proof of payment, and the campaign you intended to support. The team will reconcile the payment, record it against your donor profile and issue your receipt.',
+            ],
+            [
                 'title' => 'What is a pledge, and how does it work?',
                 'content' => 'A pledge is a commitment to give a stated amount over time instead of paying everything at once. When creating a pledge you choose a payment plan — a single payment on a future date, monthly instalments, quarterly instalments, or a custom schedule. You will receive reminders when an instalment is due, and each payment you make counts towards fulfilling your pledge.',
             ],
@@ -55,6 +63,10 @@ class FaqSeeder extends Seeder
             [
                 'title' => 'Will I get a receipt for my donation?',
                 'content' => 'Yes. A receipt is issued for every successful donation and sent to the email address you provided. If you have an account, you can also download your receipts at any time from the "Transactions" section of your dashboard.',
+            ],
+            [
+                'title' => 'Why are an RC number and TIN required for corporate donations?',
+                'content' => 'Corporate donors are asked for their Corporate Affairs Commission (CAC) registration (RC) number and Tax Identification Number (TIN) for tax-related purposes. The RC number confirms the identity of the donating organisation, and the TIN is printed on the tax receipt issued for your donation so that the contribution can be properly documented for tax purposes, including any tax relief your organisation may be entitled to claim. Both details are stored securely and used only for issuing receipts and maintaining accurate donation records.',
             ],
             [
                 'title' => 'What are recognition tiers?',
