@@ -4,7 +4,9 @@ namespace App\Http\Controllers\v1\Public;
 
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\Public\PublicReceiptResource;
 use App\Models\Transaction;
+use App\Responser\JsonResponser;
 use App\Services\Receipt\ReceiptPdfService;
 use App\Services\Receipt\ReceiptService;
 use Illuminate\Http\JsonResponse;
@@ -18,6 +20,26 @@ class ReceiptDownloadController extends Controller
         private readonly ReceiptPdfService $receiptPdfService,
         private readonly ReceiptService $receiptService,
     ) {}
+
+    /**
+     * Guest-facing receipt details as JSON. Same access rules as the PDF download:
+     * an optional `token` query parameter is validated when supplied.
+     */
+    public function show(Request $request, string $receiptNumber): JsonResponse
+    {
+        try {
+            $transaction = $this->resolveAuthorizedTransaction($request, $receiptNumber);
+            $transaction->loadMissing('campaign', 'donor.donorType', 'donorType');
+
+            return JsonResponser::send(false, 'Receipt retrieved.', PublicReceiptResource::make($transaction)->resolve());
+        } catch (\Throwable $th) {
+            if ($th instanceof HttpException) {
+                throw $th;
+            }
+
+            return GeneralHelper::handleControllerThrowable($th, 'Public\ReceiptDownloadController@show');
+        }
+    }
 
     public function guestPdf(Request $request, string $receiptNumber): Response
     {
