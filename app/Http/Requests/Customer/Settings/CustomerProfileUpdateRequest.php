@@ -153,16 +153,13 @@ class CustomerProfileUpdateRequest extends ApiFormRequest
                 'rc_number' => ['sometimes', 'string', 'min:2', 'max:64'],
                 'tin' => ['sometimes', 'string', 'min:2', 'max:64'],
             ], $affiliation),
-            DonorTypeSlug::WIVES_OF_ICOBA->value => array_merge($contact, [
+            DonorTypeSlug::WIVES_OF_ICOBA->value,
+            DonorTypeSlug::FRIENDS_OF_ICOBA->value,
+            DonorTypeSlug::RELATIVES_OF_ICOBA->value => array_merge($contact, [
                 'firstname' => $this->personNameRules(),
                 'lastname' => $this->personNameRules(),
                 'middlename' => ['sometimes', 'nullable', 'string', 'max:50', 'regex:/^[\p{L}\'\-]+(?:\s[\p{L}\'\-]+)*$/u'],
             ], $affiliation),
-            DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value => array_merge($contact, [
-                'firstname' => $this->personNameRules(),
-                'lastname' => $this->personNameRules(),
-                'middlename' => ['sometimes', 'nullable', 'string', 'max:50', 'regex:/^[\p{L}\'\-]+(?:\s[\p{L}\'\-]+)*$/u'],
-            ]),
             default => $contact,
         };
     }

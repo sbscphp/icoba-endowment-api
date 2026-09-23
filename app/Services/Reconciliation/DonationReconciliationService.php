@@ -1238,6 +1238,9 @@ class DonationReconciliationService
             'corporate_category_uuid',
             'rc_number',
             'tin',
+            'house',
+            'affiliated_set_number',
+            'is_igbobian_owned',
             'campaign_uuid',
             'pledge_uuid',
             'reconciliation_note',
@@ -1452,6 +1455,16 @@ class DonationReconciliationService
         if ($identity->tin !== null && $identity->tin !== '') {
             $payload['tin'] = $identity->tin;
         }
+
+        if ($identity->house !== null && $identity->house !== '') {
+            $payload['house'] = $identity->house;
+        }
+
+        if ($identity->affiliated_graduation_set_uuid !== null && $identity->affiliated_graduation_set_uuid !== '') {
+            $payload['affiliated_graduation_set_uuid'] = $identity->affiliated_graduation_set_uuid;
+        }
+
+        $payload['is_igbobian_owned'] = (bool) $identity->is_igbobian_owned;
 
         if ($identity->donorType?->slug !== null) {
             $payload['donor_type'] = $identity->donorType->slug;

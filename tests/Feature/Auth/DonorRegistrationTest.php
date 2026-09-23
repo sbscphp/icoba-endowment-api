@@ -132,6 +132,45 @@ class DonorRegistrationTest extends TestCase
         $this->assertSame('aggrey', $identity->house);
     }
 
+    public function test_friends_and_relatives_can_register_with_affiliated_set_and_house(): void
+    {
+        foreach ([DonorTypeSlug::FRIENDS_OF_ICOBA, DonorTypeSlug::RELATIVES_OF_ICOBA] as $index => $slug) {
+            $email = "donor{$index}@example.com";
+            $phone = '+2348077777'.$index.'00';
+
+            $this->postJson('/api/v1/auth/signup', $this->payload([
+                'donor_type' => $slug->value,
+                'email' => $email,
+                'phone_number' => $phone,
+                'firstname' => 'Tunde',
+                'lastname' => 'Ola',
+                'affiliated_set_number' => '2002',
+                'house' => 'Freeman',
+            ]))->assertStatus(201);
+
+            $user = User::query()->where('email', $email)->firstOrFail();
+            $this->assertNull($user->graduation_set_uuid);
+            $this->assertSame($this->set->uuid, $user->affiliated_graduation_set_uuid);
+            $this->assertSame('freeman', $user->house);
+            $this->assertFalse($user->is_igbobian_owned);
+
+            $identity = GivingIdentity::query()->where('user_uuid', $user->uuid)->firstOrFail();
+            $this->assertSame($this->set->uuid, $identity->affiliated_graduation_set_uuid);
+            $this->assertSame('freeman', $identity->house);
+        }
+    }
+
+    public function test_friends_affiliated_set_must_exist_and_house_must_be_valid(): void
+    {
+        $this->postJson('/api/v1/auth/signup', $this->payload([
+            'donor_type' => DonorTypeSlug::FRIENDS_OF_ICOBA->value,
+            'firstname' => 'Tunde',
+            'lastname' => 'Ola',
+            'affiliated_set_number' => '0000',
+            'house' => 'hogwarts',
+        ]))->assertStatus(422)->assertJsonStructure(['data' => ['affiliated_set_number', 'house']]);
+    }
+
     public function test_wife_set_and_house_are_optional(): void
     {
         $this->postJson('/api/v1/auth/signup', $this->payload([
