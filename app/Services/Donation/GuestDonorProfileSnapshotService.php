@@ -3,9 +3,11 @@
 namespace App\Services\Donation;
 
 use App\Enums\DonorTypeSlug;
+use App\Enums\House;
 use App\Models\CorporateCategory;
 use App\Models\DonorType;
 use App\Models\GraduationSet;
+use App\Support\DonorAffiliation;
 
 final class GuestDonorProfileSnapshotService
 {
@@ -81,6 +83,25 @@ final class GuestDonorProfileSnapshotService
             $profile['firstname'] = trim((string) ($data['firstname'] ?? ''));
             $profile['lastname'] = trim((string) ($data['lastname'] ?? ''));
             $donorName = trim($profile['firstname'].' '.$profile['lastname']);
+        }
+
+        $affiliation = DonorAffiliation::columnsFor($slug, $data);
+        if ($affiliation['house'] !== null) {
+            $profile['house'] = $affiliation['house'];
+            $profile['house_label'] = House::from($affiliation['house'])->label();
+        }
+        if ($affiliation['affiliated_graduation_set_uuid'] !== null) {
+            $affiliatedSet = GraduationSet::query()
+                ->where('uuid', $affiliation['affiliated_graduation_set_uuid'])
+                ->first(['uuid', 'name', 'set_number']);
+            $profile['affiliated_graduation_set_uuid'] = $affiliation['affiliated_graduation_set_uuid'];
+            if ($affiliatedSet !== null) {
+                $profile['affiliated_set_number'] = $affiliatedSet->set_number;
+                $profile['affiliated_graduation_set_name'] = $affiliatedSet->name;
+            }
+        }
+        if ($affiliation['is_igbobian_owned']) {
+            $profile['is_igbobian_owned'] = true;
         }
 
         return [

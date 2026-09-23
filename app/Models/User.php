@@ -62,6 +62,7 @@ class User extends Authenticatable
             'last_login_at' => 'datetime',
             'login_attempts' => 'integer',
             'is_locked' => 'boolean',
+            'is_igbobian_owned' => 'boolean',
             'locked_at' => 'datetime',
             'last_active_at' => 'datetime',
         ];
@@ -80,6 +81,14 @@ class User extends Authenticatable
     public function graduationSet(): BelongsTo
     {
         return $this->belongsTo(GraduationSet::class, 'graduation_set_uuid', 'uuid');
+    }
+
+    /**
+     * Set of the affiliated Igbobian (wives of ICOBA / Igbobian-owned corporates).
+     */
+    public function affiliatedGraduationSet(): BelongsTo
+    {
+        return $this->belongsTo(GraduationSet::class, 'affiliated_graduation_set_uuid', 'uuid');
     }
 
     public function transactions(): HasMany

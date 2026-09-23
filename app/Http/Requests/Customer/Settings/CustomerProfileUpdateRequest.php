@@ -4,6 +4,7 @@ namespace App\Http\Requests\Customer\Settings;
 
 use App\Enums\DonorTypeSlug;
 use App\Http\Requests\ApiFormRequest;
+use App\Http\Requests\Concerns\ValidatesDonorAffiliationFields;
 use App\Models\Country;
 use App\Models\User;
 use App\Services\Phone\PhoneNumberService;
@@ -14,6 +15,8 @@ use Illuminate\Validation\Rule;
 
 class CustomerProfileUpdateRequest extends ApiFormRequest
 {
+    use ValidatesDonorAffiliationFields;
+
     public function rules(): array
     {
         $slug = $this->customerDonorTypeSlug();
@@ -32,7 +35,7 @@ class CustomerProfileUpdateRequest extends ApiFormRequest
             'donor_type_uuid.prohibited' => 'Donor type cannot be changed.',
             'set_number.exists' => 'I couldn\'t find that set. Please double-check your graduation year or contact ICOBA support.',
             'phone_number.regex' => 'Please enter a valid phone number for the selected country.',
-        ];
+        ] + $this->donorAffiliationMessages();
 
         foreach (CustomerProfileUpdateFields::prohibitedKeys($this->customerDonorTypeSlug()) as $field) {
             if (! isset($messages["{$field}.prohibited"])) {
@@ -45,6 +48,8 @@ class CustomerProfileUpdateRequest extends ApiFormRequest
 
     protected function prepareForValidation(): void
     {
+        $this->prepareDonorAffiliationForValidation();
+
         if ($this->has('email')) {
             $this->merge(['email' => strtolower(trim((string) $this->input('email')))]);
         }
@@ -71,6 +76,25 @@ class CustomerProfileUpdateRequest extends ApiFormRequest
 
     public function withValidator(Validator $validator): void
     {
+        $validator->after(function (Validator $validator): void {
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
+
+            // Corporate turning ownership on must end up with an affiliated set (sent now or already stored).
+            $user = $this->user();
+            if ($user instanceof User
+                && $this->customerDonorTypeSlug() === DonorTypeSlug::CORPORATE_DONOR->value
+                && $this->boolean('is_igbobian_owned')
+                && ! $this->filled('affiliated_set_number')
+                && empty($user->affiliated_graduation_set_uuid)) {
+                $validator->errors()->add(
+                    'affiliated_set_number',
+                    'Please select the set of the Igbobian this organization belongs to.',
+                );
+            }
+        });
+
         $validator->after(function (Validator $validator): void {
             if ($validator->errors()->isNotEmpty() || ! $this->has('phone_number')) {
                 return;
@@ -113,6 +137,8 @@ class CustomerProfileUpdateRequest extends ApiFormRequest
             'country_code' => ['sometimes', 'nullable', 'string', 'max:10'],
         ];
 
+        $affiliation = $this->donorAffiliationRulesForSlug($slug, sometimes: true);
+
         return match ($slug) {
             DonorTypeSlug::ICOBA_ALUMNI->value => array_merge($contact, [
                 'firstname' => $this->personNameRules(),
@@ -120,13 +146,18 @@ class CustomerProfileUpdateRequest extends ApiFormRequest
                 'middlename' => ['sometimes', 'nullable', 'string', 'max:50', 'regex:/^[\p{L}\'\-]+(?:\s[\p{L}\'\-]+)*$/u'],
                 'set_number' => ['sometimes', 'string', 'max:16', Rule::exists('sets', 'set_number')],
                 'alumni_identifier' => ['sometimes', 'nullable', 'string', 'max:50', 'regex:/^[a-zA-Z0-9]*$/'],
-            ]),
+            ], $affiliation),
             DonorTypeSlug::CORPORATE_DONOR->value => array_merge($contact, [
                 'organization_name' => ['sometimes', 'string', 'min:2', 'max:100'],
                 'corporate_category_uuid' => ['sometimes', 'uuid', Rule::exists('corporate_categories', 'uuid')],
                 'rc_number' => ['sometimes', 'string', 'min:2', 'max:64'],
                 'tin' => ['sometimes', 'string', 'min:2', 'max:64'],
-            ]),
+            ], $affiliation),
+            DonorTypeSlug::WIVES_OF_ICOBA->value => array_merge($contact, [
+                'firstname' => $this->personNameRules(),
+                'lastname' => $this->personNameRules(),
+                'middlename' => ['sometimes', 'nullable', 'string', 'max:50', 'regex:/^[\p{L}\'\-]+(?:\s[\p{L}\'\-]+)*$/u'],
+            ], $affiliation),
             DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value => array_merge($contact, [
                 'firstname' => $this->personNameRules(),
                 'lastname' => $this->personNameRules(),

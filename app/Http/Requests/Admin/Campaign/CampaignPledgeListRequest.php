@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin\Campaign;
 
 use App\Enums\Currency;
+use App\Enums\House;
 use App\Enums\PledgePaymentPlanType;
 use App\Enums\PledgeStatus;
 use App\Http\Requests\ApiFormRequest;
@@ -14,6 +15,13 @@ class CampaignPledgeListRequest extends ApiFormRequest
     protected function prepareForValidation(): void
     {
         ListingFilterRules::applyPeriodDateRangeToRequest($this);
+
+        $house = $this->input('filters.house');
+        if (is_string($house) && $house !== '') {
+            $filters = is_array($this->input('filters')) ? $this->input('filters') : [];
+            $filters['house'] = strtolower(trim($house));
+            $this->merge(['filters' => $filters]);
+        }
     }
 
     public function rules(): array
@@ -35,6 +43,8 @@ class CampaignPledgeListRequest extends ApiFormRequest
                 'filters.payment_plan_type' => ['sometimes', 'nullable', Rule::in(PledgePaymentPlanType::values())],
                 'filters.is_anonymous' => ['sometimes', 'nullable', Rule::in(['0', '1', 0, 1, true, false, 'true', 'false'])],
                 'filters.graduation_set_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:sets,uuid'],
+                'filters.affiliated_graduation_set_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:sets,uuid'],
+                'filters.house' => ['sometimes', 'nullable', 'string', Rule::in(House::values())],
                 'filters.donor_type_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:donor_types,uuid'],
                 'filters.min_committed_amount' => ['sometimes', 'nullable', 'numeric', 'min:0'],
                 'filters.max_committed_amount' => ['sometimes', 'nullable', 'numeric', 'gte:filters.min_committed_amount'],
@@ -54,6 +64,9 @@ class CampaignPledgeListRequest extends ApiFormRequest
             'filters.is_anonymous.in' => 'Anonymous filter must be a boolean value.',
             'filters.graduation_set_uuid.uuid' => 'Graduation set filter must be a valid UUID.',
             'filters.graduation_set_uuid.exists' => 'Selected graduation set does not exist.',
+            'filters.affiliated_graduation_set_uuid.uuid' => 'Affiliated graduation set filter must be a valid UUID.',
+            'filters.affiliated_graduation_set_uuid.exists' => 'Selected affiliated graduation set does not exist.',
+            'filters.house.in' => 'House filter is invalid.',
             'filters.donor_type_uuid.uuid' => 'Donor type filter must be a valid UUID.',
             'filters.donor_type_uuid.exists' => 'Selected donor type does not exist.',
             'filters.min_committed_amount.numeric' => 'Minimum committed amount filter must be a number.',

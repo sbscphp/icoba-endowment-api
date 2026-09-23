@@ -21,6 +21,7 @@ class GivingIdentity extends Model
             'status' => GivingIdentityStatus::class,
             'source' => GivingIdentitySource::class,
             'locked_at' => 'datetime',
+            'is_igbobian_owned' => 'boolean',
         ];
     }
 
@@ -37,6 +38,11 @@ class GivingIdentity extends Model
     public function graduationSet(): BelongsTo
     {
         return $this->belongsTo(GraduationSet::class, 'graduation_set_uuid', 'uuid');
+    }
+
+    public function affiliatedGraduationSet(): BelongsTo
+    {
+        return $this->belongsTo(GraduationSet::class, 'affiliated_graduation_set_uuid', 'uuid');
     }
 
     public function corporateCategory(): BelongsTo

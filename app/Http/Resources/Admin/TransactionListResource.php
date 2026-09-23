@@ -2,6 +2,9 @@
 
 namespace App\Http\Resources\Admin;
 
+use App\Enums\House;
+use App\Models\DonorType;
+use App\Models\GraduationSet;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -21,6 +24,11 @@ class TransactionListResource extends JsonResource
             'transaction_id' => $this->transaction_id,
             'donor_name' => $this->resolveDonorName(),
             'donor_email' => $this->donor_email ?? $this->donor?->email,
+            'donor_type' => $this->donorTypePayload(),
+            'set' => $this->setPayload($this->donor?->graduationSet ?? $this->pledge?->graduationSet),
+            'affiliated_set' => $this->setPayload($this->donor?->affiliatedGraduationSet ?? $this->givingIdentity?->affiliatedGraduationSet),
+            'house' => House::payload($this->donor?->house ?? $this->givingIdentity?->house),
+            'is_igbobian_owned' => (bool) ($this->donor?->is_igbobian_owned ?? $this->givingIdentity?->is_igbobian_owned ?? false),
             'is_anonymous' => (bool) $this->is_anonymous,
             'is_test' => (bool) $this->is_test,
             'linked_campaign' => $this->campaign !== null ? [
@@ -35,6 +43,38 @@ class TransactionListResource extends JsonResource
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
             'paid_at' => $this->paid_at,
             'created_at' => $this->created_at,
+        ];
+    }
+
+    /**
+     * @return array{uuid: string, name: string|null, set_number: string|null}|null
+     */
+    private function setPayload(?GraduationSet $set): ?array
+    {
+        if ($set === null) {
+            return null;
+        }
+
+        return [
+            'uuid' => $set->uuid,
+            'name' => $set->name,
+            'set_number' => $set->set_number,
+        ];
+    }
+
+    /**
+     * @return array{slug: string, label: string}|null
+     */
+    private function donorTypePayload(): ?array
+    {
+        $type = $this->donorType ?? $this->donor?->donorType;
+        if (! $type instanceof DonorType) {
+            return null;
+        }
+
+        return [
+            'slug' => (string) $type->slug,
+            'label' => (string) $type->label,
         ];
     }
 

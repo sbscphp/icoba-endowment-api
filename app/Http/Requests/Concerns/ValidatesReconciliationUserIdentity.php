@@ -70,6 +70,10 @@ trait ValidatesReconciliationUserIdentity
             'corporate_category_uuid',
             'rc_number',
             'tin',
+            'house',
+            'affiliated_set_number',
+            'affiliated_graduation_set_uuid',
+            'is_igbobian_owned',
         ];
     }
 

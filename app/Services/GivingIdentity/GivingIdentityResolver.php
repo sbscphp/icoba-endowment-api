@@ -275,13 +275,24 @@ final class GivingIdentityResolver
     {
         $updates = [];
 
-        foreach (['rc_number', 'tin', 'alumni_identifier'] as $field) {
-            $incoming = $profile->{$field === 'rc_number' ? 'rcNumber' : ($field === 'tin' ? 'tin' : 'alumniIdentifier')};
+        $softFields = [
+            'rc_number' => $profile->rcNumber,
+            'tin' => $profile->tin,
+            'alumni_identifier' => $profile->alumniIdentifier,
+            'house' => $profile->house,
+            'affiliated_graduation_set_uuid' => $profile->affiliatedGraduationSetUuid,
+        ];
+
+        foreach ($softFields as $field => $incoming) {
             $current = $identity->{$field};
 
             if (($current === null || $current === '') && filled($incoming)) {
                 $updates[$field] = $incoming;
             }
+        }
+
+        if ($profile->isIgbobianOwned && ! $identity->is_igbobian_owned) {
+            $updates['is_igbobian_owned'] = true;
         }
 
         if ($updates !== []) {

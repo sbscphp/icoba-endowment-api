@@ -26,6 +26,7 @@ use App\Repositories\Contracts\User\UserRepositoryInterface;
 use App\Services\GivingIdentity\GivingIdentityResolver;
 use App\Services\Notifications\NotificationDispatchService;
 use App\Services\Theme\ThemeResolver;
+use App\Support\DonorAffiliation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -70,7 +71,7 @@ class AuthService
             $payload = $this->mapDonorRegistrationToUserPayload($validated, $donorType);
             $user = $this->userRepository->create($payload);
             $user->assignRole(eRole::CUSTOMER->value);
-            $user->load(['roles', 'donorType', 'corporateCategory', 'graduationSet']);
+            $user->load(['roles', 'donorType', 'corporateCategory', 'graduationSet', 'affiliatedGraduationSet']);
 
             $this->givingIdentityResolver->linkRegistrationToIdentity($user);
 
@@ -120,6 +121,8 @@ class AuthService
             'tin' => null,
             'alumni_identifier' => null,
         ];
+
+        $row = array_merge($row, DonorAffiliation::columnsFor($donorType->slug, $validated));
 
         return match ($donorType->slug) {
             DonorTypeSlug::ICOBA_ALUMNI->value => array_merge($row, [

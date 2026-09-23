@@ -19,6 +19,7 @@ enum ePermission: string
     case TRANSACTIONS_REVERSE = 'transactions.reverse';
     case TRANSACTIONS_RETRY = 'transactions.retry';
     case TRANSACTIONS_EXPORT = 'transactions.export';
+    case TRANSACTIONS_VERIFY = 'transactions.verify';
 
     // 4. Tier configuration
     case TIER_CONFIGURATION_READ = 'tier_configuration.read';

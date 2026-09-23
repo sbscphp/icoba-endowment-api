@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\DonorTypeSlug;
+use App\Enums\House;
 use App\Models\DonorType;
 use App\Models\GraduationSet;
 use App\Models\Pledge;
@@ -99,6 +100,31 @@ class PledgeListResource extends JsonResource
             'is_anonymous' => (bool) $this->is_anonymous,
             'donor_type' => $this->resolveDonorTypePayload(),
             'graduation_set' => $this->resolveGraduationSetPayload(),
+            'affiliated_set' => $this->resolveAffiliatedSetPayload(),
+            'house' => House::payload($donor?->house ?? $this->givingIdentity?->house),
+            'is_igbobian_owned' => (bool) ($donor?->is_igbobian_owned ?? $this->givingIdentity?->is_igbobian_owned ?? false),
+        ];
+    }
+
+    /**
+     * Affiliated Igbobian's set (wives of ICOBA / Igbobian-owned corporates):
+     * donor account first, then the giving identity.
+     *
+     * @return array{uuid: string, name: string|null, set_number: string|null}|null
+     */
+    private function resolveAffiliatedSetPayload(): ?array
+    {
+        $donor = $this->relationLoaded('donor') ? $this->donor : null;
+        $set = $donor?->affiliatedGraduationSet ?? $this->givingIdentity?->affiliatedGraduationSet;
+
+        if (! $set instanceof GraduationSet) {
+            return null;
+        }
+
+        return [
+            'uuid' => $set->uuid,
+            'name' => $set->name,
+            'set_number' => $set->set_number,
         ];
     }
 

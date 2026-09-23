@@ -12,8 +12,12 @@ use Illuminate\Validation\Rule;
 
 trait ValidatesGuestDonorProfileFields
 {
+    use ValidatesDonorAffiliationFields;
+
     protected function prepareGuestDonorProfileForValidation(): void
     {
+        $this->prepareDonorAffiliationForValidation();
+
         if ($this->filled('donor_type_uuid') && ! $this->filled('donor_type')) {
             $slug = DonorType::query()
                 ->where('uuid', (string) $this->input('donor_type_uuid'))
@@ -62,6 +66,7 @@ trait ValidatesGuestDonorProfileFields
     protected function guestDonorProfileRulesForSlug(?string $slug): array
     {
         $shared = $this->guestDonorIdentityRules();
+        $affiliation = $this->donorAffiliationRulesForSlug($slug);
 
         return match ($slug) {
             DonorTypeSlug::ICOBA_ALUMNI->value => array_merge($shared, [
@@ -69,19 +74,19 @@ trait ValidatesGuestDonorProfileFields
                 'lastname' => $this->guestPersonNameRules(),
                 'set_number' => ['required', 'string', 'max:16', Rule::exists('sets', 'set_number')],
                 'alumni_identifier' => ['nullable', 'string', 'max:50', 'regex:/^[a-zA-Z0-9]*$/'],
-            ]),
+            ], $affiliation),
             DonorTypeSlug::CORPORATE_DONOR->value => array_merge($shared, [
                 'organization_name' => ['required', 'string', 'min:2', 'max:150'],
                 'corporate_category_uuid' => ['required', 'uuid', Rule::exists('corporate_categories', 'uuid')],
                 'rc_number' => ['required', 'string', 'min:2', 'max:64'],
                 'tin' => ['required', 'string', 'min:2', 'max:64'],
-            ]),
+            ], $affiliation),
             DonorTypeSlug::FRIENDS_OF_ICOBA->value,
             DonorTypeSlug::RELATIVES_OF_ICOBA->value,
             DonorTypeSlug::WIVES_OF_ICOBA->value => array_merge($shared, [
                 'firstname' => $this->guestPersonNameRules(),
                 'lastname' => $this->guestPersonNameRules(),
-            ]),
+            ], $affiliation),
             default => $shared,
         };
     }

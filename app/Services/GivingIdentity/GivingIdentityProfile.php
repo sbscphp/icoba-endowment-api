@@ -21,6 +21,9 @@ final readonly class GivingIdentityProfile
         public ?string $firstname = null,
         public ?string $lastname = null,
         public ?string $alumniIdentifier = null,
+        public ?string $house = null,
+        public ?string $affiliatedGraduationSetUuid = null,
+        public bool $isIgbobianOwned = false,
     ) {}
 
     public function hardFieldsMatch(GivingIdentityProfile $other): bool
@@ -69,6 +72,9 @@ final readonly class GivingIdentityProfile
             'firstname' => GivingIdentityNormalizer::text($this->firstname),
             'lastname' => GivingIdentityNormalizer::text($this->lastname),
             'alumni_identifier' => filled($this->alumniIdentifier) ? (string) $this->alumniIdentifier : null,
+            'house' => $this->house,
+            'affiliated_graduation_set_uuid' => $this->affiliatedGraduationSetUuid,
+            'is_igbobian_owned' => $this->isIgbobianOwned,
         ], fn ($value) => $value !== null);
     }
 

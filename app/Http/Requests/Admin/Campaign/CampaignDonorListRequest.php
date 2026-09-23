@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin\Campaign;
 
 use App\Enums\Currency;
+use App\Enums\House;
 use App\Enums\TransactionStatus;
 use App\Http\Requests\ApiFormRequest;
 use App\Http\Requests\Concerns\ListingFilterRules;
@@ -13,6 +14,13 @@ class CampaignDonorListRequest extends ApiFormRequest
     protected function prepareForValidation(): void
     {
         ListingFilterRules::applyPeriodDateRangeToRequest($this);
+
+        $house = $this->input('filters.house');
+        if (is_string($house) && $house !== '') {
+            $filters = is_array($this->input('filters')) ? $this->input('filters') : [];
+            $filters['house'] = strtolower(trim($house));
+            $this->merge(['filters' => $filters]);
+        }
     }
 
     public function rules(): array
@@ -45,6 +53,13 @@ class CampaignDonorListRequest extends ApiFormRequest
                     'string',
                     Rule::exists('sets', 'uuid'),
                 ],
+                'filters.affiliated_graduation_set_uuid' => [
+                    'sometimes',
+                    'nullable',
+                    'uuid',
+                    Rule::exists('sets', 'uuid'),
+                ],
+                'filters.house' => ['sometimes', 'nullable', 'string', Rule::in(House::values())],
                 'filters.donor_type_uuid' => [
                     'sometimes',
                     'nullable',
@@ -70,6 +85,9 @@ class CampaignDonorListRequest extends ApiFormRequest
             'filters.gateway.max' => 'Gateway filter may not be longer than 64 characters.',
             'filters.user_uuid.exists' => 'Selected user does not exist.',
             'filters.graduation_set_uuid.exists' => 'Selected graduation set does not exist.',
+            'filters.affiliated_graduation_set_uuid.uuid' => 'Affiliated graduation set filter must be a valid UUID.',
+            'filters.affiliated_graduation_set_uuid.exists' => 'Selected affiliated graduation set does not exist.',
+            'filters.house.in' => 'House filter is invalid.',
             'filters.donor_type_uuid.exists' => 'Selected donor type does not exist.',
             'filters.is_anonymous.in' => 'Anonymous filter must be a boolean value.',
             'filters.min_amount.numeric' => 'Minimum amount filter must be a number.',

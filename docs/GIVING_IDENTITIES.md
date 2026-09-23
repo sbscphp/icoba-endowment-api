@@ -39,7 +39,9 @@ Hard fields define the identity and must stay consistent for a given email:
 | Corporate Donor | `donor_type`, `organization_name`, `corporate_category` |
 | Friend / Relative | `donor_type`, `firstname`, `lastname` |
 
-Soft fields (can be filled in later): `alumni_identifier`, `rc_number`, `tin`, phone.
+Soft fields (can be filled in later): `alumni_identifier`, `rc_number`, `tin`, `house`, `affiliated_graduation_set_uuid`, `is_igbobian_owned`, phone.
+
+House and affiliation: `house` is the alumnus' own house, or the affiliated Igbobian's house for Wives of ICOBA and Igbobian-owned corporates. `affiliated_graduation_set_uuid` is the affiliated Igbobian's set (never the donor's own `graduation_set_uuid`). `is_igbobian_owned` marks a corporate donor that belongs to an Igbobian; when true an affiliated set is required and house stays optional.
 
 ---
 
@@ -90,7 +92,10 @@ No transaction, pledge, or second identity is created.
 | `email_lower` | Unique contact email (nullable when user-only) |
 | `user_uuid` | Linked registered account |
 | `donor_type_uuid` | Donor type |
-| `graduation_set_uuid` | Alumni set |
+| `graduation_set_uuid` | Alumni set (own set) |
+| `house` | House slug (`parker`, `townsend`, `oluwole`, `aggrey`, `freeman`) |
+| `affiliated_graduation_set_uuid` | Affiliated Igbobian's set (wives, Igbobian-owned corporates) |
+| `is_igbobian_owned` | Corporate donor belongs to an Igbobian |
 | `corporate_category_uuid` | Corporate category |
 | `organization_name` | Corporate name |
 | `firstname`, `lastname` | Individual donors |

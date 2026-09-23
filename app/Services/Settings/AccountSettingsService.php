@@ -3,6 +3,7 @@
 namespace App\Services\Settings;
 
 use App\Enums\DonorTypeSlug;
+use App\Enums\House;
 use App\Enums\ModuleEnums;
 use App\Exceptions\ApiException;
 use App\Http\Resources\UserResource;
@@ -11,6 +12,7 @@ use App\Models\GraduationSet;
 use App\Models\User;
 use App\Notifications\GenericDatabaseNotification;
 use App\Support\CustomerProfileUpdateFields;
+use App\Support\DonorAffiliation;
 use App\Support\PasswordRules;
 use App\Services\GivingIdentity\GivingIdentityLockService;
 use App\Services\Notifications\NotificationDispatchService;
@@ -31,6 +33,9 @@ class AccountSettingsService
         'rc_number' => 'RC number',
         'tin' => 'TIN',
         'corporate_category_uuid' => 'Corporate category',
+        'house' => 'House',
+        'affiliated_graduation_set_uuid' => 'Affiliated set',
+        'is_igbobian_owned' => 'Igbobian-owned',
     ];
 
     public function __construct(
@@ -42,7 +47,7 @@ class AccountSettingsService
      */
     public function customerProfile(User $user): array
     {
-        $user->loadMissing(['roles', 'donorType', 'corporateCategory', 'graduationSet']);
+        $user->loadMissing(['roles', 'donorType', 'corporateCategory', 'graduationSet', 'affiliatedGraduationSet']);
 
         return UserResource::make($user)->resolve();
     }
@@ -140,9 +145,13 @@ class AccountSettingsService
         match ($slug) {
             DonorTypeSlug::ICOBA_ALUMNI->value => $updates = array_merge($updates, $this->alumniProfileUpdates($data)),
             DonorTypeSlug::CORPORATE_DONOR->value => $updates = array_merge($updates, $this->corporateProfileUpdates($data)),
-            DonorTypeSlug::FRIENDS_OF_ICOBA->value, DonorTypeSlug::RELATIVES_OF_ICOBA->value => $updates = array_merge($updates, $this->individualProfileUpdates($data)),
+            DonorTypeSlug::WIVES_OF_ICOBA->value,
+            DonorTypeSlug::FRIENDS_OF_ICOBA->value,
+            DonorTypeSlug::RELATIVES_OF_ICOBA->value => $updates = array_merge($updates, $this->individualProfileUpdates($data)),
             default => null,
         };
+
+        $updates = array_merge($updates, DonorAffiliation::partialColumnsFor($slug, $data));
 
         if ($updates !== []) {
             $changes = $this->resolveCustomerProfileChanges($user, $updates);
@@ -398,10 +407,18 @@ class AccountSettingsService
             return null;
         }
 
-        if ($field === 'graduation_set_uuid') {
+        if ($field === 'graduation_set_uuid' || $field === 'affiliated_graduation_set_uuid') {
             $setNumber = GraduationSet::query()->where('uuid', $value)->value('set_number');
 
             return $setNumber !== null ? (string) $setNumber : (string) $value;
+        }
+
+        if ($field === 'house') {
+            return House::tryFrom((string) $value)?->label() ?? (string) $value;
+        }
+
+        if ($field === 'is_igbobian_owned') {
+            return filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'Yes' : 'No';
         }
 
         return (string) $value;

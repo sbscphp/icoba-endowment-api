@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\House;
 use App\Http\Resources\CountryResource;
 use App\Models\CorporateCategory;
 use App\Models\Country;
@@ -18,6 +19,7 @@ final class DropdownService
      *     donor_types: Collection<int, DonorType>,
      *     corporate_categories: Collection<int, CorporateCategory>,
      *     sets: Collection<int, GraduationSet>,
+     *     houses: list<array{value: string, label: string}>,
      *     countries: array<int, array<string, mixed>>,
      * }
      */
@@ -27,6 +29,7 @@ final class DropdownService
             'donor_types' => DonorType::query()->orderBy('id')->get(['uuid', 'slug', 'label', 'description']),
             'corporate_categories' => CorporateCategory::query()->orderBy('id')->get(['uuid', 'name']),
             'sets' => GraduationSet::query()->orderBy('sort_order')->orderBy('set_number')->get(['uuid', 'public_id', 'name', 'set_number', 'sort_order']),
+            'houses' => House::options(),
             'countries' => CountryResource::collection(
                 Country::query()->active()->orderBy('name')->get()
             )->resolve(),
