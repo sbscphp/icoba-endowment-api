@@ -50,6 +50,8 @@ Route::prefix('v1')->group(function () {
             ->where('token', '[A-Za-z0-9]{32,64}')
             ->middleware(['throttle:public-receipt']);
 
+        Route::get('receipts/{receiptNumber}', [ReceiptDownloadController::class, 'show'])
+            ->middleware(['throttle:public-receipt']);
         Route::get('receipts/{receiptNumber}/download', [ReceiptDownloadController::class, 'guestPdf'])
             ->middleware(['throttle:public-receipt']);
         Route::get('receipts/{receiptNumber}/tax/download', [ReceiptDownloadController::class, 'guestTaxPdf'])
