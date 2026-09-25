@@ -7,6 +7,7 @@ use App\Enums\DonorTypeSlug;
 use App\Enums\eRole;
 use App\Enums\GivingIdentitySource;
 use App\Enums\GivingIdentityStatus;
+use App\Enums\PledgeStatus;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
 use App\Models\Admin;
@@ -16,6 +17,7 @@ use App\Models\Country;
 use App\Models\DonorType;
 use App\Models\GivingIdentity;
 use App\Models\GraduationSet;
+use App\Models\Pledge;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Reconciliation\DonationReconciliationService;
@@ -69,6 +71,108 @@ class DonationReconciliationServiceTest extends TestCase
         $this->assertTrue($draft['is_igbobian_owned'] ?? null);
         $this->assertSame('2002', $draft['affiliated_set_number'] ?? null);
         $this->assertSame('parker', $draft['house'] ?? null);
+    }
+
+    public function test_create_manual_uses_admin_payment_date_and_records_wives_type(): void
+    {
+        [$set, , $adminUuid] = $this->seedDonorReferenceData();
+        $campaign = $this->createCampaign(['NGN']);
+
+        $transaction = app(DonationReconciliationService::class)->createManual([
+            'amount' => 5000,
+            'reference_id' => 'REF-'.Str::upper(Str::random(8)),
+            'bank_key' => 'fcmb_ngn',
+            'narration' => 'Late FCMB transfer',
+            'payment_date' => '2026-09-10',
+            'campaign_uuid' => $campaign->uuid,
+            'donor_type' => DonorTypeSlug::WIVES_OF_ICOBA->value,
+            'donor_email' => 'wife@example.com',
+            'donor_phone' => '+2348012345679',
+            'country_code' => '+234',
+            'firstname' => 'Bisi',
+            'lastname' => 'Ola',
+            'wives_type' => 'wives_of_icoba_europe',
+            'affiliated_set_number' => '2002',
+        ], $adminUuid);
+
+        $this->assertSame('2026-09-10', $transaction->paid_at?->toDateString());
+        $this->assertSame('2026-09-10', substr((string) ($transaction->metadata['bank_transaction_date'] ?? ''), 0, 10));
+        $this->assertTrue($transaction->metadata['payment_date_set_by_admin'] ?? false);
+        $this->assertSame('wives_of_icoba_europe', $transaction->metadata['reconciliation_draft']['wives_type'] ?? null);
+
+        $user = User::query()->where('email', 'wife@example.com')->firstOrFail();
+        $this->assertSame('wives_of_icoba_europe', $user->wives_type);
+        $this->assertSame($set->uuid, $user->affiliated_graduation_set_uuid);
+
+        $identity = GivingIdentity::query()->where('user_uuid', $user->uuid)->firstOrFail();
+        $this->assertSame('wives_of_icoba_europe', $identity->wives_type);
+    }
+
+    public function test_create_manual_defaults_payment_date_to_now(): void
+    {
+        [, , $adminUuid] = $this->seedDonorReferenceData();
+        $campaign = $this->createCampaign(['NGN']);
+
+        $transaction = app(DonationReconciliationService::class)->createManual([
+            'amount' => 5000,
+            'reference_id' => 'REF-'.Str::upper(Str::random(8)),
+            'bank_key' => 'fcmb_ngn',
+            'narration' => 'Transfer',
+            'campaign_uuid' => $campaign->uuid,
+        ], $adminUuid);
+
+        $this->assertNotNull($transaction->paid_at);
+        $this->assertTrue($transaction->paid_at->isSameDay(now()));
+        $this->assertArrayNotHasKey('payment_date_set_by_admin', $transaction->metadata ?? []);
+    }
+
+    public function test_complete_manual_overrides_payment_date(): void
+    {
+        [, , $adminUuid] = $this->seedDonorReferenceData();
+        $campaign = $this->createCampaign(['NGN']);
+        $user = User::factory()->create([
+            'donor_type_uuid' => DonorType::query()->where('slug', DonorTypeSlug::FRIENDS_OF_ICOBA->value)->value('uuid'),
+        ]);
+        $originalPaidAt = now()->subDays(2)->startOfSecond();
+        $transaction = $this->createPendingBankTransfer([
+            'campaign_uuid' => $campaign->uuid,
+            'paid_at' => $originalPaidAt,
+            'metadata' => ['source' => 'admin_manual', 'bank_transaction_date' => $originalPaidAt->toIso8601String()],
+        ]);
+
+        $finalized = app(DonationReconciliationService::class)->completeManual($transaction, [
+            'user_uuid' => $user->uuid,
+            'campaign_uuid' => $campaign->uuid,
+            'payment_date' => '2026-09-05 14:30:00',
+        ], $adminUuid);
+
+        $this->assertSame(TransactionStatus::SUCCESSFUL, $finalized->status);
+        $this->assertSame('2026-09-05 14:30:00', $finalized->paid_at?->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-09-05', substr((string) ($finalized->metadata['bank_transaction_date'] ?? ''), 0, 10));
+        $this->assertTrue($finalized->metadata['payment_date_set_by_admin'] ?? false);
+        $this->assertSame($originalPaidAt->toIso8601String(), $finalized->metadata['payment_date_previous'] ?? null);
+    }
+
+    public function test_complete_manual_without_payment_date_keeps_existing_paid_at(): void
+    {
+        [, , $adminUuid] = $this->seedDonorReferenceData();
+        $campaign = $this->createCampaign(['NGN']);
+        $user = User::factory()->create([
+            'donor_type_uuid' => DonorType::query()->where('slug', DonorTypeSlug::FRIENDS_OF_ICOBA->value)->value('uuid'),
+        ]);
+        $originalPaidAt = now()->subDays(2)->startOfSecond();
+        $transaction = $this->createPendingBankTransfer([
+            'campaign_uuid' => $campaign->uuid,
+            'paid_at' => $originalPaidAt,
+        ]);
+
+        $finalized = app(DonationReconciliationService::class)->completeManual($transaction, [
+            'user_uuid' => $user->uuid,
+            'campaign_uuid' => $campaign->uuid,
+        ], $adminUuid);
+
+        $this->assertTrue($finalized->paid_at?->equalTo($originalPaidAt));
+        $this->assertArrayNotHasKey('payment_date_set_by_admin', $finalized->metadata ?? []);
     }
 
     public function test_create_manual_from_guest_identity_carries_affiliation_to_new_user(): void
@@ -184,6 +288,76 @@ class DonationReconciliationServiceTest extends TestCase
             $this->assertArrayHasKey('campaign_uuid', $exception->errors());
             throw $exception;
         }
+    }
+
+    public function test_create_manual_stores_normalized_purpose_in_column_and_draft(): void
+    {
+        [, , $adminUuid] = $this->seedDonorReferenceData();
+        $campaign = $this->createCampaign(['NGN']);
+
+        $transaction = app(DonationReconciliationService::class)->createManual([
+            'amount' => 5000,
+            'reference_id' => 'REF-'.Str::upper(Str::random(8)),
+            'bank_key' => 'fcmb_ngn',
+            'narration' => 'Transfer',
+            'campaign_uuid' => $campaign->uuid,
+            'purpose' => 'Student Welfare',
+        ], $adminUuid);
+
+        $this->assertSame('student_welfare', $transaction->purpose);
+        $this->assertSame('Student Welfare', $transaction->metadata['reconciliation_draft']['purpose'] ?? null);
+    }
+
+    public function test_complete_manual_sets_custom_purpose_from_payload(): void
+    {
+        [, , $adminUuid] = $this->seedDonorReferenceData();
+        $campaign = $this->createCampaign(['NGN']);
+        $user = User::factory()->create([
+            'donor_type_uuid' => DonorType::query()->where('slug', DonorTypeSlug::FRIENDS_OF_ICOBA->value)->value('uuid'),
+        ]);
+        $transaction = $this->createPendingBankTransfer(['campaign_uuid' => $campaign->uuid]);
+
+        $finalized = app(DonationReconciliationService::class)->completeManual($transaction, [
+            'user_uuid' => $user->uuid,
+            'campaign_uuid' => $campaign->uuid,
+            'purpose' => 'Chapel roof',
+        ], $adminUuid);
+
+        $this->assertSame(TransactionStatus::SUCCESSFUL, $finalized->status);
+        $this->assertSame('Chapel roof', $finalized->purpose);
+    }
+
+    public function test_complete_manual_inherits_pledge_purpose_when_linking_pledge_without_purpose(): void
+    {
+        [, , $adminUuid] = $this->seedDonorReferenceData();
+        $campaign = $this->createCampaign(['NGN']);
+        $user = User::factory()->create([
+            'donor_type_uuid' => DonorType::query()->where('slug', DonorTypeSlug::FRIENDS_OF_ICOBA->value)->value('uuid'),
+        ]);
+        $pledge = Pledge::query()->create([
+            'campaign_uuid' => $campaign->uuid,
+            'user_uuid' => $user->uuid,
+            'donor_name' => 'Pledge Donor',
+            'donor_email' => $user->email,
+            'is_anonymous' => false,
+            'purpose' => 'infrastructure',
+            'committed_amount' => 5000,
+            'currency' => 'NGN',
+            'committed_amount_ngn' => 5000,
+            'exchange_rate_to_naira' => 1,
+            'payment_plan_type' => 'monthly',
+            'installment_count' => 1,
+            'status' => PledgeStatus::ACTIVE,
+        ]);
+        $transaction = $this->createPendingBankTransfer(['campaign_uuid' => $campaign->uuid]);
+
+        $finalized = app(DonationReconciliationService::class)->completeManual($transaction, [
+            'user_uuid' => $user->uuid,
+            'pledge_uuid' => $pledge->uuid,
+        ], $adminUuid);
+
+        $this->assertSame($pledge->uuid, $finalized->pledge_uuid);
+        $this->assertSame('infrastructure', $finalized->purpose);
     }
 
     /**

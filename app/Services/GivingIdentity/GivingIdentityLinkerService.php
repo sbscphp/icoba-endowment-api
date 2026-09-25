@@ -158,6 +158,7 @@ final class GivingIdentityLinkerService
             'house' => $guestProfile['house'] ?? null,
             'affiliated_graduation_set_uuid' => $guestProfile['affiliated_graduation_set_uuid'] ?? null,
             'is_igbobian_owned' => $guestProfile['is_igbobian_owned'] ?? false,
+            'wives_type' => $guestProfile['wives_type'] ?? null,
         ], [
             'donor_type_uuid' => $transaction->donor_type_uuid,
             'guest_donor_profile' => $guestProfile,

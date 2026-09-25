@@ -24,6 +24,7 @@ final readonly class GivingIdentityProfile
         public ?string $house = null,
         public ?string $affiliatedGraduationSetUuid = null,
         public bool $isIgbobianOwned = false,
+        public ?string $wivesType = null,
     ) {}
 
     public function hardFieldsMatch(GivingIdentityProfile $other): bool
@@ -75,6 +76,7 @@ final readonly class GivingIdentityProfile
             'house' => $this->house,
             'affiliated_graduation_set_uuid' => $this->affiliatedGraduationSetUuid,
             'is_igbobian_owned' => $this->isIgbobianOwned,
+            'wives_type' => $this->wivesType,
         ], fn ($value) => $value !== null);
     }
 

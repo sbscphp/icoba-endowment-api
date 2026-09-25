@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Customer\Pledge;
 
 use App\Enums\Currency;
+use App\Enums\DonationPurpose;
 use App\Enums\PledgePaymentPlanType;
 use App\Http\Requests\ApiFormRequest;
 use App\Http\Requests\Concerns\RequiresResolvableDonorName;
@@ -38,6 +39,7 @@ class PledgeStoreRequest extends ApiFormRequest
             'user_uuid' => ['prohibited'],
             'graduation_set_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:sets,uuid'],
             'is_anonymous' => ['sometimes', 'boolean'],
+            'purpose' => ['sometimes', 'nullable', 'string', 'max:'.DonationPurpose::MAX_LENGTH],
             'committed_amount' => ['required', 'numeric', 'min:0.01'],
             'currency' => ['required', 'string', Rule::in(Currency::values())],
             'exchange_rate_to_naira' => ['prohibited'],

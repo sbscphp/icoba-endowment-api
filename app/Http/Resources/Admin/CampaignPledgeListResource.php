@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Admin;
 
+use App\Enums\DonationPurpose;
 use App\Enums\DonorTypeSlug;
 use App\Models\DonorType;
 use App\Models\GraduationSet;
@@ -23,6 +24,7 @@ class CampaignPledgeListResource extends JsonResource
             'pledge_uuid' => $this->uuid,
             'donor_name' => $this->resolveDonorName(),
             'is_anonymous' => (bool) $this->is_anonymous,
+            'purpose' => DonationPurpose::payload($this->purpose),
             'donor_email' => (bool) $this->is_anonymous ? null : ($this->donor_email ?? $this->donor?->email),
             'donor_phone' => (bool) $this->is_anonymous ? null : ($this->donor_phone ?? $this->donor?->phone_number),
             'donor_type' => $this->resolveDonorTypePayload(),

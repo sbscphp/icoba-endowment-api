@@ -4,6 +4,7 @@ namespace App\Services\Donation;
 
 use App\Enums\DonorTypeSlug;
 use App\Enums\House;
+use App\Enums\WivesType;
 use App\Models\CorporateCategory;
 use App\Models\DonorType;
 use App\Models\GraduationSet;
@@ -102,6 +103,10 @@ final class GuestDonorProfileSnapshotService
         }
         if ($affiliation['is_igbobian_owned']) {
             $profile['is_igbobian_owned'] = true;
+        }
+        if ($affiliation['wives_type'] !== null) {
+            $profile['wives_type'] = $affiliation['wives_type'];
+            $profile['wives_type_label'] = WivesType::from($affiliation['wives_type'])->label();
         }
 
         return [

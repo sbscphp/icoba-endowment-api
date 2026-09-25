@@ -3,6 +3,7 @@
 namespace App\Services\Donation;
 
 use App\Enums\Currency;
+use App\Enums\DonationPurpose;
 use App\Enums\PaymentGateway;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
@@ -82,6 +83,7 @@ class DonationIntentService
             'tin' => ['sometimes', 'nullable', 'string', 'max:64'],
             'donor_type_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:donor_types,uuid'],
             'is_anonymous' => ['sometimes', 'boolean'],
+            'purpose' => ['sometimes', 'nullable', 'string', 'max:'.DonationPurpose::MAX_LENGTH],
             'gateway' => ['sometimes', 'nullable', 'string', 'max:64'],
             'application_type' => ['sometimes', 'nullable', 'string', 'max:48'],
             'schedule_item_id' => ['sometimes', 'nullable', 'string', 'max:64'],
@@ -217,6 +219,12 @@ class DonationIntentService
             'organization_name' => $organizationName,
         ], $linkedUser);
 
+        // Explicit purpose wins; a pledge payment without one inherits the pledge's purpose.
+        $purpose = DonationPurpose::normalize($clean['purpose'] ?? null);
+        if ($purpose === null && $pledgeUuid !== null && isset($pledge)) {
+            $purpose = $pledge->purpose;
+        }
+
         return Transaction::query()->create([
             'transaction_id' => $transactionId,
             'campaign_uuid' => $campaignUuid,
@@ -231,6 +239,7 @@ class DonationIntentService
             'donor_email' => $clean['donor_email'] ?? null,
             'donor_phone' => $guestSnapshot['donor_phone'] ?? ($clean['donor_phone'] ?? null),
             'is_anonymous' => (bool) ($clean['is_anonymous'] ?? false),
+            'purpose' => $purpose,
             'amount' => $amount,
             'currency' => $currency,
             'exchange_rate_to_naira' => $rate,

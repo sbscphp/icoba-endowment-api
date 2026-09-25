@@ -2,8 +2,10 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\DonationPurpose;
 use App\Enums\DonorTypeSlug;
 use App\Enums\House;
+use App\Enums\WivesType;
 use App\Models\DonorType;
 use App\Models\GraduationSet;
 use App\Models\Pledge;
@@ -58,6 +60,7 @@ class PledgeListResource extends JsonResource
             'summary' => is_array($summary) ? $summary : null,
             'schedule' => is_array($schedule) ? $schedule : null,
             'is_anonymous' => (bool) $this->is_anonymous,
+            'purpose' => DonationPurpose::payload($this->purpose),
             'is_test' => (bool) $this->is_test,
             'fulfilled_at' => $this->fulfilled_at,
             'created_at' => $this->created_at,
@@ -103,6 +106,7 @@ class PledgeListResource extends JsonResource
             'affiliated_set' => $this->resolveAffiliatedSetPayload(),
             'house' => House::payload($donor?->house ?? $this->givingIdentity?->house),
             'is_igbobian_owned' => (bool) ($donor?->is_igbobian_owned ?? $this->givingIdentity?->is_igbobian_owned ?? false),
+            'wives_type' => WivesType::payload($donor?->wives_type ?? $this->givingIdentity?->wives_type),
         ];
     }
 

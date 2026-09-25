@@ -49,14 +49,30 @@ class CustomerProfileAffiliationUpdateTest extends TestCase
         $profile = app(AccountSettingsService::class)->updateCustomerProfile($user, [
             'affiliated_set_number' => '2002',
             'house' => 'aggrey',
+            'wives_type' => 'wives_of_icoba_international',
         ]);
 
         $fresh = $user->fresh();
         $this->assertSame($this->set->uuid, $fresh->affiliated_graduation_set_uuid);
         $this->assertNull($fresh->graduation_set_uuid);
         $this->assertSame('aggrey', $fresh->house);
+        $this->assertSame('wives_of_icoba_international', $fresh->wives_type);
         $this->assertSame('2002', $profile['donor']['affiliated_set']['set_number']);
+        $this->assertSame(
+            ['value' => 'wives_of_icoba_international', 'label' => 'Wives of ICOBA, International'],
+            $profile['donor']['wives_type'],
+        );
         $this->assertNull($profile['donor']['set']);
+    }
+
+    public function test_wives_type_is_dropped_for_non_wives(): void
+    {
+        $user = $this->userOfType(DonorTypeSlug::RELATIVES_OF_ICOBA);
+
+        $profile = app(AccountSettingsService::class)->updateCustomerProfile($user, ['wives_type' => 'icobana_wives']);
+
+        $this->assertNull($user->fresh()->wives_type);
+        $this->assertNull($profile['donor']['wives_type']);
     }
 
     public function test_corporate_turning_ownership_off_clears_affiliation(): void

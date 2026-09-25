@@ -80,6 +80,7 @@ final class CustomerProfileUpdateFields
         'affiliated_set_number',
         'affiliated_graduation_set_uuid',
         'is_igbobian_owned',
+        'wives_type',
     ];
 
     /**
@@ -92,7 +93,7 @@ final class CustomerProfileUpdateFields
         return match ($donorTypeSlug) {
             DonorTypeSlug::ICOBA_ALUMNI->value => array_merge($contact, self::PERSON, ['set_number', 'alumni_identifier', 'house']),
             DonorTypeSlug::CORPORATE_DONOR->value => array_merge($contact, self::CORPORATE),
-            DonorTypeSlug::WIVES_OF_ICOBA->value,
+            DonorTypeSlug::WIVES_OF_ICOBA->value => array_merge($contact, self::PERSON, self::AFFILIATED_INDIVIDUAL, ['wives_type']),
             DonorTypeSlug::FRIENDS_OF_ICOBA->value,
             DonorTypeSlug::RELATIVES_OF_ICOBA->value => array_merge($contact, self::PERSON, self::AFFILIATED_INDIVIDUAL),
             default => $contact,

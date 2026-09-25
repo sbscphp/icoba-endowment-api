@@ -51,6 +51,28 @@ class LeaderboardController extends Controller
         }
     }
 
+    public function houses(LeaderboardRequest $request)
+    {
+        try {
+            $paginator = $this->leaderboardService->housesLeaderboard($request->validated());
+
+            return JsonResponser::send(false, 'House leaderboard retrieved.', $paginator);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Public\LeaderboardController@houses');
+        }
+    }
+
+    public function topHouses(TopSetsRequest $request)
+    {
+        try {
+            $payload = $this->leaderboardService->topHouses($request->validated());
+
+            return JsonResponser::send(false, 'Top houses retrieved.', $payload);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Public\LeaderboardController@topHouses');
+        }
+    }
+
     public function recentDonations(LeaderboardRequest $request)
     {
         try {

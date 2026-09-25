@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Customer;
 
+use App\Enums\DonationPurpose;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -28,6 +29,7 @@ class CustomerTransactionResource extends JsonResource
             'status' => $tx->status->value,
             'paid_at' => $tx->paid_at,
             'is_anonymous' => (bool) $tx->is_anonymous,
+            'purpose' => DonationPurpose::payload($tx->purpose),
             'application_type' => $tx->application_type?->value,
             'pledge_uuid' => $tx->pledge_uuid,
             'linked_campaign' => $tx->campaign !== null ? [

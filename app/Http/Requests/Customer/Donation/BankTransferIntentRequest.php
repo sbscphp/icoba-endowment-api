@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Customer\Donation;
 
 use App\Enums\Currency;
+use App\Enums\DonationPurpose;
 use App\Http\Requests\ApiFormRequest;
 use App\Http\Requests\Concerns\MergesCurrencyFromPledge;
 use App\Http\Requests\Concerns\RequiresResolvableDonorName;
@@ -52,6 +53,7 @@ class BankTransferIntentRequest extends ApiFormRequest
             'pledge_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:pledges,uuid'],
             'user_uuid' => ['prohibited'],
             'is_anonymous' => ['sometimes', 'boolean'],
+            'purpose' => ['sometimes', 'nullable', 'string', 'max:'.DonationPurpose::MAX_LENGTH],
             'metadata' => ['sometimes', 'nullable', 'array'],
             'paid_into_account_number' => array_merge(
                 ['sometimes', 'nullable', 'string', 'max:64'],

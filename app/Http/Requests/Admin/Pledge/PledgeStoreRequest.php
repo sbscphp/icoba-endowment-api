@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin\Pledge;
 
 use App\Enums\Currency;
+use App\Enums\DonationPurpose;
 use App\Enums\PledgePaymentPlanType;
 use App\Http\Requests\ApiFormRequest;
 use App\Http\Requests\Concerns\ValidatesPledgeScheduleInput;
@@ -33,6 +34,7 @@ class PledgeStoreRequest extends ApiFormRequest
             'donor_email' => ['sometimes', 'nullable', 'email', 'max:190'],
             'donor_phone' => ['sometimes', 'nullable', 'string', 'max:32'],
             'is_anonymous' => ['sometimes', 'boolean'],
+            'purpose' => ['sometimes', 'nullable', 'string', 'max:'.DonationPurpose::MAX_LENGTH],
             'committed_amount' => ['required', 'numeric', 'min:0.01'],
             'currency' => ['required', 'string', Rule::in(Currency::values())],
             'exchange_rate_to_naira' => ['prohibited'],
@@ -73,6 +75,7 @@ class PledgeStoreRequest extends ApiFormRequest
             'payment_plan_type.required' => 'Please select a payment plan type.',
             'payment_plan_type.in' => 'Selected payment plan type is invalid.',
             'metadata.array' => 'Metadata must be a structured object.',
+            'purpose.max' => 'Purpose may not be longer than '.DonationPurpose::MAX_LENGTH.' characters.',
         ]);
     }
 }

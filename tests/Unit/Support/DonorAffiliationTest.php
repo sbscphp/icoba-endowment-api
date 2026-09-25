@@ -37,6 +37,7 @@ class DonorAffiliationTest extends TestCase
             'house' => 'townsend',
             'affiliated_graduation_set_uuid' => null,
             'is_igbobian_owned' => false,
+            'wives_type' => null,
         ], $columns);
     }
 
@@ -45,11 +46,33 @@ class DonorAffiliationTest extends TestCase
         $columns = DonorAffiliation::columnsFor(DonorTypeSlug::WIVES_OF_ICOBA->value, [
             'affiliated_set_number' => '1998',
             'house' => 'freeman',
+            'wives_type' => 'Wives of ICOBA, Europe',
         ]);
 
         $this->assertSame($this->set->uuid, $columns['affiliated_graduation_set_uuid']);
         $this->assertSame('freeman', $columns['house']);
         $this->assertFalse($columns['is_igbobian_owned']);
+        $this->assertSame('wives_of_icoba_europe', $columns['wives_type']);
+    }
+
+    public function test_wives_type_is_only_kept_for_wives(): void
+    {
+        foreach ([DonorTypeSlug::ICOBA_ALUMNI, DonorTypeSlug::FRIENDS_OF_ICOBA, DonorTypeSlug::RELATIVES_OF_ICOBA] as $slug) {
+            $columns = DonorAffiliation::columnsFor($slug->value, ['wives_type' => 'icobana_wives']);
+            $this->assertNull($columns['wives_type']);
+        }
+
+        $corporate = DonorAffiliation::columnsFor(DonorTypeSlug::CORPORATE_DONOR->value, [
+            'is_igbobian_owned' => true,
+            'affiliated_set_number' => '1998',
+            'wives_type' => 'icobana_wives',
+        ]);
+        $this->assertNull($corporate['wives_type']);
+
+        $this->assertSame(
+            ['wives_type' => 'icobana_wives'],
+            DonorAffiliation::partialColumnsFor(DonorTypeSlug::WIVES_OF_ICOBA->value, ['wives_type' => 'ICOBANA Wives']),
+        );
     }
 
     public function test_corporate_not_owned_clears_affiliation(): void
@@ -64,6 +87,7 @@ class DonorAffiliationTest extends TestCase
             'house' => null,
             'affiliated_graduation_set_uuid' => null,
             'is_igbobian_owned' => false,
+            'wives_type' => null,
         ], $columns);
     }
 
@@ -78,6 +102,7 @@ class DonorAffiliationTest extends TestCase
             'house' => null,
             'affiliated_graduation_set_uuid' => $this->set->uuid,
             'is_igbobian_owned' => true,
+            'wives_type' => null,
         ], $columns);
     }
 

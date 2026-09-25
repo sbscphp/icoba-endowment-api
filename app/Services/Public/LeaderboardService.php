@@ -5,6 +5,7 @@ namespace App\Services\Public;
 use App\Enums\CampaignStatus;
 use App\Enums\Currency;
 use App\Enums\DonorTypeSlug;
+use App\Enums\House;
 use App\Enums\PledgeStatus;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
@@ -20,6 +21,8 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Pagination\LengthAwarePaginator as PaginatorInstance;
+use Illuminate\Pagination\Paginator;
 
 class LeaderboardService
 {
@@ -479,6 +482,54 @@ SQL;
         return [
             'donations' => $this->topSetsForScope($filters, 'donations', $limit, $displayCurrency),
             'pledges' => $this->topSetsForScope($filters, 'pledges', $limit, $displayCurrency),
+        ];
+    }
+
+    /**
+     * House leaderboard. Every Igbobi College house is always listed (zero-filled when it has no
+     * contributions) so the summary is complete; rows are ranked by total amount.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public function housesLeaderboard(array $filters): LengthAwarePaginator
+    {
+        $page = max(1, (int) ($filters['page'] ?? Paginator::resolveCurrentPage()));
+        $perPage = max(1, min((int) ($filters['per_page'] ?? 20), 100));
+        $scope = strtolower(trim((string) ($filters['scope'] ?? 'all')));
+        $displayCurrency = $this->resolveDisplayCurrency($filters);
+        $sort = $this->resolveSort($filters, 'amount', 'desc', ['amount', 'house']);
+        $includeFulfilledAmounts = $scope === 'pledges';
+
+        $rows = $this->houseTotalsForScope($filters, $scope);
+        $rows = $this->sortHouseRows($rows, $sort['by'], $sort['dir']);
+
+        $total = count($rows);
+        $offset = ($page - 1) * $perPage;
+        $mapped = $this->mapHouseLeaderboardRows(
+            array_slice($rows, $offset, $perPage),
+            $displayCurrency,
+            $offset,
+            $includeFulfilledAmounts,
+        );
+
+        return new PaginatorInstance($mapped, $total, $perPage, $page, [
+            'path' => Paginator::resolveCurrentPath(),
+            'pageName' => 'page',
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array{donations: list<array<string, mixed>>, pledges: list<array<string, mixed>>}
+     */
+    public function topHouses(array $filters): array
+    {
+        $limit = max(1, min((int) ($filters['limit'] ?? 3), 10));
+        $displayCurrency = $this->resolveDisplayCurrency($filters);
+
+        return [
+            'donations' => $this->topHousesForScope($filters, 'donations', $limit, $displayCurrency),
+            'pledges' => $this->topHousesForScope($filters, 'pledges', $limit, $displayCurrency),
         ];
     }
 
@@ -988,6 +1039,268 @@ SQL;
     }
 
     /**
+     * @param  array<string, mixed>  $filters
+     * @param  'all'|'donations'|'pledges'  $scope
+     * @return list<array<string, mixed>>
+     */
+    private function topHousesForScope(array $filters, string $scope, int $limit, string $displayCurrency): array
+    {
+        // Top houses rank by money actually received: direct donations or fulfilled pledge payments.
+        $rows = $this->sortHouseRows($this->buildHouseTotalsRows($filters, $scope), 'amount', 'desc');
+
+        return $this->mapHouseLeaderboardRows(array_slice($rows, 0, $limit), $displayCurrency);
+    }
+
+    /**
+     * Totals for every house (zero-filled) under the given scope.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return list<array<string, mixed>>
+     */
+    private function houseTotalsForScope(array $filters, string $scope): array
+    {
+        return $scope === 'pledges'
+            ? $this->buildPledgeHouseTotalsRows($filters)
+            : $this->buildHouseTotalsRows($filters, $scope);
+    }
+
+    /**
+     * House totals from paid transactions.
+     *
+     * @param  array<string, mixed>  $filters
+     * @param  'all'|'donations'|'pledges'  $scope
+     * @return list<array<string, mixed>>
+     */
+    private function buildHouseTotalsRows(array $filters, string $scope): array
+    {
+        $campaignUuid = isset($filters['campaign_uuid']) ? (string) $filters['campaign_uuid'] : null;
+        $amountColumn = $this->resolveAmountColumn($filters);
+        $effectiveNgnSql = $this->effectiveAmountNgnSql('transactions');
+        $houseSql = $this->resolvedHouseSql();
+        $donorKeySql = DonorCumulativeTotalService::DONOR_KEY_SQL;
+
+        $base = Transaction::query()->countableTowardRevenue()
+            ->leftJoin('users', 'users.uuid', '=', 'transactions.user_uuid')
+            ->leftJoin('giving_identities', 'giving_identities.uuid', '=', 'transactions.giving_identity_uuid')
+            ->whereRaw('('.$houseSql.') IS NOT NULL');
+
+        if ($campaignUuid !== null && $campaignUuid !== '') {
+            $base->where('transactions.campaign_uuid', $campaignUuid);
+        }
+
+        if ($scope === 'donations') {
+            $base->whereNull('transactions.pledge_uuid');
+        } elseif ($scope === 'pledges') {
+            $base->whereNotNull('transactions.pledge_uuid');
+        }
+
+        $inner = $base->clone()
+            ->select([
+                'transactions.amount',
+                'transactions.currency',
+                'transactions.amount_in_naira',
+            ])
+            ->selectRaw('('.$houseSql.') as house')
+            ->selectRaw('('.$effectiveNgnSql.') as effective_amount_ngn')
+            ->selectRaw('('.$donorKeySql.') as donor_key');
+
+        $totalAmountSql = $amountColumn === 'amount_in_naira'
+            ? 'SUM(effective_amount_ngn)'
+            : 'SUM(amount)';
+
+        $aggregated = DB::query()
+            ->fromSub($inner, 'house_transactions')
+            ->select('house')
+            ->selectRaw($totalAmountSql.' as total_amount')
+            ->selectRaw('SUM(effective_amount_ngn) as total_amount_ngn')
+            ->selectRaw('COUNT(DISTINCT donor_key) as contributing_donors')
+            ->groupBy('house')
+            ->get()
+            ->keyBy('house');
+
+        return $this->zeroFilledHouseRows($aggregated, $filters, false);
+    }
+
+    /**
+     * House totals from pledge commitments (pledged + fulfilled), not paid transactions only.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return list<array<string, mixed>>
+     */
+    private function buildPledgeHouseTotalsRows(array $filters): array
+    {
+        $campaignUuid = isset($filters['campaign_uuid']) ? (string) $filters['campaign_uuid'] : null;
+        $useNgnDisplay = $this->resolveDisplayCurrency($filters) === Currency::NGN->value;
+        $houseSql = $this->resolvedPledgeHouseSql();
+        $donorKeySql = $this->pledgeDonorKeySql();
+        $effectiveNgnSql = $this->effectiveAmountNgnSql('transactions');
+
+        $fulfilledSub = DB::table('transactions')
+            ->select('pledge_uuid')
+            ->selectRaw('COALESCE(SUM(amount), 0) as fulfilled_amount')
+            ->selectRaw('COALESCE(SUM('.$effectiveNgnSql.'), 0) as fulfilled_amount_ngn')
+            ->where('status', TransactionStatus::SUCCESSFUL->value)
+            ->where(function ($query): void {
+                $query->whereNull('application_type')
+                    ->orWhere('application_type', '!=', TransactionApplicationType::PLEDGE_PLACEHOLDER->value);
+            })
+            ->whereNull('deleted_at')
+            ->groupBy('pledge_uuid');
+
+        $base = Pledge::query()
+            ->leftJoinSub($fulfilledSub, 'fulfilled_totals', 'fulfilled_totals.pledge_uuid', '=', 'pledges.uuid')
+            ->leftJoin('users', 'users.uuid', '=', 'pledges.user_uuid')
+            ->leftJoin('giving_identities', 'giving_identities.uuid', '=', 'pledges.giving_identity_uuid')
+            ->whereNot('pledges.status', PledgeStatus::CANCELLED)
+            ->whereRaw('('.$houseSql.') IS NOT NULL');
+
+        if ($campaignUuid !== null && $campaignUuid !== '') {
+            $base->where('pledges.campaign_uuid', $campaignUuid);
+        }
+
+        $inner = $base->clone()
+            ->select([
+                'pledges.committed_amount',
+                'pledges.committed_amount_ngn',
+            ])
+            ->selectRaw('('.$houseSql.') as house')
+            ->selectRaw('COALESCE(fulfilled_totals.fulfilled_amount, 0) as pledge_fulfilled_amount')
+            ->selectRaw('COALESCE(fulfilled_totals.fulfilled_amount_ngn, 0) as pledge_fulfilled_amount_ngn')
+            ->selectRaw('('.$donorKeySql.') as donor_key');
+
+        $totalAmountSql = $useNgnDisplay
+            ? 'SUM(committed_amount_ngn)'
+            : 'SUM(committed_amount)';
+        $fulfilledAmountSql = $useNgnDisplay
+            ? 'SUM(pledge_fulfilled_amount_ngn)'
+            : 'SUM(pledge_fulfilled_amount)';
+
+        $aggregated = DB::query()
+            ->fromSub($inner, 'house_pledges')
+            ->select('house')
+            ->selectRaw($totalAmountSql.' as total_amount')
+            ->selectRaw('SUM(committed_amount_ngn) as total_amount_ngn')
+            ->selectRaw($fulfilledAmountSql.' as fulfilled_amount')
+            ->selectRaw('SUM(pledge_fulfilled_amount_ngn) as fulfilled_amount_ngn')
+            ->selectRaw('COUNT(DISTINCT donor_key) as contributing_donors')
+            ->groupBy('house')
+            ->get()
+            ->keyBy('house');
+
+        return $this->zeroFilledHouseRows($aggregated, $filters, true);
+    }
+
+    /**
+     * One row per House enum case, merging aggregated totals (zero when absent) and registered
+     * member counts, then applying the optional name search.
+     *
+     * @param  Collection<string, object>  $aggregated
+     * @param  array<string, mixed>  $filters
+     * @return list<array<string, mixed>>
+     */
+    private function zeroFilledHouseRows(Collection $aggregated, array $filters, bool $includeFulfilled): array
+    {
+        $search = strtolower(trim((string) ($filters['search'] ?? '')));
+        $registered = DB::table('users')
+            ->selectRaw('LOWER(TRIM(house)) as house_slug')
+            ->selectRaw('COUNT(*) as registered_members')
+            ->whereNotNull('house')
+            ->groupBy('house_slug')
+            ->pluck('registered_members', 'house_slug');
+
+        $rows = [];
+        foreach (House::cases() as $house) {
+            if ($search !== '' && ! str_contains(strtolower($house->label()), $search) && ! str_contains($house->value, $search)) {
+                continue;
+            }
+
+            $agg = $aggregated->get($house->value);
+            $row = [
+                'house' => $house->value,
+                'house_label' => $house->label(),
+                'total_amount' => (float) ($agg->total_amount ?? 0),
+                'total_amount_ngn' => (float) ($agg->total_amount_ngn ?? 0),
+                'contributing_donors' => (int) ($agg->contributing_donors ?? 0),
+                'registered_members' => (int) ($registered[$house->value] ?? 0),
+            ];
+
+            if ($includeFulfilled) {
+                $row['fulfilled_amount'] = (float) ($agg->fulfilled_amount ?? 0);
+                $row['fulfilled_amount_ngn'] = (float) ($agg->fulfilled_amount_ngn ?? 0);
+            }
+
+            $rows[] = $row;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function sortHouseRows(array $rows, string $by, string $dir): array
+    {
+        $order = array_flip(House::values());
+        $sign = $dir === 'asc' ? 1 : -1;
+
+        usort($rows, function (array $a, array $b) use ($by, $sign, $order): int {
+            if ($by === 'house') {
+                return $sign * ($order[$a['house']] <=> $order[$b['house']]);
+            }
+
+            $cmp = $sign * ($a['total_amount'] <=> $b['total_amount']);
+
+            // Ties keep the canonical house order so ranks are stable.
+            return $cmp !== 0 ? $cmp : ($order[$a['house']] <=> $order[$b['house']]);
+        });
+
+        return array_values($rows);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function mapHouseLeaderboardRows(
+        array $rows,
+        string $displayCurrency,
+        int $rankStart = 0,
+        bool $includeFulfilledAmounts = false,
+    ): array {
+        $rank = $rankStart;
+        $mapped = [];
+
+        foreach ($rows as $row) {
+            $rank++;
+            $contributingDonors = (int) ($row['contributing_donors'] ?? 0);
+
+            $entry = [
+                'rank' => $rank,
+                'house' => [
+                    'value' => $row['house'],
+                    'label' => $row['house_label'],
+                    'total_members' => $contributingDonors,
+                    'contributing_donors' => $contributingDonors,
+                    'registered_members' => (int) ($row['registered_members'] ?? 0),
+                ],
+                'total_amount' => $this->formatLeaderboardAmount($row['total_amount'] ?? null),
+                'amount_in_ngn' => $this->formatLeaderboardAmount($row['total_amount_ngn'] ?? null),
+                'currency' => $displayCurrency,
+            ];
+
+            if ($includeFulfilledAmounts) {
+                $entry['fulfilled_amount'] = $this->formatLeaderboardAmount($row['fulfilled_amount'] ?? null);
+                $entry['fulfilled_amount_ngn'] = $this->formatLeaderboardAmount($row['fulfilled_amount_ngn'] ?? null);
+            }
+
+            $mapped[] = $entry;
+        }
+
+        return $mapped;
+    }
+
+    /**
      * @param  Collection<int, object>|iterable<int, object>  $rows
      * @return list<array<string, mixed>>
      */
@@ -1059,6 +1372,31 @@ COALESCE(
   NULLIF(JSON_UNQUOTE(JSON_EXTRACT(pledges.metadata, '$.guest_donor_profile.graduation_set_uuid')), '')
 )
 SQL;
+    }
+
+    /**
+     * House slug for a transaction: giving identity, then user, then guest snapshot.
+     * Values are stored as lowercase slugs; normalised defensively so grouping is exact.
+     */
+    private function resolvedHouseSql(): string
+    {
+        return $this->houseSqlFor('transactions');
+    }
+
+    private function resolvedPledgeHouseSql(): string
+    {
+        return $this->houseSqlFor('pledges');
+    }
+
+    /**
+     * The guest snapshot path is wrapped by the connection grammar so the JSON extraction
+     * compiles on both MySQL (json_unquote/json_extract) and SQLite (json_extract).
+     */
+    private function houseSqlFor(string $table): string
+    {
+        $guestHouse = DB::connection()->getQueryGrammar()->wrap($table.'.metadata->guest_donor_profile->house');
+
+        return "NULLIF(LOWER(TRIM(COALESCE(giving_identities.house, users.house, NULLIF({$guestHouse}, '')))), '')";
     }
 
     private function pledgeDonorKeySql(): string

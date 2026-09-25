@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Customer\Donation;
 
 use App\Enums\Currency;
+use App\Enums\DonationPurpose;
 use App\Enums\PaymentGateway;
 use App\Http\Requests\ApiFormRequest;
 use App\Http\Requests\Concerns\MergesCurrencyFromPledge;
@@ -49,6 +50,7 @@ class DonationCheckoutRequest extends ApiFormRequest
             'pledge_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:pledges,uuid'],
             'user_uuid' => ['prohibited'],
             'is_anonymous' => ['sometimes', 'boolean'],
+            'purpose' => ['sometimes', 'nullable', 'string', 'max:'.DonationPurpose::MAX_LENGTH],
             'exchange_rate_to_naira' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'application_type' => ['sometimes', 'nullable', 'string', 'max:48'],
             'metadata' => ['sometimes', 'nullable', 'array'],

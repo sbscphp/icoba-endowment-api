@@ -48,11 +48,14 @@ class GuestDonorAffiliationRulesTest extends TestCase
             'lastname' => 'Ola',
             'affiliated_set_number' => '2002',
             'house' => 'Townsend',
+            'wives_type' => 'ICOBANA Wives',
         ]);
 
         $this->assertArrayNotHasKey('house', $errors);
         $this->assertArrayNotHasKey('affiliated_set_number', $errors);
+        $this->assertArrayNotHasKey('wives_type', $errors);
         $this->assertSame('townsend', $data['house']);
+        $this->assertSame('icobana_wives', $data['wives_type']);
 
         $snapshot = app(GuestDonorProfileSnapshotService::class)->build($data);
         $profile = $snapshot['guest_donor_profile'];
@@ -61,12 +64,42 @@ class GuestDonorAffiliationRulesTest extends TestCase
         $this->assertSame('Townsend', $profile['house_label']);
         $this->assertSame('2002', $profile['affiliated_set_number']);
         $this->assertSame($this->set->uuid, $profile['affiliated_graduation_set_uuid']);
+        $this->assertSame('icobana_wives', $profile['wives_type']);
+        $this->assertSame('ICOBANA Wives', $profile['wives_type_label']);
         $this->assertArrayNotHasKey('is_igbobian_owned', $profile);
 
         $identity = GivingIdentityProfileBuilder::fromGuestPayload($data, $snapshot)->toIdentityAttributes('bisi@example.com');
         $this->assertSame('townsend', $identity['house']);
         $this->assertSame($this->set->uuid, $identity['affiliated_graduation_set_uuid']);
+        $this->assertSame('icobana_wives', $identity['wives_type']);
         $this->assertFalse($identity['is_igbobian_owned']);
+    }
+
+    public function test_guest_wife_must_specify_wives_type(): void
+    {
+        [$errors] = $this->validate([
+            'donor_type' => DonorTypeSlug::WIVES_OF_ICOBA->value,
+            'firstname' => 'Bisi',
+            'lastname' => 'Ola',
+        ]);
+        $this->assertArrayHasKey('wives_type', $errors);
+
+        [$errors] = $this->validate([
+            'donor_type' => DonorTypeSlug::WIVES_OF_ICOBA->value,
+            'firstname' => 'Bisi',
+            'lastname' => 'Ola',
+            'wives_type' => 'wives_of_mars',
+        ]);
+        $this->assertArrayHasKey('wives_type', $errors);
+
+        [$errors, $data] = $this->validate([
+            'donor_type' => DonorTypeSlug::FRIENDS_OF_ICOBA->value,
+            'firstname' => 'Tunde',
+            'lastname' => 'Ola',
+            'wives_type' => 'icobana_wives',
+        ]);
+        $this->assertArrayNotHasKey('wives_type', $errors);
+        $this->assertArrayNotHasKey('wives_type', app(GuestDonorProfileSnapshotService::class)->build($data)['guest_donor_profile']);
     }
 
     public function test_guest_friends_and_relatives_can_send_affiliated_set_and_house(): void

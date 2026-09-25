@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin\Reconciliation;
 
+use App\Enums\DonationPurpose;
 use App\Http\Requests\ApiFormRequest;
 use App\Http\Requests\Concerns\ValidatesGuestDonorProfileFields;
 use App\Http\Requests\Concerns\ValidatesReconciliationUserIdentity;
@@ -37,6 +38,7 @@ class CreateReconciliationQueueRequest extends ApiFormRequest
                 $accountKeys !== [] ? [Rule::in($accountKeys)] : [],
             ),
             'narration' => ['required', 'string', 'max:1000'],
+            'payment_date' => ['nullable', 'date', 'before_or_equal:now'],
         ];
 
         $shared = array_merge([
@@ -45,6 +47,7 @@ class CreateReconciliationQueueRequest extends ApiFormRequest
             'pledge_uuid' => ['nullable', 'uuid', 'exists:pledges,uuid'],
             'reconciliation_note' => ['nullable', 'string', 'max:1000'],
             'is_anonymous' => ['sometimes', 'boolean'],
+            'purpose' => ['sometimes', 'nullable', 'string', 'max:'.DonationPurpose::MAX_LENGTH],
         ], $this->userIdentityFieldRules());
 
         if ($this->filled('user_identity')) {
@@ -89,11 +92,10 @@ class CreateReconciliationQueueRequest extends ApiFormRequest
             'narration.required' => 'Please provide the bank narration.',
             'narration.string' => 'Narration must be a text value.',
             'narration.max' => 'Narration may not be longer than 1000 characters.',
+            'payment_date.date' => 'Payment date must be a valid date.',
+            'payment_date.before_or_equal' => 'Payment date cannot be in the future.',
             'donor_phone.regex' => 'Please enter a valid phone number for the selected country.',
             'set_number.exists' => 'I couldn\'t find that set. Please double-check the graduation year.',
-            'house.in' => 'Please select a valid house.',
-            'affiliated_set_number.exists' => 'We could not find that set. Please double-check the set and try again.',
-            'affiliated_set_number.required_if' => 'Please select the set of the Igbobian this organization belongs to.',
             'donor_type.prohibited' => 'Provide either user_uuid or donor profile fields, not both.',
             'donor_email.prohibited' => 'Provide either user_uuid or donor profile fields, not both.',
             'user_identity.prohibited' => 'Provide either user_identity, user_uuid, or donor profile fields, not more than one.',
@@ -101,7 +103,7 @@ class CreateReconciliationQueueRequest extends ApiFormRequest
             'user_identity.uuid' => 'user_identity must be a valid giving identity UUID.',
             'user_uuid.exists' => 'Selected donor account does not exist. Use user_identity from donor search instead.',
             'user_uuid.prohibited' => 'Provide either user_identity or user_uuid, not both.',
-        ]);
+        ], $this->donorAffiliationMessages());
     }
 
     public function withValidator(Validator $validator): void
@@ -174,6 +176,7 @@ class CreateReconciliationQueueRequest extends ApiFormRequest
             'house' => $prohibited,
             'affiliated_set_number' => $prohibited,
             'is_igbobian_owned' => $prohibited,
+            'wives_type' => $prohibited,
         ];
     }
 

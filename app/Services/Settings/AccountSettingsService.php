@@ -4,6 +4,7 @@ namespace App\Services\Settings;
 
 use App\Enums\DonorTypeSlug;
 use App\Enums\House;
+use App\Enums\WivesType;
 use App\Enums\ModuleEnums;
 use App\Exceptions\ApiException;
 use App\Http\Resources\UserResource;
@@ -36,6 +37,7 @@ class AccountSettingsService
         'house' => 'House',
         'affiliated_graduation_set_uuid' => 'Affiliated set',
         'is_igbobian_owned' => 'Igbobian-owned',
+        'wives_type' => 'Wives of ICOBA chapter',
     ];
 
     public function __construct(
@@ -419,6 +421,10 @@ class AccountSettingsService
 
         if ($field === 'is_igbobian_owned') {
             return filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'Yes' : 'No';
+        }
+
+        if ($field === 'wives_type') {
+            return WivesType::tryFrom((string) $value)?->label() ?? (string) $value;
         }
 
         return (string) $value;

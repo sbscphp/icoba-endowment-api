@@ -4,6 +4,7 @@ namespace App\Services\GivingIdentity;
 
 use App\Enums\DonorTypeSlug;
 use App\Enums\House;
+use App\Enums\WivesType;
 use App\Models\GivingIdentity;
 
 /**
@@ -65,6 +66,11 @@ final class GivingIdentityGuestProfileSnapshot
 
         if ($identity->is_igbobian_owned) {
             $profile['is_igbobian_owned'] = true;
+        }
+
+        if (filled($identity->wives_type) && ($wivesType = WivesType::tryFrom((string) $identity->wives_type)) !== null) {
+            $profile['wives_type'] = $wivesType->value;
+            $profile['wives_type_label'] = $wivesType->label();
         }
 
         return array_filter($profile, fn ($value) => $value !== null && $value !== '');
