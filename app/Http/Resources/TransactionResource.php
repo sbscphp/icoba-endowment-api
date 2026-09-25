@@ -2,9 +2,11 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\DonationPurpose;
 use App\Enums\House;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
+use App\Enums\WivesType;
 use App\Models\GivingIdentity;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
@@ -42,6 +44,7 @@ class TransactionResource extends JsonResource
             'transaction_date' => ($this->paid_at ?? $this->created_at)?->copy()->utc()->toDateString(),
             'transaction_time' => ($this->paid_at ?? $this->created_at)?->copy()->utc()->format('H:i:s\Z'),
             'paid_at' => $this->paid_at,
+            'payment_date' => $this->paid_at?->copy()->utc()->toDateString(),
             // 'created_at' => $this->created_at,
             // 'updated_at' => $this->updated_at,
             'user_uuid' => $this->user_uuid ?? $this->givingIdentity?->user_uuid ?? ($reconciliationDraft['user_uuid'] ?? null),
@@ -92,9 +95,11 @@ class TransactionResource extends JsonResource
             ] : null,
             'house' => House::payload($this->donor?->house ?? $this->givingIdentity?->house),
             'is_igbobian_owned' => (bool) ($this->donor?->is_igbobian_owned ?? $this->givingIdentity?->is_igbobian_owned ?? false),
+            'wives_type' => WivesType::payload($this->donor?->wives_type ?? $this->givingIdentity?->wives_type),
             'donation_type' => isset($metadata['donation_type']) && $metadata['donation_type'] !== ''
                 ? (string) $metadata['donation_type']
                 : 'One Time Donation',
+            'purpose' => DonationPurpose::payload($this->purpose),
             'payment_method' => $this->resolvePaymentMethod(),
             'payment_via' => $this->gateway,
             'gateway_reference' => $this->gateway_reference,

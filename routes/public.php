@@ -23,6 +23,8 @@ Route::prefix('v1')->group(function () {
         Route::get('leaderboard', [LeaderboardController::class, 'leaderboard']);
         Route::get('leaderboard/sets', [LeaderboardController::class, 'sets']);
         Route::get('leaderboard/top-sets', [LeaderboardController::class, 'topSets']);
+        Route::get('leaderboard/houses', [LeaderboardController::class, 'houses']);
+        Route::get('leaderboard/top-houses', [LeaderboardController::class, 'topHouses']);
         Route::get('leaderboard/recent-donations', [LeaderboardController::class, 'recentDonations']);
 
         Route::get('campaigns/context', [PublicCampaignController::class, 'context']);

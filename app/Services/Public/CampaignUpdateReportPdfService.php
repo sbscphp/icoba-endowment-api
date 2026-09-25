@@ -2,6 +2,7 @@
 
 namespace App\Services\Public;
 
+use App\Helpers\GeneralHelper;
 use App\Models\CampaignUpdateReport;
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -15,7 +16,7 @@ class CampaignUpdateReportPdfService
      */
     public function viewData(CampaignUpdateReport $report): array
     {
-        $logoPath = public_path('assets/logo/quiva-logo-black.png');
+        $logoPath = GeneralHelper::resolveMailLogoPath();
         $logoBase64 = File::exists($logoPath)
             ? 'data:image/png;base64,'.base64_encode(File::get($logoPath))
             : null;

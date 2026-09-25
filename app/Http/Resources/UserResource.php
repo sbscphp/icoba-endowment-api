@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Enums\CustomerRegistrationStepEnum;
 use App\Enums\DonorTypeSlug;
 use App\Enums\House;
+use App\Enums\WivesType;
 use App\Services\Customer\CustomerTierService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -90,6 +91,7 @@ class UserResource extends JsonResource
                 ? $affiliatedSet->only(['uuid', 'name', 'set_number', 'public_id'])
                 : null,
             'is_igbobian_owned' => (bool) $this->is_igbobian_owned,
+            'wives_type' => WivesType::payload($this->wives_type),
             'corporate_category' => $corporateCategory !== null
                 ? $corporateCategory->only(['uuid', 'name'])
                 : null,

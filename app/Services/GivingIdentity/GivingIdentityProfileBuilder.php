@@ -3,6 +3,7 @@
 namespace App\Services\GivingIdentity;
 
 use App\Enums\House;
+use App\Enums\WivesType;
 use App\Models\DonorType;
 use App\Models\GivingIdentity;
 use App\Models\GraduationSet;
@@ -61,6 +62,7 @@ final class GivingIdentityProfileBuilder
             house: $affiliation['house'],
             affiliatedGraduationSetUuid: $affiliation['affiliated_graduation_set_uuid'],
             isIgbobianOwned: $affiliation['is_igbobian_owned'],
+            wivesType: $affiliation['wives_type'],
         );
     }
 
@@ -70,7 +72,7 @@ final class GivingIdentityProfileBuilder
      *
      * @param  array<string, mixed>  $guestProfile
      * @param  array<string, mixed>  $data
-     * @return array{house: ?string, affiliated_graduation_set_uuid: ?string, is_igbobian_owned: bool}
+     * @return array{house: ?string, affiliated_graduation_set_uuid: ?string, is_igbobian_owned: bool, wives_type: ?string}
      */
     private static function resolveAffiliation(?string $slug, array $guestProfile, array $data): array
     {
@@ -79,6 +81,7 @@ final class GivingIdentityProfileBuilder
                 'house' => House::normalize($guestProfile['house'] ?? $data['house'] ?? null),
                 'affiliated_graduation_set_uuid' => self::resolveAffiliatedSetUuid($guestProfile, $data),
                 'is_igbobian_owned' => filter_var($guestProfile['is_igbobian_owned'] ?? $data['is_igbobian_owned'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                'wives_type' => WivesType::normalize($guestProfile['wives_type'] ?? $data['wives_type'] ?? null),
             ];
         }
 
@@ -132,6 +135,7 @@ final class GivingIdentityProfileBuilder
             house: House::normalize($user->house),
             affiliatedGraduationSetUuid: $user->affiliated_graduation_set_uuid,
             isIgbobianOwned: (bool) $user->is_igbobian_owned,
+            wivesType: WivesType::normalize($user->wives_type),
         );
     }
 
@@ -169,6 +173,7 @@ final class GivingIdentityProfileBuilder
             house: House::normalize($guestProfile['house'] ?? null),
             affiliatedGraduationSetUuid: self::resolveAffiliatedSetUuid($guestProfile, []),
             isIgbobianOwned: filter_var($guestProfile['is_igbobian_owned'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            wivesType: WivesType::normalize($guestProfile['wives_type'] ?? null),
         );
     }
 
@@ -190,6 +195,7 @@ final class GivingIdentityProfileBuilder
             house: House::normalize($identity->house),
             affiliatedGraduationSetUuid: $identity->affiliated_graduation_set_uuid,
             isIgbobianOwned: (bool) $identity->is_igbobian_owned,
+            wivesType: WivesType::normalize($identity->wives_type),
         );
     }
 

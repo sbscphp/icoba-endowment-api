@@ -50,6 +50,7 @@ class CustomerProfileAffiliationTest extends TestCase
             'donor_type_uuid' => DonorType::query()->where('slug', DonorTypeSlug::WIVES_OF_ICOBA->value)->value('uuid'),
             'house' => 'aggrey',
             'affiliated_graduation_set_uuid' => $this->set->uuid,
+            'wives_type' => 'icobana_wives',
         ]);
 
         Sanctum::actingAs($user);
@@ -58,6 +59,7 @@ class CustomerProfileAffiliationTest extends TestCase
 
         $response->assertOk();
         $this->assertSame(['value' => 'aggrey', 'label' => 'Aggrey'], $response->json('data.donor.house'));
+        $this->assertSame(['value' => 'icobana_wives', 'label' => 'ICOBANA Wives'], $response->json('data.donor.wives_type'));
         $this->assertSame($this->set->uuid, $response->json('data.donor.affiliated_set.uuid'));
         $this->assertSame('2002', $response->json('data.donor.affiliated_set.set_number'));
         $this->assertFalse($response->json('data.donor.is_igbobian_owned'));
@@ -98,7 +100,28 @@ class CustomerProfileAffiliationTest extends TestCase
         $this->assertNull($response->json('data.donor.house'));
         $this->assertNull($response->json('data.donor.affiliated_set'));
         $this->assertFalse($response->json('data.donor.is_igbobian_owned'));
+        $this->assertNull($response->json('data.donor.wives_type'));
         $this->assertSame($this->set->uuid, $response->json('data.donor.set.uuid'));
+    }
+
+    public function test_wife_can_update_wives_type_and_must_send_a_valid_one(): void
+    {
+        $user = $this->customer([
+            'donor_type_uuid' => DonorType::query()->where('slug', DonorTypeSlug::WIVES_OF_ICOBA->value)->value('uuid'),
+            'wives_type' => 'icobana_wives',
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->patchJson('/api/v1/settings/profile', ['wives_type' => 'wives_of_mars'])
+            ->assertStatus(422)
+            ->assertJsonStructure(['data' => ['wives_type']]);
+
+        $response = $this->patchJson('/api/v1/settings/profile', ['wives_type' => 'Wives of ICOBA, Europe']);
+
+        $response->assertOk();
+        $this->assertSame('wives_of_icoba_europe', $response->json('data.donor.wives_type.value'));
+        $this->assertSame('wives_of_icoba_europe', $user->fresh()->wives_type);
     }
 
     /**

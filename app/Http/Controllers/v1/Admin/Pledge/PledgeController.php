@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\v1\Admin\Pledge;
 
 use App\Enums\AuditActionEnum;
+use App\Enums\DonationPurpose;
 use App\Enums\GivingIdentitySource;
 use App\Enums\ModuleEnums;
 use App\Enums\PledgeStatus;
@@ -97,6 +98,7 @@ class PledgeController extends Controller
                 'donor_email' => $v['donor_email'] ?? null,
                 'donor_phone' => $v['donor_phone'] ?? null,
                 'is_anonymous' => (bool) ($v['is_anonymous'] ?? false),
+                'purpose' => DonationPurpose::normalize($v['purpose'] ?? null),
                 'committed_amount' => $v['committed_amount'],
                 'currency' => (string) $v['currency'],
                 'committed_amount_ngn' => $fx['committed_amount_ngn'],

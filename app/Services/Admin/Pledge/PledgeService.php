@@ -570,6 +570,7 @@ class PledgeService
             'donor_email' => $pledge->donor_email,
             'donor_phone' => $pledge->donor_phone,
             'is_anonymous' => $pledge->is_anonymous,
+            'purpose' => $pledge->purpose,
             'amount' => $amount,
             'currency' => $pledge->currency,
             'amount_in_naira' => null,

@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Enums\DonorTypeSlug;
 use App\Enums\House;
+use App\Enums\WivesType;
 use App\Models\GraduationSet;
 
 /**
@@ -13,32 +14,36 @@ use App\Models\GraduationSet;
 final class DonorAffiliation
 {
     /** @var list<string> */
-    public const COLUMNS = ['house', 'affiliated_graduation_set_uuid', 'is_igbobian_owned'];
+    public const COLUMNS = ['house', 'affiliated_graduation_set_uuid', 'is_igbobian_owned', 'wives_type'];
 
     /** @var list<string> */
-    public const PAYLOAD_KEYS = ['house', 'affiliated_set_number', 'affiliated_graduation_set_uuid', 'is_igbobian_owned'];
+    public const PAYLOAD_KEYS = ['house', 'affiliated_set_number', 'affiliated_graduation_set_uuid', 'is_igbobian_owned', 'wives_type'];
 
     /**
      * Column values for a donor of the given type. Fields not applicable to the type are nulled.
      *
      * @param  array<string, mixed>  $data
-     * @return array{house: ?string, affiliated_graduation_set_uuid: ?string, is_igbobian_owned: bool}
+     * @return array{house: ?string, affiliated_graduation_set_uuid: ?string, is_igbobian_owned: bool, wives_type: ?string}
      */
     public static function columnsFor(?string $slug, array $data): array
     {
-        $empty = ['house' => null, 'affiliated_graduation_set_uuid' => null, 'is_igbobian_owned' => false];
+        $empty = ['house' => null, 'affiliated_graduation_set_uuid' => null, 'is_igbobian_owned' => false, 'wives_type' => null];
 
         return match ($slug) {
             DonorTypeSlug::ICOBA_ALUMNI->value => array_merge($empty, [
                 'house' => House::normalize($data['house'] ?? null),
             ]),
-            DonorTypeSlug::WIVES_OF_ICOBA->value,
+            DonorTypeSlug::WIVES_OF_ICOBA->value => array_merge($empty, [
+                'house' => House::normalize($data['house'] ?? null),
+                'affiliated_graduation_set_uuid' => self::resolveSetUuid($data),
+                'wives_type' => WivesType::normalize($data['wives_type'] ?? null),
+            ]),
             DonorTypeSlug::FRIENDS_OF_ICOBA->value,
             DonorTypeSlug::RELATIVES_OF_ICOBA->value => array_merge($empty, [
                 'house' => House::normalize($data['house'] ?? null),
                 'affiliated_graduation_set_uuid' => self::resolveSetUuid($data),
             ]),
-            DonorTypeSlug::CORPORATE_DONOR->value => self::corporateColumns($data),
+            DonorTypeSlug::CORPORATE_DONOR->value => array_merge($empty, self::corporateColumns($data)),
             default => $empty,
         };
     }
@@ -74,6 +79,10 @@ final class DonorAffiliation
                 $out['affiliated_graduation_set_uuid'] = null;
                 $out['house'] = null;
             }
+        }
+
+        if (in_array('wives_type', $touched, true)) {
+            $out['wives_type'] = $resolved['wives_type'];
         }
 
         return $out;

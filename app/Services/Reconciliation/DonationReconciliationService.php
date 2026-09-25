@@ -2,6 +2,7 @@
 
 namespace App\Services\Reconciliation;
 
+use App\Enums\DonationPurpose;
 use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Enums\GivingIdentitySource;
 use App\Enums\PaymentGateway;
@@ -264,6 +265,7 @@ class DonationReconciliationService
      *     pledge_uuid?: ?string,
      *     reconciliation_note?: ?string,
      *     is_anonymous?: bool,
+     *     purpose?: ?string,
      * }  $payload
      */
     public function createManual(array $payload, string $adminUuid): Transaction
@@ -296,6 +298,7 @@ class DonationReconciliationService
      *     pledge_uuid?: ?string,
      *     reconciliation_note?: ?string,
      *     is_anonymous?: bool,
+     *     purpose?: ?string,
      * }  $payload
      */
     private function createManualWithinTransaction(array $payload, string $adminUuid): Transaction
@@ -334,7 +337,7 @@ class DonationReconciliationService
             ]);
         }
 
-        $paidAt = now();
+        $paidAt = $this->resolveAdminPaymentDate($payload) ?? now();
         $snapshot = $this->transactionNgnSnapshot->resolveAtDate($amount, $account['currency'], $paidAt);
 
         $transactionId = GeneralHelper::getModelUniqueRandomId([
@@ -356,6 +359,9 @@ class DonationReconciliationService
             'paid_into_account_number' => $account['account_number'],
             'paid_into_account_key' => $account['account_key'],
         ];
+        if ($this->resolveAdminPaymentDate($payload) !== null) {
+            $metadata['payment_date_set_by_admin'] = true;
+        }
         $reconciliationDraft = $this->buildReconciliationDraft($payload);
         if ($reconciliationDraft !== []) {
             $metadata['reconciliation_draft'] = $reconciliationDraft;
@@ -393,6 +399,8 @@ class DonationReconciliationService
 
         $this->assertAnonymousDonationAllowed($payload);
 
+        $purpose = DonationPurpose::normalize($payload['purpose'] ?? null) ?? $pledge?->purpose;
+
         $transaction = Transaction::query()->create([
             'transaction_id' => $transactionId,
             'campaign_uuid' => $campaignUuid,
@@ -404,6 +412,7 @@ class DonationReconciliationService
             'donor_phone' => $profileSnapshot['donor_phone'],
             'donor_name' => $profileSnapshot['donor_name'],
             'reconciliation_note' => $reconciliationNote,
+            'purpose' => $purpose,
             'amount' => $amount,
             'currency' => $account['currency'],
             'exchange_rate_to_naira' => $snapshot['exchange_rate_to_naira'],
@@ -610,6 +619,7 @@ class DonationReconciliationService
      *     pledge_uuid?: ?string,
      *     reconciliation_note?: ?string,
      *     is_anonymous?: bool,
+     *     purpose?: ?string,
      * }  $payload
      */
     public function completeManual(Transaction $transaction, array $payload, string $adminUuid): Transaction
@@ -624,6 +634,7 @@ class DonationReconciliationService
             return DB::transaction(function () use ($transaction, $payload, $adminUuid): Transaction {
                 $payload = $this->expandUserIdentityPayload($payload);
                 $this->persistDraftReconciliationProfile($transaction, $payload);
+                $this->applyAdminPaymentDateOverride($transaction, $payload);
                 $transaction = $transaction->refresh();
 
                 $linkage = $this->resolveReconciliationLinkage($payload, $transaction);
@@ -1008,6 +1019,9 @@ class DonationReconciliationService
                 if (blank($locked->donor_type_uuid) && filled($pledge->donor_type_uuid)) {
                     $locked->donor_type_uuid = $pledge->donor_type_uuid;
                 }
+                if (blank($locked->purpose) && filled($pledge->purpose)) {
+                    $locked->purpose = $pledge->purpose;
+                }
             }
 
             $givingIdentityUuid = $this->resolveGivingIdentityUuid($user, $pledge, $explicitGivingIdentityUuid);
@@ -1189,6 +1203,72 @@ class DonationReconciliationService
         }
     }
 
+    /**
+     * Admin-supplied payment date (e.g. a transfer whose webhook never arrived and is recorded days later).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function resolveAdminPaymentDate(array $payload): ?Carbon
+    {
+        $raw = $payload['payment_date'] ?? null;
+        if ($raw instanceof \DateTimeInterface) {
+            return Carbon::instance($raw);
+        }
+        if (! is_string($raw) || trim($raw) === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse(trim($raw));
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Replace the pending transfer's paid_at with the admin-supplied payment date and
+     * re-snapshot the NGN value at that date, so finalization keeps the overridden date.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function applyAdminPaymentDateOverride(Transaction $transaction, array $payload): void
+    {
+        $paymentDate = $this->resolveAdminPaymentDate($payload);
+        if ($paymentDate === null) {
+            return;
+        }
+
+        /** @var Transaction|null $locked */
+        $locked = Transaction::query()
+            ->whereKey($transaction->getKey())
+            ->lockForUpdate()
+            ->first();
+
+        if ($locked === null || $locked->status !== TransactionStatus::PENDING) {
+            return;
+        }
+
+        $snapshot = $this->transactionNgnSnapshot->resolveAtDate(
+            (float) $locked->amount,
+            (string) $locked->currency,
+            $paymentDate,
+        );
+
+        $metadata = is_array($locked->metadata) ? $locked->metadata : [];
+        $metadata['bank_transaction_date'] = $paymentDate->toIso8601String();
+        $metadata['payment_date_set_by_admin'] = true;
+        if ($locked->paid_at !== null && ! $locked->paid_at->equalTo($paymentDate)) {
+            $metadata['payment_date_previous'] = $locked->paid_at->toIso8601String();
+        }
+
+        $locked->forceFill([
+            'paid_at' => $paymentDate,
+            'exchange_rate_to_naira' => $snapshot['exchange_rate_to_naira'],
+            'amount_in_naira' => $snapshot['amount_in_naira'],
+            'metadata' => $metadata,
+        ])->save();
+    }
+
     private function paidAtFromMetadata(Transaction $transaction): ?Carbon
     {
         $metadata = is_array($transaction->metadata) ? $transaction->metadata : [];
@@ -1241,10 +1321,12 @@ class DonationReconciliationService
             'house',
             'affiliated_set_number',
             'is_igbobian_owned',
+            'wives_type',
             'campaign_uuid',
             'pledge_uuid',
             'reconciliation_note',
             'is_anonymous',
+            'purpose',
         ] as $field) {
             if (! array_key_exists($field, $payload)) {
                 continue;
@@ -1337,6 +1419,11 @@ class DonationReconciliationService
 
         if (array_key_exists('is_anonymous', $payload)) {
             $updates['is_anonymous'] = (bool) $payload['is_anonymous'];
+        }
+
+        $purpose = DonationPurpose::normalize($payload['purpose'] ?? null);
+        if ($purpose !== null) {
+            $updates['purpose'] = $purpose;
         }
 
         if (isset($payload['campaign_uuid']) && trim((string) $payload['campaign_uuid']) !== '') {
@@ -1465,6 +1552,10 @@ class DonationReconciliationService
         }
 
         $payload['is_igbobian_owned'] = (bool) $identity->is_igbobian_owned;
+
+        if ($identity->wives_type !== null && $identity->wives_type !== '') {
+            $payload['wives_type'] = $identity->wives_type;
+        }
 
         if ($identity->donorType?->slug !== null) {
             $payload['donor_type'] = $identity->donorType->slug;

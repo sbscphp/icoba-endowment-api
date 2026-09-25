@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Customer\Donation;
 
 use App\Enums\Currency;
+use App\Enums\DonationPurpose;
 use App\Http\Requests\ApiFormRequest;
 use App\Http\Requests\Concerns\MergesCurrencyFromPledge;
 use App\Http\Requests\Concerns\RequiresResolvableDonorName;
@@ -45,6 +46,7 @@ class DonationIntentRequest extends ApiFormRequest
             'donor_phone' => ['sometimes', 'nullable', 'string', 'max:32'],
             'donor_type_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:donor_types,uuid'],
             'is_anonymous' => ['sometimes', 'boolean'],
+            'purpose' => ['sometimes', 'nullable', 'string', 'max:'.DonationPurpose::MAX_LENGTH],
             'gateway' => ['sometimes', 'nullable', 'string', 'max:64'],
             'schedule_item_id' => ['sometimes', 'nullable', 'string', 'max:64'],
             'metadata' => ['sometimes', 'nullable', 'array'],

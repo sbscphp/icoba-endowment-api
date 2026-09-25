@@ -65,6 +65,18 @@ class DonorRegistrationTest extends TestCase
 
         $this->assertSame(['parker', 'townsend', 'oluwole', 'aggrey', 'freeman'], $houses);
         $this->assertSame('Parker', $response->json('data.houses.0.label'));
+
+        $this->assertSame(
+            ['ICOBANA Wives', 'Wives of ICOBA, Europe', 'Wives of ICOBA, International'],
+            collect($response->json('data.icoba_wives_type'))->pluck('label')->all(),
+        );
+        $this->assertSame('icobana_wives', $response->json('data.icoba_wives_type.0.value'));
+
+        $this->assertSame(
+            ['general', 'student_welfare', 'infrastructure'],
+            collect($response->json('data.donation_purposes'))->pluck('value')->all(),
+        );
+        $this->assertSame('Student Welfare', $response->json('data.donation_purposes.1.label'));
     }
 
     public function test_alumni_can_register_with_house(): void
@@ -117,6 +129,7 @@ class DonorRegistrationTest extends TestCase
             'lastname' => 'Ola',
             'affiliated_set_number' => '2002',
             'house' => 'aggrey',
+            'wives_type' => 'Wives of ICOBA, Europe',
         ]));
 
         $response->assertStatus(201);
@@ -125,11 +138,41 @@ class DonorRegistrationTest extends TestCase
         $this->assertNull($user->graduation_set_uuid);
         $this->assertSame($this->set->uuid, $user->affiliated_graduation_set_uuid);
         $this->assertSame('aggrey', $user->house);
+        $this->assertSame('wives_of_icoba_europe', $user->wives_type);
         $this->assertFalse($user->is_igbobian_owned);
 
         $identity = GivingIdentity::query()->where('user_uuid', $user->uuid)->firstOrFail();
         $this->assertSame($this->set->uuid, $identity->affiliated_graduation_set_uuid);
         $this->assertSame('aggrey', $identity->house);
+        $this->assertSame('wives_of_icoba_europe', $identity->wives_type);
+    }
+
+    public function test_wife_must_specify_wives_type(): void
+    {
+        $this->postJson('/api/v1/auth/signup', $this->payload([
+            'donor_type' => DonorTypeSlug::WIVES_OF_ICOBA->value,
+            'firstname' => 'Bisi',
+            'lastname' => 'Ola',
+        ]))->assertStatus(422)->assertJsonStructure(['data' => ['wives_type']]);
+
+        $this->postJson('/api/v1/auth/signup', $this->payload([
+            'donor_type' => DonorTypeSlug::WIVES_OF_ICOBA->value,
+            'firstname' => 'Bisi',
+            'lastname' => 'Ola',
+            'wives_type' => 'wives_of_mars',
+        ]))->assertStatus(422)->assertJsonStructure(['data' => ['wives_type']]);
+    }
+
+    public function test_wives_type_is_ignored_for_other_donor_types(): void
+    {
+        $this->postJson('/api/v1/auth/signup', $this->payload([
+            'donor_type' => DonorTypeSlug::FRIENDS_OF_ICOBA->value,
+            'firstname' => 'Tunde',
+            'lastname' => 'Ola',
+            'wives_type' => 'icobana_wives',
+        ]))->assertStatus(201);
+
+        $this->assertNull(User::query()->where('email', 'donor@example.com')->firstOrFail()->wives_type);
     }
 
     public function test_friends_and_relatives_can_register_with_affiliated_set_and_house(): void
@@ -177,11 +220,13 @@ class DonorRegistrationTest extends TestCase
             'donor_type' => DonorTypeSlug::WIVES_OF_ICOBA->value,
             'firstname' => 'Bisi',
             'lastname' => 'Ola',
+            'wives_type' => 'icobana_wives',
         ]))->assertStatus(201);
 
         $user = User::query()->where('email', 'donor@example.com')->firstOrFail();
         $this->assertNull($user->affiliated_graduation_set_uuid);
         $this->assertNull($user->house);
+        $this->assertSame('icobana_wives', $user->wives_type);
     }
 
     public function test_igbobian_owned_corporate_requires_affiliated_set_but_not_house(): void

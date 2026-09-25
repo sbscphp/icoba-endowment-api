@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\v1\Customer\Pledge;
 
+use App\Enums\DonationPurpose;
 use App\Enums\PledgePaymentPreference;
 use App\Enums\PledgeStatus;
 use App\Helpers\GeneralHelper;
@@ -202,6 +203,7 @@ class CustomerPledgeController extends Controller
                 'donor_email' => $donorEmail !== '' ? $donorEmail : null,
                 'donor_phone' => $donorPhone !== '' ? $donorPhone : null,
                 'is_anonymous' => (bool) ($v['is_anonymous'] ?? false),
+                'purpose' => DonationPurpose::normalize($v['purpose'] ?? null),
                 'committed_amount' => $v['committed_amount'],
                 'currency' => (string) $v['currency'],
                 'committed_amount_ngn' => $fx['committed_amount_ngn'],

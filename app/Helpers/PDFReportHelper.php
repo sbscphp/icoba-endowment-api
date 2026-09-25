@@ -26,7 +26,7 @@ class PDFReportHelper
         $rows = $rows instanceof Collection ? $rows->toArray() : $rows;
         $orientation = strtolower($orientation) === 'portrait' ? 'portrait' : 'landscape';
         $generatedAt ??= now((string) config('app.timezone'));
-        $logoPath = public_path('assets/logo/quiva-logo-black.png');
+        $logoPath = GeneralHelper::resolveMailLogoPath();
         $logoBase64 = File::exists($logoPath)
             ? 'data:image/png;base64,'.base64_encode(File::get($logoPath))
             : null;

@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Admin;
 
+use App\Enums\DonationPurpose;
 use App\Enums\TransactionStatus;
 use App\Models\GivingIdentity;
 use App\Models\Transaction;
@@ -63,10 +64,12 @@ class ReconciliationQueueResource extends JsonResource
                 ? trim(($this->reconciledByAdmin->firstname ?? '').' '.($this->reconciledByAdmin->lastname ?? ''))
                 : null,
             'reconciliation_note' => $this->reconciliation_note,
+            'purpose' => DonationPurpose::payload($this->purpose),
             'narration' => $this->narration ?? $metadata['narration'] ?? $metadata['bank_narration'] ?? null,
             'source' => $metadata['source'] ?? null,
             'created_at' => $this->created_at,
             'paid_at' => $this->paid_at,
+            'payment_date' => $this->paid_at?->copy()->utc()->toDateString(),
         ];
     }
 

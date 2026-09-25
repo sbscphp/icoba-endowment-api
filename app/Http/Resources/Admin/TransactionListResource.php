@@ -2,7 +2,9 @@
 
 namespace App\Http\Resources\Admin;
 
+use App\Enums\DonationPurpose;
 use App\Enums\House;
+use App\Enums\WivesType;
 use App\Models\DonorType;
 use App\Models\GraduationSet;
 use App\Models\Transaction;
@@ -29,7 +31,9 @@ class TransactionListResource extends JsonResource
             'affiliated_set' => $this->setPayload($this->donor?->affiliatedGraduationSet ?? $this->givingIdentity?->affiliatedGraduationSet),
             'house' => House::payload($this->donor?->house ?? $this->givingIdentity?->house),
             'is_igbobian_owned' => (bool) ($this->donor?->is_igbobian_owned ?? $this->givingIdentity?->is_igbobian_owned ?? false),
+            'wives_type' => WivesType::payload($this->donor?->wives_type ?? $this->givingIdentity?->wives_type),
             'is_anonymous' => (bool) $this->is_anonymous,
+            'purpose' => DonationPurpose::payload($this->purpose),
             'is_test' => (bool) $this->is_test,
             'linked_campaign' => $this->campaign !== null ? [
                 'campaign_id' => $this->campaign->uuid,

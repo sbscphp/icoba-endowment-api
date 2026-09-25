@@ -74,6 +74,7 @@ trait ValidatesReconciliationUserIdentity
             'affiliated_set_number',
             'affiliated_graduation_set_uuid',
             'is_igbobian_owned',
+            'wives_type',
         ];
     }
 
