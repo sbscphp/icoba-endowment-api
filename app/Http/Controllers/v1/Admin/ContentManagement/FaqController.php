@@ -82,7 +82,7 @@ class FaqController extends Controller
     public function destroy(string $faqId)
     {
         try {
-            $this->faqService->delete($faqId);
+            $this->faqService->delete($faqId, request()->user()?->uuid);
 
             return JsonResponser::send(false, 'FAQ deleted successfully.', null);
         } catch (\Throwable $th) {

@@ -2,6 +2,7 @@
 
 namespace App\Services\Admin\Event;
 
+use App\Enums\AuditActionEnum;
 use App\Enums\EventStatus;
 use App\Exceptions\ApiException;
 use App\Helpers\FileUploadHelper;
@@ -9,6 +10,7 @@ use App\Helpers\GeneralHelper;
 use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\Event;
 use App\Models\EventImage;
+use App\Services\Admin\ContentManagement\Concerns\AuditsContentChanges;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -17,6 +19,8 @@ use InvalidArgumentException;
 
 class EventService
 {
+    use AuditsContentChanges;
+
     private const UPLOAD_FOLDER = 'events';
 
     public const MAX_GALLERY_IMAGES = 40;
@@ -54,6 +58,14 @@ class EventService
                 $this->reconcileImages($event, $images);
             }
 
+            $this->recordContentAudit(
+                AuditActionEnum::EVENT_CREATED,
+                $event,
+                'Event created.',
+                ['event_uuid' => $event->uuid, 'event_id' => $event->event_id, 'title' => $event->title],
+                $adminUuid,
+            );
+
             return $event->fresh(['images']) ?? $event;
         });
     }
@@ -87,13 +99,26 @@ class EventService
             }
 
             $imagesChanged = array_key_exists('images', $payload);
+            $previousImages = $imagesChanged ? $this->imageUrls($event) : [];
             if ($imagesChanged) {
                 $this->reconcileImages($event, (array) $payload['images']);
             }
 
             if ($updates !== [] || $imagesChanged) {
                 $updates['updated_by_admin_uuid'] = $adminUuid;
-                $event->fill($updates)->save();
+                $event->fill($updates);
+                $changes = $this->pendingChanges($event);
+                $event->save();
+
+                $metadata = ['event_uuid' => $event->uuid, 'event_id' => $event->event_id, 'title' => $event->title, ...$changes];
+                if ($imagesChanged) {
+                    $metadata['previous_images'] = $previousImages;
+                    $metadata['new_images'] = $this->imageUrls($event);
+                }
+
+                if ($changes['changed_fields'] !== [] || $previousImages !== ($metadata['new_images'] ?? [])) {
+                    $this->recordContentAudit(AuditActionEnum::EVENT_UPDATED, $event, 'Event updated.', $metadata, $adminUuid);
+                }
             }
 
             return $event->fresh(['images']) ?? $event;
@@ -103,18 +128,41 @@ class EventService
     public function setStatus(string $eventId, string $status, ?string $adminUuid = null): Event
     {
         $event = $this->resolveEvent($eventId);
+        $previousStatus = $event->getRawOriginal('status');
         $event->forceFill([
             'status' => EventStatus::from($status),
             'updated_by_admin_uuid' => $adminUuid,
         ])->save();
 
+        $this->recordContentAudit(
+            AuditActionEnum::EVENT_STATUS_CHANGED,
+            $event,
+            'Event status changed to '.$status.'.',
+            [
+                'event_uuid' => $event->uuid,
+                'event_id' => $event->event_id,
+                'title' => $event->title,
+                'previous_status' => $previousStatus,
+                'new_status' => $status,
+            ],
+            $adminUuid,
+        );
+
         return $event->fresh() ?? $event;
     }
 
-    public function delete(string $eventId): void
+    public function delete(string $eventId, ?string $adminUuid = null): void
     {
         $event = $this->resolveEvent($eventId);
         $event->delete();
+
+        $this->recordContentAudit(
+            AuditActionEnum::EVENT_DELETED,
+            $event,
+            'Event deleted.',
+            ['event_uuid' => $event->uuid, 'event_id' => $event->event_id, 'title' => $event->title],
+            $adminUuid,
+        );
     }
 
     /**
@@ -127,6 +175,7 @@ class EventService
     public function syncImages(string $eventId, array $inputs, ?string $adminUuid = null): Event
     {
         $event = $this->resolveEvent($eventId);
+        $previousImages = $this->imageUrls($event);
 
         DB::transaction(function () use ($event, $inputs): void {
             $this->reconcileImages($event, $inputs);
@@ -134,7 +183,23 @@ class EventService
 
         $event->forceFill(['updated_by_admin_uuid' => $adminUuid])->save();
 
+        $this->recordContentAudit(
+            AuditActionEnum::EVENT_IMAGES_UPDATED,
+            $event,
+            'Event images updated.',
+            ['event_uuid' => $event->uuid, 'event_id' => $event->event_id, 'previous_images' => $previousImages, 'new_images' => $this->imageUrls($event)],
+            $adminUuid,
+        );
+
         return $event->fresh(['images']) ?? $event;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function imageUrls(Event $event): array
+    {
+        return $event->images()->orderBy('sort_order')->pluck('image_url')->all();
     }
 
     /**
@@ -205,6 +270,14 @@ class EventService
 
         $image->delete();
         $event->forceFill(['updated_by_admin_uuid' => $adminUuid])->save();
+
+        $this->recordContentAudit(
+            AuditActionEnum::EVENT_IMAGE_DELETED,
+            $event,
+            'Event image deleted.',
+            ['event_uuid' => $event->uuid, 'event_id' => $event->event_id, 'image_uuid' => $image->uuid, 'image_url' => $image->image_url],
+            $adminUuid,
+        );
 
         return $event->fresh(['images']) ?? $event;
     }

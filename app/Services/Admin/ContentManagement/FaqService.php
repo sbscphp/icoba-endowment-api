@@ -2,14 +2,18 @@
 
 namespace App\Services\Admin\ContentManagement;
 
+use App\Enums\AuditActionEnum;
 use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\Faq;
+use App\Services\Admin\ContentManagement\Concerns\AuditsContentChanges;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class FaqService
 {
+    use AuditsContentChanges;
+
     public const SORTABLE_COLUMNS = ['title', 'is_active', 'sort_order', 'created_at', 'updated_at'];
 
     /**
@@ -35,6 +39,14 @@ class FaqService
             'created_by_admin_uuid' => $adminUuid,
             'updated_by_admin_uuid' => $adminUuid,
         ]);
+
+        $this->recordContentAudit(
+            AuditActionEnum::FAQ_CREATED,
+            $faq,
+            'FAQ created.',
+            ['faq_uuid' => $faq->uuid, 'title' => $faq->title],
+            $adminUuid,
+        );
 
         return $faq->fresh(['updatedByAdmin']) ?? $faq;
     }
@@ -64,7 +76,19 @@ class FaqService
 
         if ($updates !== []) {
             $updates['updated_by_admin_uuid'] = $adminUuid;
-            $faq->fill($updates)->save();
+            $faq->fill($updates);
+            $changes = $this->pendingChanges($faq);
+            $faq->save();
+
+            if ($changes['changed_fields'] !== []) {
+                $this->recordContentAudit(
+                    AuditActionEnum::FAQ_UPDATED,
+                    $faq,
+                    'FAQ updated.',
+                    ['faq_uuid' => $faq->uuid, 'title' => $faq->title, ...$changes],
+                    $adminUuid,
+                );
+            }
         }
 
         return $faq->fresh(['updatedByAdmin']) ?? $faq;
@@ -73,17 +97,40 @@ class FaqService
     public function toggleActiveStatus(string $faqId, ?string $adminUuid = null): Faq
     {
         $faq = $this->resolveFaq($faqId);
+        $isActive = ! ((bool) $faq->is_active);
         $faq->forceFill([
-            'is_active' => ! ((bool) $faq->is_active),
+            'is_active' => $isActive,
             'updated_by_admin_uuid' => $adminUuid,
         ])->save();
+
+        $this->recordContentAudit(
+            AuditActionEnum::FAQ_STATUS_TOGGLED,
+            $faq,
+            $isActive ? 'FAQ activated.' : 'FAQ deactivated.',
+            [
+                'faq_uuid' => $faq->uuid,
+                'title' => $faq->title,
+                'previous_status' => $isActive ? 'inactive' : 'active',
+                'new_status' => $isActive ? 'active' : 'inactive',
+            ],
+            $adminUuid,
+        );
 
         return $faq->fresh(['updatedByAdmin']) ?? $faq;
     }
 
-    public function delete(string $faqId): void
+    public function delete(string $faqId, ?string $adminUuid = null): void
     {
-        $this->resolveFaq($faqId)->delete();
+        $faq = $this->resolveFaq($faqId);
+        $faq->delete();
+
+        $this->recordContentAudit(
+            AuditActionEnum::FAQ_DELETED,
+            $faq,
+            'FAQ deleted.',
+            ['faq_uuid' => $faq->uuid, 'title' => $faq->title, 'content' => $faq->content],
+            $adminUuid,
+        );
     }
 
     /**

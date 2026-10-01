@@ -98,7 +98,7 @@ class AdController extends Controller
     public function destroy(string $adId)
     {
         try {
-            $this->adService->delete($adId);
+            $this->adService->delete($adId, request()->user()?->uuid);
 
             return JsonResponser::send(false, 'Ad deleted successfully.', null);
         } catch (\Throwable $th) {
