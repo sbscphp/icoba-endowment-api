@@ -110,6 +110,12 @@ class AuditLogService
                 continue;
             }
 
+            if (is_string($value) && preg_match('#^data:[^;]+;base64,#i', $value)) {
+                $clean[$key] = '[base64 file omitted]';
+
+                continue;
+            }
+
             $clean[$key] = is_array($value) ? $this->sanitizeMetadata($value) : $value;
         }
 

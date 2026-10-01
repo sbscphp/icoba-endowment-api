@@ -7,6 +7,7 @@ use App\Http\Controllers\v1\Admin\Campaign\CampaignController;
 use App\Http\Controllers\v1\Admin\Campaign\CampaignUpdateReportController;
 use App\Http\Controllers\v1\Admin\CertificateTemplate\CertificateTemplateController;
 use App\Http\Controllers\v1\Admin\ContactSubmission\ContactSubmissionController;
+use App\Http\Controllers\v1\Admin\ContentManagement\AboutSectionController;
 use App\Http\Controllers\v1\Admin\ContentManagement\AdController;
 use App\Http\Controllers\v1\Admin\ContentManagement\ContentPageController;
 use App\Http\Controllers\v1\Admin\ContentManagement\FaqController;
@@ -375,6 +376,17 @@ Route::prefix('v1/admin')->group(function () {
                 Route::put('/{adId}/images', [AdController::class, 'syncImages'])
                     ->middleware(['permission:content_management.update']);
                 Route::delete('/{adId}/images/{imageId}', [AdController::class, 'destroyImage'])
+                    ->middleware(['permission:content_management.update']);
+            });
+
+            Route::prefix('about-sections')->group(function () {
+                Route::get('/', [AboutSectionController::class, 'index'])
+                    ->middleware(['permission:content_management.read']);
+                Route::get('/{sectionKey}', [AboutSectionController::class, 'show'])
+                    ->middleware(['permission:content_management.read']);
+                Route::patch('/{sectionKey}', [AboutSectionController::class, 'update'])
+                    ->middleware(['permission:content_management.update']);
+                Route::patch('/{sectionKey}/toggle-status', [AboutSectionController::class, 'toggleStatus'])
                     ->middleware(['permission:content_management.update']);
             });
 

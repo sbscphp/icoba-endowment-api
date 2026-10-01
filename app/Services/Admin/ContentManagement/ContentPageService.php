@@ -4,6 +4,7 @@ namespace App\Services\Admin\ContentManagement;
 
 use App\Enums\ContentPage;
 use App\Enums\EventStatus;
+use App\Models\AboutSection;
 use App\Models\Ad;
 use App\Models\Event;
 use App\Models\Faq;
@@ -22,6 +23,29 @@ class ContentPageService
             $this->eventsPageSummary(),
             $this->adsPageSummary(),
             $this->faqPageSummary(),
+            $this->aboutUsPageSummary(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function aboutUsPageSummary(): array
+    {
+        $latestSection = AboutSection::query()
+            ->with('updatedByAdmin')
+            ->whereNotNull('updated_at')
+            ->orderByDesc('updated_at')
+            ->first();
+
+        $hasActiveSection = AboutSection::query()->where('is_active', true)->exists();
+
+        return [
+            'page_key' => ContentPage::ABOUT_US->value,
+            'page_title' => ContentPage::ABOUT_US->label(),
+            'last_updated' => $latestSection?->updated_at,
+            'updated_by' => $latestSection?->updatedByAdmin?->displayName(),
+            'status' => $hasActiveSection ? 'active' : 'inactive',
         ];
     }
 
