@@ -42,6 +42,9 @@ enum AuditActionEnum: string
 
     case PLEDGE_REMINDER_SENT = 'PLEDGE_REMINDER_SENT';
 
+    case ABOUT_SECTION_UPDATED = 'ABOUT_SECTION_UPDATED';
+    case ABOUT_SECTION_STATUS_TOGGLED = 'ABOUT_SECTION_STATUS_TOGGLED';
+
     /**
      * @return list<string>
      */

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\v1\Public\ContactSubmissionController;
+use App\Http\Controllers\v1\Public\PublicAboutSectionController;
 use App\Http\Controllers\v1\Public\PublicAdController;
 use App\Http\Controllers\v1\Public\PublicEventController;
 use App\Http\Controllers\v1\Public\PublicFaqController;
@@ -42,6 +43,7 @@ Route::prefix('v1')->group(function () {
         Route::get('hero-slides', [PublicHeroSlideController::class, 'index']);
         Route::get('ads', [PublicAdController::class, 'index']);
         Route::get('faqs', [PublicFaqController::class, 'index']);
+        Route::get('about-sections', [PublicAboutSectionController::class, 'index']);
         Route::get('bank-accounts', [PublicBankAccountController::class, 'index']);
 
         Route::get('events', [PublicEventController::class, 'index']);
