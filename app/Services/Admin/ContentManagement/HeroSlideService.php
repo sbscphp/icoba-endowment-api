@@ -2,15 +2,19 @@
 
 namespace App\Services\Admin\ContentManagement;
 
+use App\Enums\AuditActionEnum;
 use App\Exceptions\ApiException;
 use App\Helpers\FileUploadHelper;
 use App\Models\HeroSlide;
+use App\Services\Admin\ContentManagement\Concerns\AuditsContentChanges;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use InvalidArgumentException;
 
 class HeroSlideService
 {
+    use AuditsContentChanges;
+
     private const UPLOAD_FOLDER = 'hero-slides';
 
     /**
@@ -31,6 +35,14 @@ class HeroSlideService
             'created_by_admin_uuid' => $adminUuid,
             'updated_by_admin_uuid' => $adminUuid,
         ]);
+
+        $this->recordContentAudit(
+            AuditActionEnum::HERO_SLIDE_CREATED,
+            $slide,
+            'Hero slide created.',
+            ['slide_uuid' => $slide->uuid, 'title' => $slide->title],
+            $adminUuid,
+        );
 
         return $slide->fresh(['updatedByAdmin']) ?? $slide;
     }
@@ -92,7 +104,19 @@ class HeroSlideService
 
         if ($updates !== []) {
             $updates['updated_by_admin_uuid'] = $adminUuid;
-            $slide->fill($updates)->save();
+            $slide->fill($updates);
+            $changes = $this->pendingChanges($slide);
+            $slide->save();
+
+            if ($changes['changed_fields'] !== []) {
+                $this->recordContentAudit(
+                    AuditActionEnum::HERO_SLIDE_UPDATED,
+                    $slide,
+                    'Hero slide updated.',
+                    ['slide_uuid' => $slide->uuid, 'title' => $slide->title, ...$changes],
+                    $adminUuid,
+                );
+            }
         }
 
         return $slide->fresh(['updatedByAdmin']) ?? $slide;
@@ -101,15 +125,29 @@ class HeroSlideService
     public function toggleActiveStatus(string $slideId, ?string $adminUuid = null): HeroSlide
     {
         $slide = $this->resolveSlide($slideId);
+        $isActive = ! ((bool) $slide->is_active);
         $slide->forceFill([
-            'is_active' => ! ((bool) $slide->is_active),
+            'is_active' => $isActive,
             'updated_by_admin_uuid' => $adminUuid,
         ])->save();
+
+        $this->recordContentAudit(
+            AuditActionEnum::HERO_SLIDE_STATUS_TOGGLED,
+            $slide,
+            $isActive ? 'Hero slide activated.' : 'Hero slide deactivated.',
+            [
+                'slide_uuid' => $slide->uuid,
+                'title' => $slide->title,
+                'previous_status' => $isActive ? 'inactive' : 'active',
+                'new_status' => $isActive ? 'active' : 'inactive',
+            ],
+            $adminUuid,
+        );
 
         return $slide->fresh(['updatedByAdmin']) ?? $slide;
     }
 
-    public function delete(string $slideId): void
+    public function delete(string $slideId, ?string $adminUuid = null): void
     {
         $slide = $this->resolveSlide($slideId);
 
@@ -118,6 +156,14 @@ class HeroSlideService
         }
 
         $slide->delete();
+
+        $this->recordContentAudit(
+            AuditActionEnum::HERO_SLIDE_DELETED,
+            $slide,
+            'Hero slide deleted.',
+            ['slide_uuid' => $slide->uuid, 'title' => $slide->title, 'banner_url' => $slide->banner_url],
+            $adminUuid,
+        );
     }
 
     private function resolveSlide(string $slideId): HeroSlide

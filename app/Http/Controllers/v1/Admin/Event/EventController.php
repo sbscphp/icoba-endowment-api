@@ -92,7 +92,7 @@ class EventController extends Controller
     public function destroy(string $eventId)
     {
         try {
-            $this->eventService->delete($eventId);
+            $this->eventService->delete($eventId, request()->user()?->uuid);
 
             return JsonResponser::send(false, 'Event deleted successfully.', null);
         } catch (\Throwable $th) {

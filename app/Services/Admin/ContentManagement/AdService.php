@@ -2,6 +2,7 @@
 
 namespace App\Services\Admin\ContentManagement;
 
+use App\Enums\AuditActionEnum;
 use App\Exceptions\ApiException;
 use App\Helpers\FileUploadHelper;
 use App\Helpers\GeneralHelper;
@@ -9,6 +10,7 @@ use App\Http\Requests\Concerns\ListingFilterRules;
 use App\Models\Ad;
 use App\Models\AdImage;
 use App\Models\AdSetting;
+use App\Services\Admin\ContentManagement\Concerns\AuditsContentChanges;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -18,6 +20,8 @@ use InvalidArgumentException;
 
 class AdService
 {
+    use AuditsContentChanges;
+
     private const UPLOAD_FOLDER = 'ads';
 
     public const MAX_IMAGES = 10;
@@ -61,6 +65,14 @@ class AdService
 
             $this->reconcileImages($ad, (array) $payload['images']);
 
+            $this->recordContentAudit(
+                AuditActionEnum::AD_CREATED,
+                $ad,
+                'Ad created.',
+                ['ad_uuid' => $ad->uuid, 'ad_code' => $ad->ad_code, 'title' => $ad->title],
+                $adminUuid,
+            );
+
             return $ad->fresh(['images']) ?? $ad;
         });
     }
@@ -97,13 +109,26 @@ class AdService
             }
 
             $imagesChanged = array_key_exists('images', $payload);
+            $previousImages = $imagesChanged ? $this->imageUrls($ad) : [];
             if ($imagesChanged) {
                 $this->reconcileImages($ad, (array) $payload['images']);
             }
 
             if ($updates !== [] || $imagesChanged) {
                 $updates['updated_by_admin_uuid'] = $adminUuid;
-                $ad->fill($updates)->save();
+                $ad->fill($updates);
+                $changes = $this->pendingChanges($ad);
+                $ad->save();
+
+                $metadata = ['ad_uuid' => $ad->uuid, 'ad_code' => $ad->ad_code, 'title' => $ad->title, ...$changes];
+                if ($imagesChanged) {
+                    $metadata['previous_images'] = $previousImages;
+                    $metadata['new_images'] = $this->imageUrls($ad);
+                }
+
+                if ($changes['changed_fields'] !== [] || $previousImages !== ($metadata['new_images'] ?? [])) {
+                    $this->recordContentAudit(AuditActionEnum::AD_UPDATED, $ad, 'Ad updated.', $metadata, $adminUuid);
+                }
             }
 
             return $ad->fresh(['images']) ?? $ad;
@@ -140,13 +165,30 @@ class AdService
             'updated_by_admin_uuid' => $adminUuid,
         ])->save();
 
+        $this->recordContentAudit(
+            $isActive ? AuditActionEnum::AD_REACTIVATED : AuditActionEnum::AD_ARCHIVED,
+            $ad,
+            $isActive ? 'Ad reactivated.' : 'Ad archived.',
+            ['ad_uuid' => $ad->uuid, 'ad_code' => $ad->ad_code, 'title' => $ad->title],
+            $adminUuid,
+        );
+
         return $ad->fresh(['images']) ?? $ad;
     }
 
-    public function delete(string $adId): void
+    public function delete(string $adId, ?string $adminUuid = null): void
     {
         $ad = $this->resolveAd($adId);
+        $images = $this->imageUrls($ad);
         $ad->delete();
+
+        $this->recordContentAudit(
+            AuditActionEnum::AD_DELETED,
+            $ad,
+            'Ad deleted.',
+            ['ad_uuid' => $ad->uuid, 'ad_code' => $ad->ad_code, 'title' => $ad->title, 'images' => $images],
+            $adminUuid,
+        );
     }
 
     /**
@@ -160,12 +202,21 @@ class AdService
     public function syncImages(string $adId, array $inputs, ?string $adminUuid = null): Ad
     {
         $ad = $this->resolveAd($adId);
+        $previousImages = $this->imageUrls($ad);
 
         DB::transaction(function () use ($ad, $inputs): void {
             $this->reconcileImages($ad, $inputs);
         });
 
         $ad->forceFill(['updated_by_admin_uuid' => $adminUuid])->save();
+
+        $this->recordContentAudit(
+            AuditActionEnum::AD_IMAGES_UPDATED,
+            $ad,
+            'Ad images updated.',
+            ['ad_uuid' => $ad->uuid, 'ad_code' => $ad->ad_code, 'previous_images' => $previousImages, 'new_images' => $this->imageUrls($ad)],
+            $adminUuid,
+        );
 
         return $ad->fresh(['images']) ?? $ad;
     }
@@ -195,6 +246,14 @@ class AdService
         $image->delete();
         $ad->forceFill(['updated_by_admin_uuid' => $adminUuid])->save();
 
+        $this->recordContentAudit(
+            AuditActionEnum::AD_IMAGE_DELETED,
+            $ad,
+            'Ad image deleted.',
+            ['ad_uuid' => $ad->uuid, 'ad_code' => $ad->ad_code, 'image_uuid' => $image->uuid, 'image_url' => $image->image_url],
+            $adminUuid,
+        );
+
         return $ad->fresh(['images']) ?? $ad;
     }
 
@@ -213,9 +272,23 @@ class AdService
         $settings->forceFill([
             'ads_transition_seconds' => (int) $payload['ads_transition_seconds'],
             'updated_by_admin_uuid' => $adminUuid,
-        ])->save();
+        ]);
+        $changes = $this->pendingChanges($settings);
+        $settings->save();
+
+        if ($changes['changed_fields'] !== []) {
+            $this->recordContentAudit(AuditActionEnum::AD_SETTINGS_UPDATED, $settings, 'Ad settings updated.', $changes, $adminUuid);
+        }
 
         return $settings->fresh() ?? $settings;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function imageUrls(Ad $ad): array
+    {
+        return $ad->images()->orderBy('sort_order')->pluck('image_url')->all();
     }
 
     /**

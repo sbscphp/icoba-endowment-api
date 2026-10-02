@@ -93,7 +93,7 @@ class HeroSlideController extends Controller
     public function destroy(string $slideId)
     {
         try {
-            $this->heroSlideService->delete($slideId);
+            $this->heroSlideService->delete($slideId, request()->user()?->uuid);
 
             return JsonResponser::send(false, 'Hero slide deleted successfully.', null);
         } catch (\Throwable $th) {

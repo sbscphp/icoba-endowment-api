@@ -2,6 +2,8 @@
 
 namespace App\Helpers;
 
+use Cloudinary\Cloudinary;
+use CloudinaryLabs\CloudinaryLaravel\CloudinaryStorageAdapter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -125,7 +127,21 @@ class FileUploadHelper
             throw new InvalidArgumentException('Cloudinary upload failed.');
         }
 
-        return Storage::disk('cloudinary')->url($path);
+        $disk = Storage::disk('cloudinary');
+        $adapter = $disk->getAdapter();
+
+        if ($adapter instanceof CloudinaryStorageAdapter && $ext !== '') {
+            [$publicId, $resourceType] = $adapter->prepareResource($path);
+
+            // Cloudinary keeps the extension in a raw asset's public id, which the adapter's url() lookup drops.
+            if ($resourceType === 'raw') {
+                return app(Cloudinary::class)->adminApi()
+                    ->asset($publicId.'.'.$ext, ['resource_type' => 'raw'])
+                    ->offsetGet('secure_url');
+            }
+        }
+
+        return $disk->url($path);
     }
 
     private static function uploadBase64String(string $requestFile, string $fileKey): string
