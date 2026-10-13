@@ -125,6 +125,10 @@ class DonationCheckoutController extends Controller
                 'checkout_url' => $checkout['url'],
                 'checkout_session_id' => $checkout['session_id'],
                 'transaction_uuid' => $transaction->uuid,
+                'currency' => $transaction->currency,
+                'donation_amount' => (string) $transaction->amount,
+                'fee_amount' => (string) $transaction->fee_amount,
+                'total_amount' => number_format($transaction->chargeAmount(), 2, '.', ''),
                 'success_url' => $checkout['success_url'],
                 'failed_url' => $checkout['failed_url'],
             ], 201);

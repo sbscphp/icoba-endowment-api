@@ -151,7 +151,8 @@ final class BankFeedIngestionService
         string $source,
     ): string {
         $tolerance = $this->amountToleranceForCurrency((string) $pending->currency);
-        $expected = (float) $pending->amount;
+        // Compare against what the donor was asked to pay (donation + any service fee), never the bare donation.
+        $expected = $pending->chargeAmount();
         $amountMismatch = abs($amount - $expected) > $tolerance;
 
         if ($accountNumber !== null

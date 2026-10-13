@@ -24,6 +24,7 @@ use App\Http\Controllers\v1\Admin\Reconciliation\ReconciliationController;
 use App\Http\Controllers\v1\Admin\Report\ReportController;
 use App\Http\Controllers\v1\Admin\Report\WeeklyDigestReportController;
 use App\Http\Controllers\v1\Admin\Settings\SettingsController;
+use App\Http\Controllers\v1\Admin\PaymentFeeRule\PaymentFeeRuleController;
 use App\Http\Controllers\v1\Admin\TierConfiguration\TierConfigurationController;
 use App\Http\Controllers\v1\Admin\Transaction\TransactionController;
 use App\Http\Controllers\v1\Admin\UserManagement\UserManagementController;
@@ -139,6 +140,28 @@ Route::prefix('v1/admin')->group(function () {
                 ->middleware(['permission:tier_configuration.update']);
             Route::delete('/{tierId}', [TierConfigurationController::class, 'destroy'])
                 ->middleware(['permission:tier_configuration.delete']);
+        });
+
+        // Service fee rules (platform margin + gateway cost recovery). Charged only when PLATFORM_CHARGES=true.
+        Route::prefix('payment-fee-rules')->group(function () {
+            Route::get('/options', [PaymentFeeRuleController::class, 'options'])
+                ->middleware(['permission:payment_fee_rules.read']);
+            Route::get('/stats', [PaymentFeeRuleController::class, 'stats'])
+                ->middleware(['permission:payment_fee_rules.read']);
+            Route::get('/preview', [PaymentFeeRuleController::class, 'preview'])
+                ->middleware(['permission:payment_fee_rules.read']);
+            Route::get('/', [PaymentFeeRuleController::class, 'index'])
+                ->middleware(['permission:payment_fee_rules.read']);
+            Route::post('/', [PaymentFeeRuleController::class, 'store'])
+                ->middleware(['permission:payment_fee_rules.create']);
+            Route::get('/{ruleId}', [PaymentFeeRuleController::class, 'show'])
+                ->middleware(['permission:payment_fee_rules.read']);
+            Route::patch('/{ruleId}', [PaymentFeeRuleController::class, 'update'])
+                ->middleware(['permission:payment_fee_rules.update']);
+            Route::patch('/{ruleId}/toggle-status', [PaymentFeeRuleController::class, 'toggleStatus'])
+                ->middleware(['permission:payment_fee_rules.update']);
+            Route::delete('/{ruleId}', [PaymentFeeRuleController::class, 'destroy'])
+                ->middleware(['permission:payment_fee_rules.delete']);
         });
 
         Route::prefix('issued-certificates')->group(function () {

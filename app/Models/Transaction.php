@@ -49,6 +49,12 @@ class Transaction extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'fee_amount' => 'decimal:2',
+            'total_amount' => 'decimal:2',
+            'fee_amount_in_naira' => 'decimal:2',
+            'fee_snapshot' => 'array',
+            'gateway_amount_received' => 'decimal:2',
+            'gateway_fee_amount' => 'decimal:2',
             'exchange_rate_to_naira' => 'decimal:6',
             'amount_in_naira' => 'decimal:2',
             'is_anonymous' => 'boolean',
@@ -100,6 +106,52 @@ class Transaction extends Model
     public function reconciledByAdmin(): BelongsTo
     {
         return $this->belongsTo(Admin::class, 'reconciled_by_admin_uuid', 'uuid');
+    }
+
+    public function feeRule(): BelongsTo
+    {
+        return $this->belongsTo(PaymentFeeRule::class, 'fee_rule_uuid', 'uuid')->withTrashed();
+    }
+
+    /**
+     * What the gateway is asked to charge: donation + service fee.
+     *
+     * `amount` is always the donation alone. Rows created before the fee feature (or without a
+     * total) fall back to the donation so nothing is ever charged twice or under-charged.
+     */
+    public function chargeAmount(): float
+    {
+        $total = $this->total_amount;
+        if ($total !== null && (float) $total > 0) {
+            return round((float) $total, 2);
+        }
+
+        return round((float) $this->amount + (float) ($this->fee_amount ?? 0), 2);
+    }
+
+    public function hasServiceFee(): bool
+    {
+        return (float) ($this->fee_amount ?? 0) > 0;
+    }
+
+    /**
+     * What the platform actually kept: service fee minus what the gateway reported it took.
+     * Null until the gateway has reported its fee.
+     */
+    public function realizedMarginAmount(): ?float
+    {
+        if ($this->gateway_fee_amount === null) {
+            return null;
+        }
+
+        return round((float) ($this->fee_amount ?? 0) - (float) $this->gateway_fee_amount, 2);
+    }
+
+    public function hasGatewayAmountMismatch(): bool
+    {
+        $metadata = is_array($this->metadata) ? $this->metadata : [];
+
+        return (bool) ($metadata['gateway_amount_mismatch'] ?? false);
     }
 
     public function certificates(): HasMany

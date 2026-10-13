@@ -50,7 +50,6 @@ final class StripeCheckoutService
         ?string $frontendUrl = null,
     ): array {
         $currency = strtolower((string) $transaction->currency);
-        $unitAmount = $this->unitAmount((float) $transaction->amount, $currency);
 
         $redirects = $this->redirectResolver->resolve(
             'stripe',
@@ -62,34 +61,24 @@ final class StripeCheckoutService
 
         $referenceId = self::PLATFORM_PREFIX.$transaction->uuid;
 
+        $metadata = [
+            'transaction_uuid' => $referenceId,
+            'transaction_id' => (string) $transaction->transaction_id,
+            'donation_amount' => number_format((float) $transaction->amount, 2, '.', ''),
+            'service_fee' => number_format((float) ($transaction->fee_amount ?? 0), 2, '.', ''),
+            'is_test' => $transaction->is_test ? 'true' : 'false',
+        ];
+
         $params = [
             'mode' => 'payment',
             'client_reference_id' => $referenceId,
             'success_url' => $redirects['success_url'],
             'cancel_url' => $redirects['failed_url'],
-            'metadata' => [
-                'transaction_uuid' => $referenceId,
-            ],
+            'metadata' => $metadata,
             'payment_intent_data' => [
-                'metadata' => [
-                    'transaction_uuid' => $referenceId,
-                ],
+                'metadata' => $metadata,
             ],
-            'line_items' => [
-                [
-                    'quantity' => 1,
-                    'price_data' => [
-                        'currency' => $currency,
-                        'unit_amount' => $unitAmount,
-                        'product_data' => [
-                            'name' => $transaction->pledge_uuid !== null ? 'Pledge payment' : 'Donation',
-                            'metadata' => [
-                                'transaction_uuid' => $referenceId,
-                            ],
-                        ],
-                    ],
-                ],
-            ],
+            'line_items' => $this->buildLineItems($transaction, $currency, $referenceId),
         ];
 
         if ($donorUser !== null) {
@@ -150,6 +139,80 @@ final class StripeCheckoutService
     public function retrieveCheckoutSession(string $sessionId): Session
     {
         return $this->stripe->checkout->sessions->retrieve($sessionId);
+    }
+
+    /**
+     * The fee Stripe kept on this session's charge, in the transaction currency, or null when
+     * it is not available yet or was settled in another currency.
+     *
+     * Best effort: never throws, so finalization is not blocked by a lookup failure.
+     *
+     * @return array{fee: float|null, currency: string|null}
+     */
+    public function resolveGatewayFee(Session $session): array
+    {
+        $paymentIntentId = is_string($session->payment_intent) ? $session->payment_intent : null;
+        if ($paymentIntentId === null || $paymentIntentId === '') {
+            return ['fee' => null, 'currency' => null];
+        }
+
+        try {
+            $intent = $this->stripe->paymentIntents->retrieve($paymentIntentId, [
+                'expand' => ['latest_charge.balance_transaction'],
+            ]);
+            $balance = $intent->latest_charge?->balance_transaction ?? null;
+            if (! is_object($balance) || ! isset($balance->fee, $balance->currency)) {
+                return ['fee' => null, 'currency' => null];
+            }
+
+            $currency = strtoupper((string) $balance->currency);
+
+            return [
+                'fee' => MinorUnits::toMajor((int) $balance->fee, $currency),
+                'currency' => $currency,
+            ];
+        } catch (\Throwable) {
+            return ['fee' => null, 'currency' => null];
+        }
+    }
+
+    /**
+     * Donation and service fee as separate lines so the Stripe receipt itemises them.
+     * The sum of the lines is the charged figure (total_amount).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function buildLineItems(Transaction $transaction, string $currency, string $referenceId): array
+    {
+        $productMetadata = ['transaction_uuid' => $referenceId];
+
+        $items = [[
+            'quantity' => 1,
+            'price_data' => [
+                'currency' => $currency,
+                'unit_amount' => $this->unitAmount((float) $transaction->amount, $currency),
+                'product_data' => [
+                    'name' => $transaction->pledge_uuid !== null ? 'Pledge payment' : 'Donation',
+                    'metadata' => $productMetadata,
+                ],
+            ],
+        ]];
+
+        if ($transaction->hasServiceFee()) {
+            $items[] = [
+                'quantity' => 1,
+                'price_data' => [
+                    'currency' => $currency,
+                    'unit_amount' => $this->unitAmount((float) $transaction->fee_amount, $currency),
+                    'product_data' => [
+                        'name' => 'Service fee',
+                        'metadata' => $productMetadata,
+                    ],
+                ],
+            ];
+        }
+
+        return $items;
     }
 
     private function resolveStripeCustomerId(User $user): string

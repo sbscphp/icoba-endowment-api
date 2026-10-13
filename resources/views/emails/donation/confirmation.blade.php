@@ -9,6 +9,10 @@
     $amountNgn = $transaction->amount_in_naira !== null
         ? number_format((float) $transaction->amount_in_naira, 2)
         : null;
+    // Service fee is shown beside the donation, never folded into it.
+    $serviceFee = (float) ($transaction->fee_amount ?? 0);
+    $serviceFeeLabel = $serviceFee > 0 ? number_format($serviceFee, 2) : null;
+    $totalCharged = $serviceFee > 0 ? number_format($transaction->chargeAmount(), 2) : null;
 @endphp
 
 @section('content')
@@ -16,8 +20,10 @@
         'rows' => array_values(array_filter([
             ['label' => 'Receipt #', 'value' => $transaction->receipt_number ?? app(\App\Services\Receipt\ReceiptService::class)->receiptNumberFor($transaction)],
             ['label' => 'Campaign', 'value' => $campaignName],
-            ['label' => 'Amount', 'value' => $amount.' '.$currency],
+            ['label' => $serviceFeeLabel !== null ? 'Donation amount' : 'Amount', 'value' => $amount.' '.$currency],
             $amountNgn !== null ? ['label' => 'Amount (NGN)', 'value' => '₦'.$amountNgn] : null,
+            $serviceFeeLabel !== null ? ['label' => 'Service fee', 'value' => $serviceFeeLabel.' '.$currency] : null,
+            $totalCharged !== null ? ['label' => 'Total charged', 'value' => $totalCharged.' '.$currency] : null,
             ['label' => 'Transaction ID', 'value' => $transaction->transaction_id],
             optional($transaction->paid_at) ? ['label' => 'Paid At', 'value' => $transaction->paid_at->format('F j, Y g:i A')] : null,
         ])),

@@ -12,6 +12,7 @@ final class PaystackCheckoutSyncService
 {
     public function __construct(
         private readonly TransactionFinalizationService $finalizationService,
+        private readonly GatewaySettlementContext $settlementContext,
     ) {}
 
     /**
@@ -66,17 +67,27 @@ final class PaystackCheckoutSyncService
             return false;
         }
 
-        return $this->finalizationService->finalizeSuccessful($transaction, [
+        // Paystack's amount/fees land in the gateway_* columns only; the donation amount is untouched.
+        $currency = (string) $transaction->currency;
+        $received = $checkoutTransaction->amountReceived($currency);
+        $settlement = $this->settlementContext->build(
+            $transaction,
+            $received,
+            $received,
+            $checkoutTransaction->gatewayFee($currency),
+        );
+
+        return $this->finalizationService->finalizeSuccessful($transaction, array_merge($settlement, [
             'gateway_reference' => $gatewayReference,
-            'metadata' => [
+            'metadata' => array_merge($settlement['metadata'], [
                 'paystack_reference' => $checkoutTransaction->reference,
                 'paystack_transaction_id' => $checkoutTransaction->paystackTransactionId,
                 'paystack_status' => $checkoutTransaction->status,
                 'payment_method' => 'paystack',
                 'paystack_checkout_finalized_at' => now()->toIso8601String(),
-            ],
+            ]),
             'tax_receipt_email_meta_key' => 'paystack_tax_receipt_email_queued',
-        ]);
+        ]));
     }
 
     /**

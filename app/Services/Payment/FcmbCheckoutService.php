@@ -123,7 +123,8 @@ final class FcmbCheckoutService
 
         $email = $this->resolveDonorEmail($transaction, $donorUser);
         $invoiceRequestReference = (string) $transaction->uuid;
-        $amount = (float) $transaction->amount;
+        // Charged figure = donation + service fee. The donation itself is carried separately in customFields.
+        $amount = $transaction->chargeAmount();
         [$firstName, $lastName] = $this->splitDonorName($transaction);
 
         $payload = [
@@ -135,12 +136,7 @@ final class FcmbCheckoutService
             'email' => $email,
             'invoiceRequestReference' => $invoiceRequestReference,
             'isVatEnabled' => false,
-            'customFields' => [
-                [
-                    'label' => 'transaction_uuid',
-                    'value' => $transaction->uuid,
-                ],
-            ],
+            'customFields' => $this->buildCustomFields($transaction),
             'returnUrl' => $this->buildReturnUrl($returnBaseUrl, $invoiceRequestReference),
             'hash' => $this->hashInitializePayment($amount, $email, $invoiceRequestReference),
         ];
@@ -156,6 +152,34 @@ final class FcmbCheckoutService
         }
 
         return $payload;
+    }
+
+    /**
+     * `transaction_uuid` stays first: FcmbCheckoutTransaction::extractTransactionUuid reads it back.
+     *
+     * @return list<array{label: string, value: string}>
+     */
+    private function buildCustomFields(Transaction $transaction): array
+    {
+        $fields = [
+            ['label' => 'transaction_uuid', 'value' => (string) $transaction->uuid],
+        ];
+
+        if (is_string($transaction->transaction_id) && $transaction->transaction_id !== '') {
+            $fields[] = ['label' => 'transaction_id', 'value' => $transaction->transaction_id];
+        }
+
+        $fields[] = ['label' => 'donation_amount', 'value' => number_format((float) $transaction->amount, 2, '.', '')];
+
+        if ($transaction->hasServiceFee()) {
+            $fields[] = ['label' => 'service_fee', 'value' => number_format((float) $transaction->fee_amount, 2, '.', '')];
+        }
+
+        if ($transaction->is_test !== null) {
+            $fields[] = ['label' => 'is_test', 'value' => $transaction->is_test ? 'true' : 'false'];
+        }
+
+        return $fields;
     }
 
     private function buildReturnUrl(string $baseUrl, string $invoiceRequestReference): string

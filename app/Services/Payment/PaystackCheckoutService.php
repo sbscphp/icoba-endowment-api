@@ -52,12 +52,17 @@ final class PaystackCheckoutService
 
         $response = $this->client()->post('/transaction/initialize', [
             'email' => $email,
-            'amount' => $this->minorUnitAmount((float) $transaction->amount, $currency),
+            // Charged figure = donation + service fee; the split travels in metadata.
+            'amount' => $this->minorUnitAmount($transaction->chargeAmount(), $currency),
             'currency' => $currency,
             'reference' => $reference,
             'callback_url' => $redirects['success_url'],
             'metadata' => [
                 'transaction_uuid' => $transaction->uuid,
+                'transaction_id' => $transaction->transaction_id,
+                'donation_amount' => number_format((float) $transaction->amount, 2, '.', ''),
+                'service_fee' => number_format((float) ($transaction->fee_amount ?? 0), 2, '.', ''),
+                'is_test' => (bool) $transaction->is_test,
                 'failed_url' => $redirects['failed_url'],
             ],
         ]);

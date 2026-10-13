@@ -15,6 +15,7 @@ enum ModuleEnums: string
     case transactions = 'transactions';
     case pledges = 'pledges';
     case tier_configuration = 'tier_configuration';
+    case payment_fee_rules = 'payment_fee_rules';
     case reconciliation = 'reconciliation';
     case issued_certificate = 'issued_certificate';
     case certificate_template = 'certificate_template';
@@ -40,6 +41,7 @@ enum ModuleEnums: string
             self::transactions => 'Transactions',
             self::pledges => 'Pledges',
             self::tier_configuration => 'Tier configuration',
+            self::payment_fee_rules => 'Payment fee rules',
             self::reconciliation => 'Reconciliation',
             self::issued_certificate => 'Issued certificate',
             self::certificate_template => 'Certificate template',

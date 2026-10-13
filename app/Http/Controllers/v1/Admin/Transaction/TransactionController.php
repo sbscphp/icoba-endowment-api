@@ -166,6 +166,11 @@ class TransactionController extends Controller
                 'Amount',
                 'Currency',
                 'Amount (NGN)',
+                'Service fee',
+                'Total charged',
+                'Gateway fee (actual)',
+                'Margin after gateway',
+                'Gateway amount received',
                 'Gateway',
                 'Reference',
                 'Status',
@@ -200,6 +205,11 @@ class TransactionController extends Controller
                     (string) $tx->amount,
                     $tx->currency,
                     $tx->amount_in_naira !== null ? (string) $tx->amount_in_naira : '',
+                    (string) ($tx->fee_amount ?? '0.00'),
+                    number_format($tx->chargeAmount(), 2, '.', ''),
+                    $tx->gateway_fee_amount !== null ? (string) $tx->gateway_fee_amount : '',
+                    $tx->realizedMarginAmount() !== null ? number_format($tx->realizedMarginAmount(), 2, '.', '') : '',
+                    $tx->gateway_amount_received !== null ? (string) $tx->gateway_amount_received : '',
                     (string) ($tx->gateway ?? ''),
                     (string) ($tx->gateway_reference ?? ''),
                     $tx->status->value,
@@ -233,7 +243,7 @@ class TransactionController extends Controller
         $periodStart = ! empty($listing['start_date']) ? (string) $listing['start_date'] : 'All dates';
         $periodEnd = ! empty($listing['end_date']) ? (string) $listing['end_date'] : 'All dates';
 
-        $headings = ['Transaction ID', 'Date', 'Donor', 'Set', 'Affiliated set', 'House', 'Campaign', 'Amount', 'Currency', 'Amount (NGN)', 'Gateway', 'Status'];
+        $headings = ['Transaction ID', 'Date', 'Donor', 'Set', 'Affiliated set', 'House', 'Campaign', 'Amount', 'Currency', 'Amount (NGN)', 'Service fee', 'Total charged', 'Gateway', 'Status'];
         $rows = $collection->map(fn(Transaction $tx): array => [
             $tx->transaction_id,
             $tx->created_at?->format('Y-m-d H:i') ?? '',
@@ -245,6 +255,8 @@ class TransactionController extends Controller
             (string) $tx->amount,
             $tx->currency,
             $tx->amount_in_naira !== null ? (string) $tx->amount_in_naira : '',
+            (string) ($tx->fee_amount ?? '0.00'),
+            number_format($tx->chargeAmount(), 2, '.', ''),
             (string) ($tx->gateway ?? ''),
             $tx->status->value,
         ]);

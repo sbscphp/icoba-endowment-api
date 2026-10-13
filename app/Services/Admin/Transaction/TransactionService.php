@@ -50,6 +50,10 @@ class TransactionService
             'anonymous_count' => (clone $base)->where('is_anonymous', true)->count(),
             'unique_donors_count' => (clone $successful)->whereNotNull('user_uuid')->distinct('user_uuid')->count('user_uuid'),
             'total_volume_naira' => (string) ((clone $successful)->sum('amount_in_naira') ?: '0'),
+            // Service fees collected on top of donations; never part of total_volume_naira.
+            'total_service_fees_naira' => (string) ((clone $successful)->sum('fee_amount_in_naira') ?: '0'),
+            'service_fee_count' => (clone $successful)->where('fee_amount', '>', 0)->count(),
+            'gateway_amount_mismatch_count' => (clone $successful)->where('metadata->gateway_amount_mismatch', true)->count(),
         ];
     }
 
@@ -255,8 +259,27 @@ class TransactionService
             $query->where('amount_in_naira', '<=', (float) $maxAmount);
         }
 
+        $hasServiceFee = data_get($validated, 'filters.has_service_fee');
+        if ($hasServiceFee !== null && $hasServiceFee !== '') {
+            $truthy = in_array($hasServiceFee, ['1', 1, true, 'true'], true);
+            $query->where('fee_amount', $truthy ? '>' : '<=', 0);
+        }
+
+        $mismatch = data_get($validated, 'filters.gateway_amount_mismatch');
+        if ($mismatch !== null && $mismatch !== '') {
+            $truthy = in_array($mismatch, ['1', 1, true, 'true'], true);
+            if ($truthy) {
+                $query->where('metadata->gateway_amount_mismatch', true);
+            } else {
+                $query->where(function (Builder $builder): void {
+                    $builder->whereNull('metadata->gateway_amount_mismatch')
+                        ->orWhere('metadata->gateway_amount_mismatch', false);
+                });
+            }
+        }
+
         $sortBy = (string) ($validated['sort_by'] ?? 'created_at');
-        $allowedSorts = ['transaction_id', 'donor_name', 'amount', 'amount_in_naira', 'status', 'paid_at', 'created_at', 'updated_at'];
+        $allowedSorts = ['transaction_id', 'donor_name', 'amount', 'amount_in_naira', 'fee_amount', 'total_amount', 'status', 'paid_at', 'created_at', 'updated_at'];
         if (! in_array($sortBy, $allowedSorts, true)) {
             $sortBy = 'created_at';
         }

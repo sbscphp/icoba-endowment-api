@@ -25,6 +25,9 @@ class TransactionStatsResource extends JsonResource
             'anonymous_count' => (int) ($data['anonymous_count'] ?? 0),
             'unique_donors_count' => (int) ($data['unique_donors_count'] ?? 0),
             'total_volume_naira' => (string) ($data['total_volume_naira'] ?? '0'),
+            'total_service_fees_naira' => (string) ($data['total_service_fees_naira'] ?? '0'),
+            'service_fee_count' => (int) ($data['service_fee_count'] ?? 0),
+            'gateway_amount_mismatch_count' => (int) ($data['gateway_amount_mismatch_count'] ?? 0),
         ];
     }
 }
