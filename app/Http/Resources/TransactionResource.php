@@ -107,6 +107,17 @@ class TransactionResource extends JsonResource
             'currency' => $this->currency,
             'amount_in_naira' => $this->amount_in_naira !== null ? (string) $this->amount_in_naira : null,
             'exchange_rate_to_naira' => $this->exchange_rate_to_naira !== null ? (string) $this->exchange_rate_to_naira : null,
+            // Service fee is kept apart from the donation: amount is the donation, total_amount is what was charged.
+            'fee_amount' => (string) ($this->fee_amount ?? '0.00'),
+            'total_amount' => number_format($this->resource->chargeAmount(), 2, '.', ''),
+            'fee_amount_in_naira' => $this->fee_amount_in_naira !== null ? (string) $this->fee_amount_in_naira : null,
+            'gateway_amount_received' => $this->gateway_amount_received !== null ? (string) $this->gateway_amount_received : null,
+            'gateway_fee_amount' => $this->gateway_fee_amount !== null ? (string) $this->gateway_fee_amount : null,
+            'realized_margin_amount' => $this->resource->realizedMarginAmount() !== null
+                ? number_format($this->resource->realizedMarginAmount(), 2, '.', '')
+                : null,
+            'gateway_amount_mismatch' => $this->resource->hasGatewayAmountMismatch(),
+            'fee_snapshot' => $this->fee_snapshot,
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
             'pledge_uuid' => $this->pledge_uuid,
             'application_type' => $this->application_type instanceof \BackedEnum ? $this->application_type->value : $this->application_type,

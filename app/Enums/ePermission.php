@@ -27,6 +27,12 @@ enum ePermission: string
     case TIER_CONFIGURATION_UPDATE = 'tier_configuration.update';
     case TIER_CONFIGURATION_DELETE = 'tier_configuration.delete';
 
+    // 4b. Payment fee rules (platform charges)
+    case PAYMENT_FEE_RULES_READ = 'payment_fee_rules.read';
+    case PAYMENT_FEE_RULES_CREATE = 'payment_fee_rules.create';
+    case PAYMENT_FEE_RULES_UPDATE = 'payment_fee_rules.update';
+    case PAYMENT_FEE_RULES_DELETE = 'payment_fee_rules.delete';
+
     // 5. Pledges
     case PLEDGES_READ = 'pledges.read';
     case PLEDGES_REMIND = 'pledges.remind';

@@ -40,6 +40,8 @@ final class TransactionFinalizationService
      *     paid_into_account_number?: ?string,
      *     reconciled_by_admin_uuid?: ?string,
      *     reconciliation_note?: ?string,
+     *     gateway_amount_received?: ?float,
+     *     gateway_fee_amount?: ?float,
      *     metadata?: array<string, mixed>,
      *     confirmation_email_meta_key?: ?string,
      *     tax_receipt_email_meta_key?: ?string,
@@ -105,6 +107,20 @@ final class TransactionFinalizationService
                 }
             }
 
+            // Service fee in NGN at the same rate as the donation (never folded into amount_in_naira).
+            $feeAmount = (float) ($locked->fee_amount ?? 0);
+            if ($locked->fee_amount_in_naira === null) {
+                $rate = $ngnFields['exchange_rate_to_naira'] ?? $locked->exchange_rate_to_naira;
+                if ($feeAmount <= 0) {
+                    $ngnFields['fee_amount_in_naira'] = 0.0;
+                } elseif ($rate !== null) {
+                    $ngnFields['fee_amount_in_naira'] = round($feeAmount * (float) $rate, 2);
+                }
+            }
+            if ($locked->total_amount === null) {
+                $ngnFields['total_amount'] = round((float) $locked->amount + $feeAmount, 2);
+            }
+
             $update = [
                 'status' => TransactionStatus::SUCCESSFUL,
                 'paid_at' => $effectivePaidAt,
@@ -126,6 +142,13 @@ final class TransactionFinalizationService
             }
             if (array_key_exists('reconciliation_note', $context) && $context['reconciliation_note'] !== null && $context['reconciliation_note'] !== '') {
                 $update['reconciliation_note'] = (string) $context['reconciliation_note'];
+            }
+            // Gateway-reported figures only. `amount`, `fee_amount` and `total_amount` are never written here.
+            if (array_key_exists('gateway_amount_received', $context) && $context['gateway_amount_received'] !== null) {
+                $update['gateway_amount_received'] = round((float) $context['gateway_amount_received'], 2);
+            }
+            if (array_key_exists('gateway_fee_amount', $context) && $context['gateway_fee_amount'] !== null) {
+                $update['gateway_fee_amount'] = round((float) $context['gateway_fee_amount'], 2);
             }
 
             $locked->forceFill(array_merge($update, $ngnFields))->save();

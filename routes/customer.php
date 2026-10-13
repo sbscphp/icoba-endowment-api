@@ -10,6 +10,7 @@ use App\Http\Controllers\v1\Customer\Donation\BankTransferController;
 use App\Http\Controllers\v1\Customer\Donation\CustomerReceiptController;
 use App\Http\Controllers\v1\Customer\Donation\DonationIntentController;
 use App\Http\Controllers\v1\Customer\Donation\DonationCheckoutController;
+use App\Http\Controllers\v1\Customer\Donation\DonationFeeQuoteController;
 use App\Http\Controllers\v1\Customer\Notification\NotificationController;
 use App\Http\Controllers\v1\Customer\Pledge\CustomerPledgeController;
 use App\Http\Controllers\v1\Customer\Settings\SettingsController;
@@ -90,6 +91,10 @@ Route::prefix('v1')->group(function () {
 
     // Route::post('donations/intent', [DonationIntentController::class, 'store'])
     //     ->middleware(['throttle:60,1']);
+
+    // Donation + service fee + total for a given amount/currency (and optionally one gateway).
+    Route::get('donations/fee-quote', [DonationFeeQuoteController::class, 'show'])
+        ->middleware(['throttle:120,1']);
 
     Route::post('donations/checkout', [DonationCheckoutController::class, 'store'])
         ->middleware(['throttle:60,1']);

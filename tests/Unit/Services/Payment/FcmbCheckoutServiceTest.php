@@ -120,7 +120,9 @@ class FcmbCheckoutServiceTest extends TestCase
             $payload['returnUrl'],
         );
         $this->assertSame($transaction->uuid, $payload['invoiceRequestReference']);
-        $this->assertSame([['label' => 'transaction_uuid', 'value' => $transaction->uuid]], $payload['customFields']);
+        $this->assertSame(['label' => 'transaction_uuid', 'value' => $transaction->uuid], $payload['customFields'][0]);
+        $this->assertContains(['label' => 'donation_amount', 'value' => '5000.00'], $payload['customFields']);
+        $this->assertSame(5000.0, $payload['amount']);
         $this->assertSame('NGN', $payload['currency']);
         $this->assertSame('Ada', $payload['firstName']);
         $this->assertSame('Lovelace', $payload['lastName']);
@@ -161,6 +163,27 @@ class FcmbCheckoutServiceTest extends TestCase
         ]));
 
         $this->assertSame($expected, $payload['hash']);
+    }
+
+    public function test_initialize_payload_charges_total_and_carries_donation_and_fee_separately(): void
+    {
+        $transaction = $this->makeTransaction();
+        $transaction->fee_amount = 150;
+        $transaction->total_amount = 5150;
+
+        $payload = $this->makeService()->buildInitializePayload(
+            $transaction,
+            null,
+            'https://frontend.example.com/donate/success',
+        );
+
+        $this->assertSame(5150.0, $payload['amount']);
+        $this->assertContains(['label' => 'donation_amount', 'value' => '5000.00'], $payload['customFields']);
+        $this->assertContains(['label' => 'service_fee', 'value' => '150.00'], $payload['customFields']);
+        $this->assertSame(
+            hash('sha512', implode('|', ['5150', 'donor@example.com', $transaction->uuid, 'test-secret-key'])),
+            $payload['hash'],
+        );
     }
 
     private function makeTransaction(): Transaction

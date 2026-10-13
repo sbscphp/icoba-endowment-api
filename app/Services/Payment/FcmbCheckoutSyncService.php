@@ -12,6 +12,7 @@ final class FcmbCheckoutSyncService
 {
     public function __construct(
         private readonly TransactionFinalizationService $finalizationService,
+        private readonly GatewaySettlementContext $settlementContext,
     ) {}
 
     /**
@@ -60,17 +61,27 @@ final class FcmbCheckoutSyncService
 
         $gatewayReference = $checkoutTransaction->reference ?? $checkoutTransaction->invoiceRequestReference;
 
-        return $this->finalizationService->finalizeSuccessful($transaction, [
+        // What CLNX reports goes into the gateway_* columns only; the donation amount is untouched.
+        $settlement = $this->settlementContext->build(
+            $transaction,
+            $checkoutTransaction->chargedAmount(),
+            $checkoutTransaction->amountReceived(),
+            $checkoutTransaction->gatewayFee(),
+        );
+
+        return $this->finalizationService->finalizeSuccessful($transaction, array_merge($settlement, [
             'gateway_reference' => $gatewayReference,
-            'metadata' => [
+            'metadata' => array_merge($settlement['metadata'], [
                 'payment_method' => 'fcmb_checkout',
                 'fcmb_invoice_request_reference' => $checkoutTransaction->invoiceRequestReference,
                 'fcmb_reference' => $checkoutTransaction->reference,
                 'fcmb_status' => $checkoutTransaction->status,
+                'fcmb_original_amount' => $checkoutTransaction->originalAmount,
+                'fcmb_amount' => $checkoutTransaction->amount,
                 'fcmb_checkout_finalized_at' => now()->toIso8601String(),
-            ],
+            ]),
             'tax_receipt_email_meta_key' => 'fcmb_tax_receipt_email_queued',
-        ]);
+        ]));
     }
 
     public function markPendingFailed(FcmbCheckoutTransaction $checkoutTransaction): bool

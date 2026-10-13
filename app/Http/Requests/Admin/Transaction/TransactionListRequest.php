@@ -31,6 +31,8 @@ class TransactionListRequest extends ApiFormRequest
                 'donor_name',
                 'amount',
                 'amount_in_naira',
+                'fee_amount',
+                'total_amount',
                 'status',
                 'paid_at',
                 'created_at',
@@ -79,6 +81,8 @@ class TransactionListRequest extends ApiFormRequest
                 'filters.date_field' => ['sometimes', 'nullable', Rule::in(['created_at', 'paid_at'])],
                 'filters.pledge_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:pledges,uuid'],
                 'filters.include_superseded' => ['sometimes', 'boolean'],
+                'filters.has_service_fee' => ['sometimes', 'nullable', Rule::in(['0', '1', 0, 1, true, false, 'true', 'false'])],
+                'filters.gateway_amount_mismatch' => ['sometimes', 'nullable', Rule::in(['0', '1', 0, 1, true, false, 'true', 'false'])],
             ]
         );
     }
@@ -108,6 +112,8 @@ class TransactionListRequest extends ApiFormRequest
             'filters.pledge_uuid.uuid' => 'Pledge filter must be a valid UUID.',
             'filters.pledge_uuid.exists' => 'Selected pledge does not exist.',
             'filters.include_superseded.boolean' => 'Include superseded filter must be true or false.',
+            'filters.has_service_fee.in' => 'Service fee filter must be a boolean value.',
+            'filters.gateway_amount_mismatch.in' => 'Gateway amount mismatch filter must be a boolean value.',
         ]);
     }
 }

@@ -43,6 +43,14 @@ class TransactionListResource extends JsonResource
             'amount' => (string) $this->amount,
             'currency' => $this->currency,
             'amount_in_naira' => $this->amount_in_naira !== null ? (string) $this->amount_in_naira : null,
+            'fee_amount' => (string) ($this->fee_amount ?? '0.00'),
+            'total_amount' => number_format($this->resource->chargeAmount(), 2, '.', ''),
+            'gateway_amount_received' => $this->gateway_amount_received !== null ? (string) $this->gateway_amount_received : null,
+            'gateway_fee_amount' => $this->gateway_fee_amount !== null ? (string) $this->gateway_fee_amount : null,
+            'realized_margin_amount' => $this->resource->realizedMarginAmount() !== null
+                ? number_format($this->resource->realizedMarginAmount(), 2, '.', '')
+                : null,
+            'gateway_amount_mismatch' => $this->resource->hasGatewayAmountMismatch(),
             'gateway' => $this->gateway,
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
             'paid_at' => $this->paid_at,

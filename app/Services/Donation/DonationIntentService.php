@@ -13,6 +13,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Bank\BankAccountRegistry;
 use App\Services\GivingIdentity\GivingIdentityResolver;
+use App\Services\Payment\Fee\PaymentFeeQuoteService;
 use App\Services\Pledge\PledgeBalanceService;
 use App\Services\Pledge\PledgeScheduleService;
 use App\Services\Transaction\TransactionNgnSnapshotService;
@@ -34,6 +35,7 @@ class DonationIntentService
         private readonly BankTransferReferenceService $bankTransferReference,
         private readonly BankAccountRegistry $bankAccountRegistry,
         private readonly GivingIdentityResolver $givingIdentityResolver,
+        private readonly PaymentFeeQuoteService $feeQuoteService,
     ) {}
 
     /**
@@ -71,6 +73,7 @@ class DonationIntentService
 
         $v = Validator::make($data, [
             'amount' => ['required', 'numeric', 'min:0.01'],
+            'expected_total_amount' => ['sometimes', 'nullable', 'numeric', 'min:0.01'],
             'currency' => ['required', 'string', Rule::in(Currency::values())],
             'campaign_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:campaigns,uuid'],
             'pledge_uuid' => ['sometimes', 'nullable', 'uuid', 'exists:pledges,uuid'],
@@ -225,7 +228,28 @@ class DonationIntentService
             $purpose = $pledge->purpose;
         }
 
-        return Transaction::query()->create([
+        // Service fee is priced once here and frozen on the row. `amount` stays the donation only.
+        $feeQuote = $this->feeQuoteService->quoteForApplicationType($amount, $currency, $applicationType);
+
+        $expectedTotal = isset($clean['expected_total_amount']) ? (float) $clean['expected_total_amount'] : null;
+        if ($expectedTotal !== null && abs($expectedTotal - $feeQuote->totalAmount()) > 0.009) {
+            throw ValidationException::withMessages([
+                'expected_total_amount' => [sprintf(
+                    'The service fee has changed. Donation %s + fee %s = total %s %s. Please refresh the quote.',
+                    number_format($feeQuote->donationAmount, 2),
+                    number_format($feeQuote->feeAmount(), 2),
+                    number_format($feeQuote->totalAmount(), 2),
+                    $currency,
+                )],
+            ]);
+        }
+
+        $feeNgn = $feeQuote->feeAmount() > 0 && $rate !== null
+            ? round($feeQuote->feeAmount() * (float) $rate, 2)
+            : ($feeQuote->feeAmount() > 0 ? null : 0.0);
+
+        return Transaction::query()->create(array_merge($feeQuote->toTransactionAttributes(), [
+            'fee_amount_in_naira' => $feeNgn,
             'transaction_id' => $transactionId,
             'campaign_uuid' => $campaignUuid,
             'pledge_uuid' => $pledgeUuid,
@@ -248,7 +272,7 @@ class DonationIntentService
             'gateway' => $clean['gateway'] ?? null,
             'application_type' => $applicationType,
             'metadata' => array_merge((array) ($data['metadata'] ?? []), $metadata),
-        ]);
+        ]));
     }
 
     /**

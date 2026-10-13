@@ -35,6 +35,8 @@ class DonationCheckoutRequest extends ApiFormRequest
         $checkoutRules = [
             'payment_gateway' => ['required', 'string', Rule::enum(PaymentGateway::class)],
             'amount' => ['required', 'numeric', 'min:0.01'],
+            // Total the donor was shown (from the fee-quote endpoint). Rejected if the fee has since changed.
+            'expected_total_amount' => ['sometimes', 'nullable', 'numeric', 'min:0.01'],
             'currency' => [
                 Rule::requiredIf(fn () => ! $this->filled('pledge_uuid')),
                 'nullable',

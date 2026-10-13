@@ -13,7 +13,35 @@ final class StripeCheckoutSyncService
 {
     public function __construct(
         private readonly TransactionFinalizationService $finalizationService,
+        private readonly GatewaySettlementContext $settlementContext,
     ) {}
+
+    /**
+     * Best-effort Stripe fee lookup. Resolved lazily so this service stays usable without a
+     * configured Stripe secret (tests, non-Stripe webhooks).
+     *
+     * @return array{fee: float|null, fee_other_currency: float|null, currency: string|null}
+     */
+    private function resolveStripeFee(Session $session, string $transactionCurrency): array
+    {
+        $none = ['fee' => null, 'fee_other_currency' => null, 'currency' => null];
+
+        try {
+            $result = app(StripeCheckoutService::class)->resolveGatewayFee($session);
+        } catch (\Throwable) {
+            return $none;
+        }
+
+        if ($result['fee'] === null || $result['currency'] === null) {
+            return $none;
+        }
+
+        if (strtoupper($result['currency']) === strtoupper($transactionCurrency)) {
+            return ['fee' => $result['fee'], 'fee_other_currency' => null, 'currency' => $result['currency']];
+        }
+
+        return ['fee' => null, 'fee_other_currency' => $result['fee'], 'currency' => $result['currency']];
+    }
 
     /**
      * Secondary confirmation path: applies the same state transitions as the webhook when safe.
@@ -68,17 +96,29 @@ final class StripeCheckoutSyncService
             return false;
         }
 
-        return $this->finalizationService->finalizeSuccessful($transaction, [
+        // Stripe's amount_total and balance fee land in the gateway_* columns only; the donation amount is untouched.
+        $currency = (string) $transaction->currency;
+        $received = isset($session->amount_total) ? MinorUnits::toMajor($session->amount_total, $currency) : null;
+        $fee = $this->resolveStripeFee($session, $currency);
+        $settlement = $this->settlementContext->build($transaction, $received, $received, $fee['fee']);
+
+        $extraMeta = [];
+        if ($fee['fee_other_currency'] !== null) {
+            $extraMeta['stripe_balance_fee'] = $fee['fee_other_currency'];
+            $extraMeta['stripe_balance_fee_currency'] = $fee['currency'];
+        }
+
+        return $this->finalizationService->finalizeSuccessful($transaction, array_merge($settlement, [
             'gateway_reference' => $gatewayReference,
-            'metadata' => [
+            'metadata' => array_merge($settlement['metadata'], $extraMeta, [
                 'stripe_checkout_session_id' => $session->id,
                 'stripe_payment_intent_id' => $session->payment_intent,
                 'stripe_payment_status' => $session->payment_status,
                 'payment_method' => 'stripe',
                 'stripe_checkout_finalized_at' => now()->toIso8601String(),
-            ],
+            ]),
             'tax_receipt_email_meta_key' => 'stripe_tax_receipt_email_queued',
-        ]);
+        ]));
     }
 
     /**
