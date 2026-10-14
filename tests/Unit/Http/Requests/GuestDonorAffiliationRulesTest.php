@@ -75,6 +75,20 @@ class GuestDonorAffiliationRulesTest extends TestCase
         $this->assertFalse($identity['is_igbobian_owned']);
     }
 
+    public function test_guest_name_trailing_spaces_are_removed_before_validation(): void
+    {
+        [$errors, $data] = $this->validate([
+            'donor_type' => DonorTypeSlug::FRIENDS_OF_ICOBA->value,
+            'firstname' => 'Favour ',
+            'lastname' => 'Ola  ',
+        ]);
+
+        $this->assertArrayNotHasKey('firstname', $errors);
+        $this->assertArrayNotHasKey('lastname', $errors);
+        $this->assertSame('Favour', $data['firstname']);
+        $this->assertSame('Ola', $data['lastname']);
+    }
+
     public function test_guest_wife_must_specify_wives_type(): void
     {
         [$errors] = $this->validate([
