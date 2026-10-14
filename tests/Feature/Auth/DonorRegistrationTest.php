@@ -83,8 +83,8 @@ class DonorRegistrationTest extends TestCase
     {
         $response = $this->postJson('/api/v1/auth/signup', $this->payload([
             'donor_type' => DonorTypeSlug::ICOBA_ALUMNI->value,
-            'firstname' => 'Ade',
-            'lastname' => 'Ola',
+            'firstname' => 'Ade ',
+            'lastname' => 'Ola  ',
             'set_number' => '2002',
             'house' => 'Parker',
         ]));
@@ -92,6 +92,8 @@ class DonorRegistrationTest extends TestCase
         $response->assertStatus(201);
 
         $user = User::query()->where('email', 'donor@example.com')->firstOrFail();
+        $this->assertSame('Ade', $user->firstname);
+        $this->assertSame('Ola', $user->lastname);
         $this->assertSame('parker', $user->house);
         $this->assertSame($this->set->uuid, $user->graduation_set_uuid);
         $this->assertNull($user->affiliated_graduation_set_uuid);

@@ -98,6 +98,13 @@ class DonorRegisterRequest extends ApiFormRequest
             'donor_type' => strtolower(trim((string) $this->input('donor_type'))),
         ]);
 
+        foreach (['firstname', 'lastname'] as $field) {
+            $value = $this->input($field);
+            if (is_string($value)) {
+                $this->merge([$field => rtrim($value)]);
+            }
+        }
+
         $country = Country::forRegistration($this->input('country_uuid'));
 
         $normalized = app(PhoneNumberService::class)->normalize(

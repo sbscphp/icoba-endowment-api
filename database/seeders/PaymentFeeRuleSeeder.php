@@ -20,10 +20,10 @@ class PaymentFeeRuleSeeder extends Seeder
     {
         $rows = [
             // name, currency, min, max, percentage, fixed, cap, active
-            ['Service fee NGN', 'NGN', 0.01, null, 3.0000, 0.00, null, true],
-            ['Service fee USD', 'USD', 0.01, null, 3.0000, 0.00, null, true],
-            ['Service fee GBP', 'GBP', 0.01, null, 3.0000, 0.00, null, true],
-            ['Service fee EUR', 'EUR', 0.01, null, 3.0000, 0.00, null, true],
+            ['Service fee NGN', 'NGN', 0.01, null, 3.0000, 2000.00, null, true],
+            ['Service fee USD', 'USD', 0.01, null, 3.0000, 1.50, null, true],
+            ['Service fee GBP', 'GBP', 0.01, null, 3.0000, 1.13, null, true],
+            ['Service fee EUR', 'EUR', 0.01, null, 3.0000, 1.34, null, true],
         ];
 
         foreach ($rows as [$name, $currency, $min, $max, $percentage, $fixed, $cap, $active]) {
