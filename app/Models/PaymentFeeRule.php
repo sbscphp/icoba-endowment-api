@@ -11,6 +11,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * One band of the service fee for a currency over an amount range.
  * Fee = amount × percentage + fixed, then capped. Gateway-independent.
+ *
+ * The cap may be kept in another currency (cap_currency, e.g. 2,000 NGN on every rule); it is
+ * converted into the rule currency at quote time with the latest exchange rate.
  */
 class PaymentFeeRule extends Model
 {
@@ -87,6 +90,17 @@ class PaymentFeeRule extends Model
             'percentage' => (string) $this->percentage,
             'fixed_amount' => (string) $this->fixed_amount,
             'cap_amount' => $this->cap_amount !== null ? (string) $this->cap_amount : null,
+            'cap_currency' => $this->cap_amount !== null ? $this->capCurrency() : null,
         ];
+    }
+
+    /**
+     * Currency the cap is written in; defaults to the rule currency.
+     */
+    public function capCurrency(): string
+    {
+        $capCurrency = trim((string) ($this->cap_currency ?? ''));
+
+        return strtoupper($capCurrency !== '' ? $capCurrency : (string) $this->currency);
     }
 }

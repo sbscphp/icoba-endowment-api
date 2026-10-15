@@ -13,6 +13,7 @@ final class PaymentFeeQuoteService
 {
     public function __construct(
         private readonly PaymentFeeRuleResolver $resolver,
+        private readonly PaymentFeeCapResolver $capResolver,
         private readonly PaymentFeeCalculator $calculator,
     ) {}
 
@@ -39,12 +40,16 @@ final class PaymentFeeQuoteService
             return PaymentFeeQuote::zero($donationAmount, $currency, true);
         }
 
+        // A cap kept in another currency (e.g. 2,000 NGN on a USD rule) is converted at today's rate.
+        $cap = $this->capResolver->resolve($rule);
+
         return new PaymentFeeQuote(
             donationAmount: $donationAmount,
-            feeAmount: $this->calculator->fee($rule, $donationAmount),
+            feeAmount: $this->calculator->fee($rule, $donationAmount, $cap),
             currency: $currency,
             chargesEnabled: true,
             rule: $rule,
+            cap: $cap,
         );
     }
 

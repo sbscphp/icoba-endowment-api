@@ -208,7 +208,7 @@ class PaymentFeeRuleController extends Controller
      */
     private function headings(): array
     {
-        return ['ID', 'Name', 'Currency', 'Min amount', 'Max amount', 'Percentage', 'Fixed amount', 'Cap amount', 'Status', 'Date created', 'Last updated'];
+        return ['ID', 'Name', 'Currency', 'Min amount', 'Max amount', 'Percentage', 'Fixed amount', 'Cap amount', 'Cap currency', 'Status', 'Date created', 'Last updated'];
     }
 
     /**
@@ -225,6 +225,7 @@ class PaymentFeeRuleController extends Controller
             (string) $rule->percentage,
             (string) $rule->fixed_amount,
             $rule->cap_amount !== null ? (string) $rule->cap_amount : '',
+            $rule->cap_amount !== null ? $rule->capCurrency() : '',
             $rule->is_active ? 'active' : 'inactive',
             $rule->created_at?->toIso8601String() ?? '',
             $rule->updated_at?->toIso8601String() ?? '',

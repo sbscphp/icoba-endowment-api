@@ -17,6 +17,8 @@ final readonly class PaymentFeeQuote
         public string $currency,
         public bool $chargesEnabled,
         public ?PaymentFeeRule $rule = null,
+        /** The rule's cap in the quote currency, with the rate used when it was converted. */
+        public ?ResolvedFeeCap $cap = null,
     ) {}
 
     public static function zero(float $donationAmount, string $currency, bool $chargesEnabled): self
@@ -57,6 +59,7 @@ final readonly class PaymentFeeQuote
 
         return [
             'rule' => $this->rule->toSnapshot(),
+            'cap' => $this->cap?->toArray(),
             'quoted_at' => now()->toIso8601String(),
         ];
     }
@@ -96,6 +99,10 @@ final readonly class PaymentFeeQuote
                 'percentage' => (string) $this->rule->percentage,
                 'fixed_amount' => (string) $this->rule->fixed_amount,
                 'cap_amount' => $this->rule->cap_amount !== null ? (string) $this->rule->cap_amount : null,
+                'cap_currency' => $this->rule->cap_amount !== null ? ($this->cap?->sourceCurrency ?? $this->rule->currency) : null,
+                // Cap in the quote currency after conversion (same as cap_amount when no conversion was needed).
+                'effective_cap_amount' => $this->cap !== null ? $this->money($this->cap->amount) : null,
+                'cap_exchange_rate' => $this->cap?->exchangeRate !== null ? number_format($this->cap->exchangeRate, 6, '.', '') : null,
             ] : null,
         ];
     }

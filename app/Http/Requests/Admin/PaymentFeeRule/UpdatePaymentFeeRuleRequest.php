@@ -14,6 +14,9 @@ class UpdatePaymentFeeRuleRequest extends ApiFormRequest
         if (is_string($this->input('currency'))) {
             $this->merge(['currency' => strtoupper(trim((string) $this->input('currency')))]);
         }
+        if (is_string($this->input('cap_currency'))) {
+            $this->merge(['cap_currency' => strtoupper(trim((string) $this->input('cap_currency')))]);
+        }
     }
 
     public function rules(): array
@@ -45,6 +48,8 @@ class UpdatePaymentFeeRuleRequest extends ApiFormRequest
             'percentage' => ['sometimes', 'numeric', 'min:0', 'max:99.9999'],
             'fixed_amount' => ['sometimes', 'numeric', 'min:0'],
             'cap_amount' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            // Currency the cap is written in (e.g. NGN on a USD rule); defaults to the rule currency.
+            'cap_currency' => ['sometimes', 'nullable', 'string', Rule::in(Currency::values())],
             'is_active' => ['sometimes', 'boolean'],
         ];
     }
@@ -64,6 +69,7 @@ class UpdatePaymentFeeRuleRequest extends ApiFormRequest
             'fixed_amount.min' => 'Fixed amount must be at least 0.',
             'cap_amount.numeric' => 'Cap amount must be a number.',
             'cap_amount.min' => 'Cap amount must be at least 0.',
+            'cap_currency.in' => 'Cap currency is not supported.',
         ]);
     }
 }
