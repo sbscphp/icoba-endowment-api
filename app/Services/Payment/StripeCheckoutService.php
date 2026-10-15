@@ -4,6 +4,7 @@ namespace App\Services\Payment;
 
 use App\Models\Transaction;
 use App\Models\User;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Stripe\Checkout\Session;
@@ -142,37 +143,52 @@ final class StripeCheckoutService
     }
 
     /**
-     * The fee Stripe kept on this session's charge, in the transaction currency, or null when
-     * it is not available yet or was settled in another currency.
+     * The fee Stripe kept on a payment, in the transaction currency (converted back from the
+     * settlement currency with Stripe's own exchange rate when they differ).
      *
-     * Best effort: never throws, so finalization is not blocked by a lookup failure.
+     * Best effort: never throws, so finalization is not blocked by a lookup failure; failures
+     * are logged so a missing gateway_fee_amount can be traced.
      *
-     * @return array{fee: float|null, currency: string|null}
+     * @return array{fee: float|null, settlement_fee: float|null, settlement_currency: string|null, converted: bool}
      */
-    public function resolveGatewayFee(Session $session): array
+    public function resolveGatewayFee(Session|string $sessionOrPaymentIntentId, string $transactionCurrency): array
     {
-        $paymentIntentId = is_string($session->payment_intent) ? $session->payment_intent : null;
+        $paymentIntentId = $sessionOrPaymentIntentId instanceof Session
+            ? (is_string($sessionOrPaymentIntentId->payment_intent) ? $sessionOrPaymentIntentId->payment_intent : null)
+            : $sessionOrPaymentIntentId;
+
+        $none = ['fee' => null, 'settlement_fee' => null, 'settlement_currency' => null, 'converted' => false];
+
         if ($paymentIntentId === null || $paymentIntentId === '') {
-            return ['fee' => null, 'currency' => null];
+            Log::notice('Stripe fee lookup skipped: session has no payment_intent yet.');
+
+            return $none;
         }
 
         try {
             $intent = $this->stripe->paymentIntents->retrieve($paymentIntentId, [
                 'expand' => ['latest_charge.balance_transaction'],
             ]);
-            $balance = $intent->latest_charge?->balance_transaction ?? null;
-            if (! is_object($balance) || ! isset($balance->fee, $balance->currency)) {
-                return ['fee' => null, 'currency' => null];
+            $charge = $intent->latest_charge;
+            $balance = is_object($charge) ? ($charge->balance_transaction ?? null) : null;
+
+            if (! is_object($balance)) {
+                Log::notice('Stripe fee lookup: balance transaction not available yet.', [
+                    'payment_intent' => $paymentIntentId,
+                    'latest_charge' => is_object($charge) ? ($charge->id ?? null) : $charge,
+                ]);
+
+                return $none;
             }
 
-            $currency = strtoupper((string) $balance->currency);
+            return StripeBalanceFee::inCurrency($balance, $transactionCurrency);
+        } catch (\Throwable $e) {
+            Log::warning('Stripe fee lookup failed.', [
+                'payment_intent' => $paymentIntentId,
+                'error' => $e->getMessage(),
+            ]);
 
-            return [
-                'fee' => MinorUnits::toMajor((int) $balance->fee, $currency),
-                'currency' => $currency,
-            ];
-        } catch (\Throwable) {
-            return ['fee' => null, 'currency' => null];
+            return $none;
         }
     }
 
