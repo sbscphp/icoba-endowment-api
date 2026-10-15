@@ -76,6 +76,29 @@ class PublicReceiptLookupTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_returns_receipt_details_by_transaction_uuid(): void
+    {
+        $transaction = $this->makeReceiptedTransaction();
+
+        $this->getJson('/api/v1/public/receipts/'.$transaction->uuid)
+            ->assertOk()
+            ->assertJsonPath('data.receipt_number', $transaction->receipt_number)
+            ->assertJsonPath('data.transaction_uuid', $transaction->uuid);
+
+        $this->getJson('/api/v1/public/receipts/'.strtoupper($transaction->uuid))
+            ->assertOk()
+            ->assertJsonPath('data.transaction_uuid', $transaction->uuid);
+    }
+
+    public function test_returns_404_for_uuid_of_unreceipted_transaction(): void
+    {
+        $transaction = $this->makeReceiptedTransaction();
+        $transaction->forceFill(['receipt_number' => null])->save();
+
+        $this->getJson('/api/v1/public/receipts/'.$transaction->uuid)
+            ->assertStatus(404);
+    }
+
     public function test_returns_404_for_unknown_receipt_number(): void
     {
         $this->getJson('/api/v1/public/receipts/RCT-DOES-NOT-EXIST')

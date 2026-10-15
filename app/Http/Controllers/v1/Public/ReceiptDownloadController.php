@@ -24,6 +24,7 @@ class ReceiptDownloadController extends Controller
     /**
      * Guest-facing receipt details as JSON. Same access rules as the PDF download:
      * an optional `token` query parameter is validated when supplied.
+     * `{receiptNumber}` accepts either the receipt number or the transaction UUID.
      */
     public function show(Request $request, string $receiptNumber): JsonResponse
     {
