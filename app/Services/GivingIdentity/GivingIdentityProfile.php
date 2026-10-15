@@ -58,6 +58,78 @@ final readonly class GivingIdentityProfile
     }
 
     /**
+     * Hard fields on which this (incoming) profile disagrees with an existing one.
+     * Mirrors hardFieldsMatch(): only the fields the donor type treats as identity-defining
+     * are compared, so an empty result means the two profiles match.
+     *
+     * @return array<string, array{existing: mixed, incoming: mixed}>
+     */
+    public function hardFieldDifferences(GivingIdentityProfile $existing): array
+    {
+        $differences = [];
+
+        if (! GivingIdentityNormalizer::compareUuid($this->donorTypeUuid, $existing->donorTypeUuid)) {
+            $differences['donor_type_uuid'] = ['existing' => $existing->donorTypeUuid, 'incoming' => $this->donorTypeUuid];
+            $differences['donor_type'] = ['existing' => $existing->donorTypeSlug, 'incoming' => $this->donorTypeSlug];
+        }
+
+        $slugs = array_unique(array_filter([$this->donorTypeSlug, $existing->donorTypeSlug]));
+        $checks = [];
+
+        foreach ($slugs as $slug) {
+            $checks += match ($slug) {
+                DonorTypeSlug::ICOBA_ALUMNI->value => [
+                    'graduation_set_uuid' => 'uuid',
+                    'firstname' => 'text',
+                    'lastname' => 'text',
+                ],
+                DonorTypeSlug::CORPORATE_DONOR->value => [
+                    'corporate_category_uuid' => 'uuid',
+                    'organization_name' => 'text',
+                ],
+                DonorTypeSlug::FRIENDS_OF_ICOBA->value,
+                DonorTypeSlug::RELATIVES_OF_ICOBA->value => [
+                    'firstname' => 'text',
+                    'lastname' => 'text',
+                ],
+                default => [],
+            };
+        }
+
+        $properties = [
+            'graduation_set_uuid' => 'graduationSetUuid',
+            'firstname' => 'firstname',
+            'lastname' => 'lastname',
+            'corporate_category_uuid' => 'corporateCategoryUuid',
+            'organization_name' => 'organizationName',
+        ];
+
+        foreach ($checks as $field => $kind) {
+            $property = $properties[$field];
+            $incoming = $this->{$property};
+            $current = $existing->{$property};
+
+            $matches = $kind === 'uuid'
+                ? GivingIdentityNormalizer::compareUuid($incoming, $current)
+                : GivingIdentityNormalizer::compareText($incoming, $current);
+
+            if (! $matches) {
+                $differences[$field] = ['existing' => $current, 'incoming' => $incoming];
+            }
+        }
+
+        return $differences;
+    }
+
+    /**
+     * @return array<string, array{existing: mixed, incoming: mixed}>
+     */
+    public function hardFieldDifferencesFromIdentity(GivingIdentity $identity): array
+    {
+        return $this->hardFieldDifferences(GivingIdentityProfileBuilder::fromIdentity($identity));
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toIdentityAttributes(?string $emailLower = null): array

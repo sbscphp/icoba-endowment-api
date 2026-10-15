@@ -21,6 +21,7 @@ use App\Services\Payment\PaystackCheckoutService;
 use App\Services\Payment\PaystackCheckoutVerificationService;
 use App\Services\Payment\StripeCheckoutService;
 use App\Services\Payment\StripeCheckoutVerificationService;
+use App\Services\Receipt\ReceiptService;
 use Illuminate\Validation\ValidationException;
 
 class DonationCheckoutController extends Controller
@@ -36,6 +37,7 @@ class DonationCheckoutController extends Controller
         private readonly TransactionService $transactionService,
         private readonly DonorNameRequirement $donorNameRequirement,
         private readonly CheckoutRedirectResolver $checkoutRedirectResolver,
+        private readonly ReceiptService $receiptService,
     ) {}
 
     public function store(DonationCheckoutRequest $request)
@@ -175,6 +177,7 @@ class DonationCheckoutController extends Controller
                 'session_status' => $result['session_status'],
                 'sync_action' => $result['sync_action'],
                 'receipt_number' => $result['receipt_number'] ?? null,
+                'is_corporate_donor' => $this->receiptService->isCorporateDonation($transaction),
                 'redirect_url' => $this->checkoutRedirectResolver->redirectForPaymentStatus(
                     $transaction,
                     $result['payment_status'],

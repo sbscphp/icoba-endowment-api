@@ -82,6 +82,16 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Giving identity flags: donations/registrations whose donor profile disagrees with the
+        // identity already tied to the email. Each entry carries the user and the field-level diff.
+        'giving_identity' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/giving-identity.log'),
+            'level' => 'info',
+            'days' => env('LOG_GIVING_IDENTITY_DAYS', 30),
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

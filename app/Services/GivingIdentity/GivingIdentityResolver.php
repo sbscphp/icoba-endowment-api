@@ -11,6 +11,10 @@ use Illuminate\Validation\ValidationException;
 
 final class GivingIdentityResolver
 {
+    public function __construct(
+        private readonly GivingIdentityFlagLogger $flagLogger,
+    ) {}
+
     /**
      * Resolve or create a giving identity for a registered user.
      */
@@ -27,7 +31,7 @@ final class GivingIdentityResolver
                 ->first();
 
             if ($byUser !== null) {
-                $this->assertProfileAllowedForIdentity($profile, $byUser);
+                $this->assertProfileAllowedForIdentity($profile, $byUser, $user, $source);
 
                 return $byUser;
             }
@@ -39,7 +43,18 @@ final class GivingIdentityResolver
                     ->first();
 
                 if ($byEmail !== null) {
+                    $flag = fn (string $outcome) => $this->flagLogger->log(
+                        GivingIdentityFlagLogger::FLOW_USER_DONATION,
+                        $outcome,
+                        $byEmail,
+                        $profile,
+                        $user,
+                        $source,
+                    );
+
                     if ($byEmail->user_uuid !== null && $byEmail->user_uuid !== $user->uuid) {
+                        $flag(GivingIdentityFlagLogger::OUTCOME_REJECTED_OTHER_ACCOUNT);
+
                         throw ValidationException::withMessages([
                             'email' => ['This email is already linked to another account.'],
                         ]);
@@ -47,10 +62,14 @@ final class GivingIdentityResolver
 
                     if (! $profile->hardFieldsMatchIdentity($byEmail)) {
                         if ($byEmail->isLocked()) {
+                            $flag(GivingIdentityFlagLogger::OUTCOME_REJECTED_LOCKED_MISMATCH);
+
                             throw ValidationException::withMessages([
                                 'email' => [$this->conflictMessage($byEmail)],
                             ]);
                         }
+
+                        $flag(GivingIdentityFlagLogger::OUTCOME_IDENTITY_REPROFILED);
 
                         $byEmail->forceFill(array_merge(
                             $profile->toIdentityAttributes($emailLower),
@@ -108,7 +127,7 @@ final class GivingIdentityResolver
             ]);
         }
 
-        return DB::transaction(function () use ($emailLower, $profile, $source): GivingIdentity {
+        return DB::transaction(function () use ($data, $emailLower, $profile, $source): GivingIdentity {
             $existing = GivingIdentity::query()
                 ->where('email_lower', $emailLower)
                 ->lockForUpdate()
@@ -124,7 +143,19 @@ final class GivingIdentityResolver
                 ));
             }
 
+            $flag = fn (string $outcome) => $this->flagLogger->log(
+                GivingIdentityFlagLogger::FLOW_GUEST_DONATION,
+                $outcome,
+                $existing,
+                $profile,
+                null,
+                $source,
+                $data,
+            );
+
             if ($existing->user_uuid !== null) {
+                $flag(GivingIdentityFlagLogger::OUTCOME_REJECTED_ACCOUNT_REQUIRED);
+
                 throw ValidationException::withMessages([
                     'donor_email' => [
                         'An account already exists for this email. Please log in to continue giving.',
@@ -133,6 +164,8 @@ final class GivingIdentityResolver
             }
 
             if ($existing->status === GivingIdentityStatus::CONFLICT) {
+                $flag(GivingIdentityFlagLogger::OUTCOME_REJECTED_IDENTITY_IN_CONFLICT);
+
                 throw ValidationException::withMessages([
                     'donor_email' => [
                         'This email has conflicting giving history. Please contact ICOBA support for assistance.',
@@ -141,6 +174,8 @@ final class GivingIdentityResolver
             }
 
             if (! $profile->hardFieldsMatchIdentity($existing)) {
+                $flag(GivingIdentityFlagLogger::OUTCOME_REJECTED_PROFILE_MISMATCH);
+
                 throw ValidationException::withMessages([
                     'donor_email' => [$this->conflictMessage($existing)],
                 ]);
@@ -184,7 +219,18 @@ final class GivingIdentityResolver
                 ));
             }
 
+            $flag = fn (string $outcome) => $this->flagLogger->log(
+                GivingIdentityFlagLogger::FLOW_REGISTRATION,
+                $outcome,
+                $existing,
+                $profile,
+                $user,
+                $source,
+            );
+
             if ($existing->user_uuid !== null && $existing->user_uuid !== $user->uuid) {
+                $flag(GivingIdentityFlagLogger::OUTCOME_REJECTED_OTHER_ACCOUNT);
+
                 throw ValidationException::withMessages([
                     'email' => ['This email is already linked to another account.'],
                 ]);
@@ -192,6 +238,8 @@ final class GivingIdentityResolver
 
             if (! $profile->hardFieldsMatchIdentity($existing)) {
                 if ($existing->isLocked()) {
+                    $flag(GivingIdentityFlagLogger::OUTCOME_MARKED_CONFLICT);
+
                     $existing->forceFill(['status' => GivingIdentityStatus::CONFLICT])->save();
 
                     throw ValidationException::withMessages([
@@ -200,6 +248,8 @@ final class GivingIdentityResolver
                         ],
                     ]);
                 }
+
+                $flag(GivingIdentityFlagLogger::OUTCOME_IDENTITY_REPROFILED);
 
                 $existing->forceFill(array_merge(
                     $profile->toIdentityAttributes($emailLower),
@@ -262,9 +312,22 @@ final class GivingIdentityResolver
         );
     }
 
-    private function assertProfileAllowedForIdentity(GivingIdentityProfile $profile, GivingIdentity $identity): void
-    {
+    private function assertProfileAllowedForIdentity(
+        GivingIdentityProfile $profile,
+        GivingIdentity $identity,
+        User $user,
+        GivingIdentitySource $source,
+    ): void {
         if ($identity->isLocked() && ! $profile->hardFieldsMatchIdentity($identity)) {
+            $this->flagLogger->log(
+                GivingIdentityFlagLogger::FLOW_USER_DONATION,
+                GivingIdentityFlagLogger::OUTCOME_REJECTED_LOCKED_MISMATCH,
+                $identity,
+                $profile,
+                $user,
+                $source,
+            );
+
             throw ValidationException::withMessages([
                 'donor_email' => ['Your account giving profile cannot be changed after a successful donation. Contact support if you need help.'],
             ]);
