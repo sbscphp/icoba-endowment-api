@@ -20,27 +20,17 @@ final class StripeCheckoutSyncService
      * Best-effort Stripe fee lookup. Resolved lazily so this service stays usable without a
      * configured Stripe secret (tests, non-Stripe webhooks).
      *
-     * @return array{fee: float|null, fee_other_currency: float|null, currency: string|null}
+     * @return array{fee: float|null, settlement_fee: float|null, settlement_currency: string|null, converted: bool}
      */
     private function resolveStripeFee(Session $session, string $transactionCurrency): array
     {
-        $none = ['fee' => null, 'fee_other_currency' => null, 'currency' => null];
-
         try {
-            $result = app(StripeCheckoutService::class)->resolveGatewayFee($session);
-        } catch (\Throwable) {
-            return $none;
-        }
+            return app(StripeCheckoutService::class)->resolveGatewayFee($session, $transactionCurrency);
+        } catch (\Throwable $e) {
+            Log::warning('Stripe fee lookup unavailable.', ['error' => $e->getMessage()]);
 
-        if ($result['fee'] === null || $result['currency'] === null) {
-            return $none;
+            return ['fee' => null, 'settlement_fee' => null, 'settlement_currency' => null, 'converted' => false];
         }
-
-        if (strtoupper($result['currency']) === strtoupper($transactionCurrency)) {
-            return ['fee' => $result['fee'], 'fee_other_currency' => null, 'currency' => $result['currency']];
-        }
-
-        return ['fee' => null, 'fee_other_currency' => $result['fee'], 'currency' => $result['currency']];
     }
 
     /**
@@ -103,9 +93,11 @@ final class StripeCheckoutSyncService
         $settlement = $this->settlementContext->build($transaction, $received, $received, $fee['fee']);
 
         $extraMeta = [];
-        if ($fee['fee_other_currency'] !== null) {
-            $extraMeta['stripe_balance_fee'] = $fee['fee_other_currency'];
-            $extraMeta['stripe_balance_fee_currency'] = $fee['currency'];
+        if ($fee['settlement_fee'] !== null) {
+            // Stripe's own figures in its settlement currency, kept for reconciliation against the Stripe dashboard.
+            $extraMeta['stripe_balance_fee'] = number_format($fee['settlement_fee'], 2, '.', '');
+            $extraMeta['stripe_balance_fee_currency'] = $fee['settlement_currency'];
+            $extraMeta['stripe_fee_converted'] = $fee['converted'];
         }
 
         return $this->finalizationService->finalizeSuccessful($transaction, array_merge($settlement, [
