@@ -25,6 +25,7 @@ class PaymentFeeRuleResource extends JsonResource
             'percentage' => (string) $this->percentage,
             'fixed_amount' => (string) $this->fixed_amount,
             'cap_amount' => $this->cap_amount !== null ? (string) $this->cap_amount : null,
+            'cap_currency' => $this->cap_amount !== null ? $this->capCurrency() : null,
             'is_active' => (bool) $this->is_active,
             'status' => $this->is_active ? 'active' : 'inactive',
             'transactions_count' => (int) ($this->transactions_count ?? 0),

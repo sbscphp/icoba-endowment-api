@@ -12,6 +12,9 @@ use Illuminate\Database\Seeder;
  * The 3% placeholder should cover the dearest gateway plus the platform margin; once the
  * gateway reports its cost on each payment, margin = fee_amount - gateway_fee_amount.
  *
+ * Every rule is capped at 2,000 NGN. For USD, GBP and EUR the cap is kept in NGN and converted
+ * into the rule currency at quote time with the latest exchange rate (exchange:fetch-rates).
+ *
  * Nothing here is charged unless PLATFORM_CHARGES=true.
  */
 class PaymentFeeRuleSeeder extends Seeder
@@ -19,14 +22,14 @@ class PaymentFeeRuleSeeder extends Seeder
     public function run(): void
     {
         $rows = [
-            // name, currency, min, max, percentage, fixed, cap, active
-            ['Service fee NGN', 'NGN', 0.01, null, 3.0000, 2000.00, null, true],
-            ['Service fee USD', 'USD', 0.01, null, 3.0000, 1.50, null, true],
-            ['Service fee GBP', 'GBP', 0.01, null, 3.0000, 1.13, null, true],
-            ['Service fee EUR', 'EUR', 0.01, null, 3.0000, 1.34, null, true],
+            // name, currency, min, max, percentage, fixed, cap, cap currency, active
+            ['Service fee NGN', 'NGN', 0.01, null, 3.0000, 2000.00, 2000.00, 'NGN', true],
+            ['Service fee USD', 'USD', 0.01, null, 3.0000, 1.50, 2000.00, 'NGN', true],
+            ['Service fee GBP', 'GBP', 0.01, null, 3.0000, 1.13, 2000.00, 'NGN', true],
+            ['Service fee EUR', 'EUR', 0.01, null, 3.0000, 1.34, 2000.00, 'NGN', true],
         ];
 
-        foreach ($rows as [$name, $currency, $min, $max, $percentage, $fixed, $cap, $active]) {
+        foreach ($rows as [$name, $currency, $min, $max, $percentage, $fixed, $cap, $capCurrency, $active]) {
             PaymentFeeRule::query()->firstOrCreate(
                 ['name' => $name],
                 [
@@ -36,6 +39,7 @@ class PaymentFeeRuleSeeder extends Seeder
                     'percentage' => $percentage,
                     'fixed_amount' => $fixed,
                     'cap_amount' => $cap,
+                    'cap_currency' => $capCurrency,
                     'is_active' => $active,
                 ],
             );

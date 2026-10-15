@@ -3,6 +3,7 @@
 namespace Tests\Unit\Services\Payment\Fee;
 
 use App\Enums\TransactionApplicationType;
+use App\Models\ExchangeRate;
 use App\Models\PaymentFeeRule;
 use App\Services\Payment\Fee\PaymentFeeQuoteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -71,6 +72,49 @@ final class PaymentFeeQuoteServiceTest extends TestCase
         $this->assertSame(300.0, $large->feeAmount());
     }
 
+    public function test_naira_cap_on_a_usd_rule_is_converted_at_the_latest_rate(): void
+    {
+        ExchangeRate::query()->updateOrCreate(
+            ['currency' => 'USD', 'effective_date' => now()->toDateString()],
+            ['rate_to_naira' => 1600, 'source' => 'test'],
+        );
+        $this->rule('USD', 3.0, cap: 2000, capCurrency: 'NGN');
+
+        $service = app(PaymentFeeQuoteService::class);
+
+        // 3% of 500 USD = 15 USD, capped at 2000 NGN = 1.25 USD
+        $capped = $service->quote(500, 'USD');
+        $this->assertSame(1.25, $capped->feeAmount());
+        $this->assertSame(501.25, $capped->totalAmount());
+
+        // 3% of 10 USD = 0.30 USD, under the cap
+        $this->assertSame(0.3, $service->quote(10, 'USD')->feeAmount());
+
+        $array = $capped->toArray();
+        $this->assertSame('2000.00', $array['rule']['cap_amount']);
+        $this->assertSame('NGN', $array['rule']['cap_currency']);
+        $this->assertSame('1.25', $array['rule']['effective_cap_amount']);
+        $this->assertSame('1600.000000', $array['rule']['cap_exchange_rate']);
+
+        $snapshot = $capped->toTransactionAttributes()['fee_snapshot'];
+        $this->assertSame('NGN', $snapshot['rule']['cap_currency']);
+        $this->assertSame('1.25', $snapshot['cap']['effective_amount']);
+        $this->assertSame('1600.000000', $snapshot['cap']['exchange_rate']);
+        $this->assertSame(now()->toDateString(), $snapshot['cap']['rate_date']);
+    }
+
+    public function test_cap_in_the_rule_currency_needs_no_rate(): void
+    {
+        $this->rule('NGN', 3.0, cap: 2000);
+
+        $quote = app(PaymentFeeQuoteService::class)->quote(500000, 'NGN');
+
+        $this->assertSame(2000.0, $quote->feeAmount());
+        $this->assertSame('NGN', $quote->toArray()['rule']['cap_currency']);
+        $this->assertNull($quote->toArray()['rule']['cap_exchange_rate']);
+        $this->assertNull($quote->toTransactionAttributes()['fee_snapshot']['cap']['exchange_rate']);
+    }
+
     public function test_inactive_rules_are_ignored(): void
     {
         $this->rule('NGN', 3.0, active: false);
@@ -112,6 +156,7 @@ final class PaymentFeeQuoteServiceTest extends TestCase
         ?float $max = null,
         bool $active = true,
         ?string $name = null,
+        ?string $capCurrency = null,
     ): PaymentFeeRule {
         return PaymentFeeRule::query()->create([
             'name' => $name ?? 'Service fee '.$currency,
@@ -121,6 +166,7 @@ final class PaymentFeeQuoteServiceTest extends TestCase
             'percentage' => $percentage,
             'fixed_amount' => $fixed,
             'cap_amount' => $cap,
+            'cap_currency' => $capCurrency,
             'is_active' => $active,
         ]);
     }

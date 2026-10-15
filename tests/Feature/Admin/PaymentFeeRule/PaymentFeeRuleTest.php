@@ -65,9 +65,39 @@ final class PaymentFeeRuleTest extends TestCase
         $this->assertTrue(AuditLog::query()->where('action', AuditActionEnum::PAYMENT_FEE_RULE_CREATED->value)->exists());
     }
 
+    public function test_cap_can_be_kept_in_naira_on_a_foreign_currency_rule(): void
+    {
+        $response = $this->postJson(self::BASE, [
+            'name' => 'Service fee USD',
+            'currency' => 'USD',
+            'min_amount' => 0.01,
+            'percentage' => 3,
+            'cap_amount' => 2000,
+            'cap_currency' => 'ngn',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.cap_amount', '2000.00')
+            ->assertJsonPath('data.cap_currency', 'NGN');
+
+        $ruleId = (string) $response->json('data.rule_id');
+
+        // Clearing the cap also clears its currency.
+        $this->patchJson(self::BASE.'/'.$ruleId, ['cap_amount' => null])
+            ->assertOk()
+            ->assertJsonPath('data.cap_amount', null)
+            ->assertJsonPath('data.cap_currency', null);
+
+        // Without cap_currency the cap is in the rule currency.
+        $this->patchJson(self::BASE.'/'.$ruleId, ['cap_amount' => 5])
+            ->assertOk()
+            ->assertJsonPath('data.cap_amount', '5.00')
+            ->assertJsonPath('data.cap_currency', 'USD');
+    }
+
     public function test_validation_rejects_bad_input(): void
     {
         $this->postJson(self::BASE, ['name' => 'x', 'currency' => 'XYZ', 'percentage' => 3])->assertStatus(422);
+        $this->postJson(self::BASE, ['name' => 'x', 'currency' => 'NGN', 'cap_amount' => 2000, 'cap_currency' => 'XYZ'])->assertStatus(422);
         $this->postJson(self::BASE, ['name' => 'x', 'currency' => 'NGN', 'percentage' => 100])->assertStatus(422);
         $this->postJson(self::BASE, ['name' => 'x', 'currency' => 'NGN', 'min_amount' => 100, 'max_amount' => 50])->assertStatus(422);
     }

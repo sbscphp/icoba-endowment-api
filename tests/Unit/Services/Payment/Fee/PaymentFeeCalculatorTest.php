@@ -4,6 +4,7 @@ namespace Tests\Unit\Services\Payment\Fee;
 
 use App\Models\PaymentFeeRule;
 use App\Services\Payment\Fee\PaymentFeeCalculator;
+use App\Services\Payment\Fee\ResolvedFeeCap;
 use PHPUnit\Framework\TestCase;
 
 final class PaymentFeeCalculatorTest extends TestCase
@@ -21,6 +22,23 @@ final class PaymentFeeCalculatorTest extends TestCase
     public function test_fee_respects_cap(): void
     {
         $this->assertSame(2000.0, (new PaymentFeeCalculator)->fee($this->rule(percentage: 3.0, cap: 2000), 500000));
+    }
+
+    public function test_resolved_cap_in_rule_currency_overrides_the_raw_cap(): void
+    {
+        // Rule says "cap 2000 NGN" but prices USD; the resolver hands over the converted 1.25 USD.
+        $rule = $this->rule(percentage: 3.0, cap: 2000);
+        $cap = new ResolvedFeeCap(
+            amount: 1.25,
+            currency: 'USD',
+            sourceAmount: 2000,
+            sourceCurrency: 'NGN',
+            exchangeRate: 1600,
+            rateDate: '2026-10-15',
+        );
+
+        $this->assertSame(1.25, (new PaymentFeeCalculator)->fee($rule, 500, $cap));
+        $this->assertSame(0.3, (new PaymentFeeCalculator)->fee($rule, 10, $cap));
     }
 
     public function test_fee_rounds_half_up_to_two_decimals(): void

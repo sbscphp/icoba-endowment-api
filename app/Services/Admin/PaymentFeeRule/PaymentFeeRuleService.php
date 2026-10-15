@@ -175,6 +175,14 @@ class PaymentFeeRuleService
         if (array_key_exists('cap_amount', $payload)) {
             $attributes['cap_amount'] = $payload['cap_amount'] !== null ? round((float) $payload['cap_amount'], 2) : null;
         }
+        if (array_key_exists('cap_currency', $payload)) {
+            $capCurrency = is_string($payload['cap_currency']) ? strtoupper(trim($payload['cap_currency'])) : null;
+            $attributes['cap_currency'] = $capCurrency !== '' ? $capCurrency : null;
+        }
+        // A cap currency means nothing without a cap.
+        if (array_key_exists('cap_amount', $attributes) && $attributes['cap_amount'] === null) {
+            $attributes['cap_currency'] = null;
+        }
         if (array_key_exists('is_active', $payload)) {
             $attributes['is_active'] = (bool) $payload['is_active'];
         }
@@ -186,6 +194,7 @@ class PaymentFeeRuleService
                 'percentage' => 0.0,
                 'fixed_amount' => 0.0,
                 'cap_amount' => null,
+                'cap_currency' => null,
                 'is_active' => true,
             ];
         }

@@ -11,8 +11,12 @@ final class PaymentFeeCalculator
 {
     /**
      * donation × percentage + fixed, then capped, rounded half-up to two decimals.
+     *
+     * @param  ResolvedFeeCap|null  $cap  the cap already expressed in the rule currency. Pass the
+     *                                    resolver's result; leaving it out uses the rule's cap as-is,
+     *                                    which is only right when the cap is in the rule currency.
      */
-    public function fee(PaymentFeeRule $rule, float $donationAmount): float
+    public function fee(PaymentFeeRule $rule, float $donationAmount, ?ResolvedFeeCap $cap = null): float
     {
         if ($donationAmount <= 0) {
             return 0.0;
@@ -25,9 +29,9 @@ final class PaymentFeeCalculator
             $fee = 0.0;
         }
 
-        $cap = $rule->cap_amount;
-        if ($cap !== null && (float) $cap >= 0 && $fee > (float) $cap) {
-            $fee = (float) $cap;
+        $capAmount = $cap?->amount ?? ($rule->cap_amount !== null ? (float) $rule->cap_amount : null);
+        if ($capAmount !== null && $capAmount >= 0 && $fee > $capAmount) {
+            $fee = $capAmount;
         }
 
         return round($fee, 2, PHP_ROUND_HALF_UP);
