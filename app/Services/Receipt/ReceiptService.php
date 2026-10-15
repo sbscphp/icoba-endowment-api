@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\Pledge\PledgeBalanceService;
 use App\Services\PublicDownload\PublicDocumentDownloadService;
 use App\Services\Tier\TierResolutionService;
+use Illuminate\Support\Str;
 
 class ReceiptService
 {
@@ -168,12 +169,24 @@ class ReceiptService
         return $transaction;
     }
 
+    /**
+     * Resolve a receipted transaction by its receipt number or, as a fallback,
+     * by its transaction UUID. UUID lookups only match transactions that
+     * already carry a receipt number so un-receipted rows stay hidden.
+     */
     public function resolveByReceiptNumber(string $receiptNumber): Transaction
     {
-        $receiptNumber = strtoupper(trim($receiptNumber));
+        $identifier = trim($receiptNumber);
+
+        if (Str::isUuid($identifier)) {
+            return Transaction::query()
+                ->where('uuid', strtolower($identifier))
+                ->whereNotNull('receipt_number')
+                ->firstOrFail();
+        }
 
         return Transaction::query()
-            ->where('receipt_number', $receiptNumber)
+            ->where('receipt_number', strtoupper($identifier))
             ->firstOrFail();
     }
 
