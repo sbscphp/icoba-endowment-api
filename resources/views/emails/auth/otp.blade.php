@@ -12,7 +12,7 @@
         \App\Enums\OtpPurposeEnum::EMAIL_VERIFICATION => 'Thank you for registering with the '.$theme->brand_name.' portal. Use the One-Time Password (OTP) below to verify your email address. It expires in '.$expiresInMinutes.' minutes.',
         default => 'We received a request to sign in to your account. To complete your login, please use the One-Time Password (OTP) provided below:',
     };
-    $supportEmail = $theme->support_email ?? 'support@icoba.com';
+    $supportEmail = $theme->support_email ?? 'support@icobaendowment.org';
 @endphp
 
 @section('content')

@@ -40,7 +40,7 @@ class ThemeSeeder extends Seeder
                 'font_family' => "'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
                 'heading_font_family' => null,
 
-                'support_email' => 'support@icoba.com',
+                'support_email' => 'support@icobaendowment.org',
                 'footer_text' => 'Automated notification - please do not reply.',
                 'footer_line_one' => 'Automated notification - please do not reply.',
                 'footer_line_two' => "If you didn't expect this email, please ignore this message.",
