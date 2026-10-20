@@ -49,4 +49,21 @@ return [
         'storage_path' => env('WEEKLY_DIGEST_STORAGE_PATH', 'reports/weekly-digest'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Giving identity report
+    |--------------------------------------------------------------------------
+    |
+    | On-demand Excel snapshot of every giving identity, the account behind it,
+    | how it was created, what it has given, and anything needing attention.
+    | Sent with: php artisan reports:giving-identities --to=someone@example.com
+    |
+    */
+
+    'giving_identities' => [
+        /** Disk and directory where a copy of every generated report is kept. */
+        'storage_disk' => env('GIVING_IDENTITY_REPORT_STORAGE_DISK', 'local'),
+        'storage_path' => env('GIVING_IDENTITY_REPORT_STORAGE_PATH', 'reports/giving-identities'),
+    ],
+
 ];
