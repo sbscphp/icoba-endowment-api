@@ -38,10 +38,10 @@ Schedule::command('reports:send-weekly-digest')
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/reports-weekly-digest.log'));
 
-Schedule::command('sms:check-balance --scheduled')
-    ->dailyAt('09:00')
-    ->withoutOverlapping()
-    ->appendOutputTo(storage_path('logs/sms-balance.log'));
+// Schedule::command('sms:check-balance --scheduled')
+//     ->dailyAt('09:00')
+//     ->withoutOverlapping()
+//     ->appendOutputTo(storage_path('logs/sms-balance.log'));
 
 $exchangeRateFetchHours = max(1, min(12, (int) config('endowment.exchange_rate.fetch_interval_hours', 4)));
 
