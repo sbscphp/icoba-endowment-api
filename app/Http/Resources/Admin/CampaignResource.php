@@ -30,6 +30,8 @@ class CampaignResource extends JsonResource
         $filteredRaised = $this->resource->total_raised_filtered ?? null;
         $totalRaised = $filteredRaised !== null ? (string) $filteredRaised : '0';
         $raised = (float) $totalRaised;
+        $serviceFee = (float) ($this->resource->service_fee_filtered ?? 0);
+        $nairaServiceFee = (float) ($this->resource->service_fee_sum_naira ?? 0);
         $pledgeFiltered = $this->resource->pledges_committed_filtered ?? null;
         $totalPledged = $pledgeFiltered !== null ? (string) $pledgeFiltered : '0';
         $pledged = (float) $totalPledged;
@@ -60,6 +62,11 @@ class CampaignResource extends JsonResource
             'total_raised' => $totalRaised,
             'total_raised_currency' => $raisedCurrency,
             'total_raised_in_naira' => $nairaRaised !== null ? (string) $nairaRaised : '0',
+            // Service fee collected on top of total_raised, in the same currency scope; raised + fee is what donors paid.
+            'total_service_fee' => number_format($serviceFee, 2, '.', ''),
+            'total_service_fee_currency' => $raisedCurrency,
+            'total_service_fee_in_naira' => number_format($nairaServiceFee, 2, '.', ''),
+            'total_raised_including_service_fee' => number_format($raised + $serviceFee, 2, '.', ''),
             'donation_progress' => [
                 'total_raised' => $totalRaised,
                 'remaining_amount' => $hasTarget ? (string) max(0, $target - $raised) : null,

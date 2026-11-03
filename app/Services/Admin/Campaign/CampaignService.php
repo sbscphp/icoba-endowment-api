@@ -486,6 +486,8 @@ class CampaignService
 
         $campaign->setAttribute('successful_contributions_sum_naira', $row->successful_contributions_sum_naira);
         $campaign->setAttribute('total_raised_filtered', $row->total_raised_filtered);
+        $campaign->setAttribute('service_fee_sum_naira', $row->service_fee_sum_naira);
+        $campaign->setAttribute('service_fee_filtered', $row->service_fee_filtered);
         $campaign->setAttribute('successful_transactions_count', $row->successful_transactions_count);
         $campaign->setAttribute('pledges_committed_sum_naira', $row->pledges_committed_sum_naira);
         $campaign->setAttribute('pledges_committed_filtered', $row->pledges_committed_filtered);
@@ -937,6 +939,11 @@ class CampaignService
             'transactions as successful_contributions_sum_naira' => $successfulTransactions,
         ], 'amount_in_naira');
 
+        // Service fee charged on top of those donations; `amount` columns never include it.
+        $query->withSum([
+            'transactions as service_fee_sum_naira' => $successfulTransactions,
+        ], 'fee_amount_in_naira');
+
         $query->withCount([
             'transactions as successful_transactions_count' => $successfulTransactions,
         ]);
@@ -948,22 +955,27 @@ class CampaignService
 
         if ($raisedCurrency === 'NGN') {
             $query->withSum([
-                'transactions as total_raised_filtered' => function (Builder $q) use ($window): void {
-                    $q->where('status', TransactionStatus::SUCCESSFUL);
-                    $this->applyTransactionCreatedAtWindow($q, $window['start'], $window['end']);
-                },
+                'transactions as total_raised_filtered' => $successfulTransactions,
             ], 'amount_in_naira');
+            $query->withSum([
+                'transactions as service_fee_filtered' => $successfulTransactions,
+            ], 'fee_amount_in_naira');
 
             return;
         }
 
+        $inCurrency = function (Builder $q) use ($raisedCurrency, $window): void {
+            $q->where('status', TransactionStatus::SUCCESSFUL)
+                ->where('currency', $raisedCurrency);
+            $this->applyTransactionCreatedAtWindow($q, $window['start'], $window['end']);
+        };
+
         $query->withSum([
-            'transactions as total_raised_filtered' => function (Builder $q) use ($raisedCurrency, $window): void {
-                $q->where('status', TransactionStatus::SUCCESSFUL)
-                    ->where('currency', $raisedCurrency);
-                $this->applyTransactionCreatedAtWindow($q, $window['start'], $window['end']);
-            },
+            'transactions as total_raised_filtered' => $inCurrency,
         ], 'amount');
+        $query->withSum([
+            'transactions as service_fee_filtered' => $inCurrency,
+        ], 'fee_amount');
     }
 
     /**
