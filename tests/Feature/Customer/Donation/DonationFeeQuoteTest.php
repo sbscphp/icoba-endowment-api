@@ -8,8 +8,8 @@ use Illuminate\Routing\Middleware\ThrottleRequests;
 use Tests\TestCase;
 
 /**
- * Donors see what they give and what they pay. The fee amount, rule and percentage never
- * appear in a customer response.
+ * Donors see what they give, the service fee and what they pay. The rule and its percentage
+ * never appear in a customer response.
  */
 final class DonationFeeQuoteTest extends TestCase
 {
@@ -33,18 +33,21 @@ final class DonationFeeQuoteTest extends TestCase
         ]);
     }
 
-    public function test_quote_returns_only_donation_and_total(): void
+    public function test_quote_returns_donation_fee_and_total_without_the_rule(): void
     {
         $response = $this->getJson(self::URL.'?amount=10000&currency=ngn')
             ->assertOk()
             ->assertJsonPath('error', false)
             ->assertJsonPath('data.donation_amount', '10000.00')
+            ->assertJsonPath('data.service_fee', '300.00')
+            ->assertJsonPath('data.fee_amount', '300.00')
             ->assertJsonPath('data.total_amount', '10300.00')
-            ->assertJsonPath('data.currency', 'NGN');
+            ->assertJsonPath('data.currency', 'NGN')
+            ->assertJsonPath('data.charges_enabled', true)
+            ->assertJsonPath('data.fee_applied', true);
 
-        $this->assertSame(['donation_amount', 'total_amount', 'currency'], array_keys($response->json('data')));
+        $this->assertArrayNotHasKey('rule', $response->json('data'));
         $this->assertStringNotContainsString('percentage', $response->getContent());
-        $this->assertStringNotContainsString('fee_amount', $response->getContent());
     }
 
     public function test_total_equals_donation_for_a_currency_without_a_rule(): void
@@ -52,6 +55,8 @@ final class DonationFeeQuoteTest extends TestCase
         $this->getJson(self::URL.'?amount=100&currency=USD')
             ->assertOk()
             ->assertJsonPath('data.donation_amount', '100.00')
+            ->assertJsonPath('data.service_fee', '0.00')
+            ->assertJsonPath('data.fee_applied', false)
             ->assertJsonPath('data.total_amount', '100.00');
     }
 
@@ -61,6 +66,8 @@ final class DonationFeeQuoteTest extends TestCase
 
         $this->getJson(self::URL.'?amount=10000&currency=NGN')
             ->assertOk()
+            ->assertJsonPath('data.charges_enabled', false)
+            ->assertJsonPath('data.service_fee', '0.00')
             ->assertJsonPath('data.total_amount', '10000.00');
     }
 

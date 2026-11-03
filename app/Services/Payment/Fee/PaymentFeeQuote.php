@@ -80,17 +80,22 @@ final readonly class PaymentFeeQuote
     }
 
     /**
-     * Donor-facing shape (quote endpoint, checkout response): only what they give and what they pay.
-     * The fee itself, the rule and its percentage are deliberately left out.
+     * Donor-facing shape (quote endpoint, checkout response): what they give, the service fee and
+     * what they pay. The rule and its percentage are deliberately left out so the fee formula is
+     * never derivable client-side.
      *
-     * @return array<string, string>
+     * @return array<string, mixed>
      */
     public function toCustomerArray(): array
     {
         return [
             'donation_amount' => $this->money($this->donationAmount),
+            'service_fee' => $this->money($this->feeAmount()),
+            'fee_amount' => $this->money($this->feeAmount()),
             'total_amount' => $this->money($this->totalAmount()),
             'currency' => $this->currency,
+            'charges_enabled' => $this->chargesEnabled,
+            'fee_applied' => $this->feeApplied(),
         ];
     }
 
