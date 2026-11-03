@@ -30,6 +30,10 @@ class CampaignDonorListResource extends JsonResource
             'is_anonymous' => (bool) $this->is_anonymous,
             'donation_value' => (string) $this->amount,
             'donation_currency' => $this->currency,
+            // Admin-only listing: the service fee charged on top of the donation and what the donor paid in all.
+            'service_fee' => (string) ($this->fee_amount ?? '0.00'),
+            'service_fee_in_naira' => $this->fee_amount_in_naira !== null ? (string) $this->fee_amount_in_naira : null,
+            'total_amount' => number_format($this->resource->chargeAmount(), 2, '.', ''),
             'transaction_date' => $this->paid_at ?? $this->created_at,
             'donor_type' => $this->resolveDonorTypePayload(),
             'graduation_set' => $this->resolveGraduationSetPayload(),
