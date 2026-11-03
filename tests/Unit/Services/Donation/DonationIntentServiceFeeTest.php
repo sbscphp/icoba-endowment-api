@@ -117,11 +117,13 @@ final class DonationIntentServiceFeeTest extends TestCase
 
         $payload = TransactionResource::make($transaction)->resolve();
 
+        // Customer context (no admin on the request): donation and total only.
         $this->assertSame('10000.00', $payload['amount']);
-        $this->assertSame('300.00', $payload['fee_amount']);
         $this->assertSame('10300.00', $payload['total_amount']);
-        $this->assertNull($payload['realized_margin_amount']);
-        $this->assertFalse($payload['gateway_amount_mismatch']);
+        $this->assertArrayNotHasKey('fee_amount', $payload);
+        $this->assertArrayNotHasKey('fee_snapshot', $payload);
+        $this->assertArrayNotHasKey('realized_margin_amount', $payload);
+        $this->assertArrayNotHasKey('gateway_amount_mismatch', $payload);
     }
 
     /**

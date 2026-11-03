@@ -193,42 +193,25 @@ final class StripeCheckoutService
     }
 
     /**
-     * Donation and service fee as separate lines so the Stripe receipt itemises them.
-     * The sum of the lines is the charged figure (total_amount).
+     * One line for the charged figure (donation + service fee). The fee is not itemised on the
+     * Stripe page so donors cannot read the percentage off it; the split lives in our columns
+     * and in the payment metadata, which only the Stripe dashboard shows.
      *
      * @return list<array<string, mixed>>
      */
     private function buildLineItems(Transaction $transaction, string $currency, string $referenceId): array
     {
-        $productMetadata = ['transaction_uuid' => $referenceId];
-
-        $items = [[
+        return [[
             'quantity' => 1,
             'price_data' => [
                 'currency' => $currency,
-                'unit_amount' => $this->unitAmount((float) $transaction->amount, $currency),
+                'unit_amount' => $this->unitAmount($transaction->chargeAmount(), $currency),
                 'product_data' => [
                     'name' => $transaction->pledge_uuid !== null ? 'Pledge payment' : 'Donation',
-                    'metadata' => $productMetadata,
+                    'metadata' => ['transaction_uuid' => $referenceId],
                 ],
             ],
         ]];
-
-        if ($transaction->hasServiceFee()) {
-            $items[] = [
-                'quantity' => 1,
-                'price_data' => [
-                    'currency' => $currency,
-                    'unit_amount' => $this->unitAmount((float) $transaction->fee_amount, $currency),
-                    'product_data' => [
-                        'name' => 'Service fee',
-                        'metadata' => $productMetadata,
-                    ],
-                ],
-            ];
-        }
-
-        return $items;
     }
 
     private function resolveStripeCustomerId(User $user): string

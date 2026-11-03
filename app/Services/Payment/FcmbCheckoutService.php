@@ -169,11 +169,7 @@ final class FcmbCheckoutService
             $fields[] = ['label' => 'transaction_id', 'value' => $transaction->transaction_id];
         }
 
-        $fields[] = ['label' => 'donation_amount', 'value' => number_format((float) $transaction->amount, 2, '.', '')];
-
-        if ($transaction->hasServiceFee()) {
-            $fields[] = ['label' => 'service_fee', 'value' => number_format((float) $transaction->fee_amount, 2, '.', '')];
-        }
+        // No amounts here: CLNX may render custom fields to the payer, and the donation/fee split is admin-only.
 
         if ($transaction->is_test !== null) {
             $fields[] = ['label' => 'is_test', 'value' => $transaction->is_test ? 'true' : 'false'];

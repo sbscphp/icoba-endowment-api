@@ -233,11 +233,10 @@ class DonationIntentService
 
         $expectedTotal = isset($clean['expected_total_amount']) ? (float) $clean['expected_total_amount'] : null;
         if ($expectedTotal !== null && abs($expectedTotal - $feeQuote->totalAmount()) > 0.009) {
+            // Donor-facing message: the total only, never the fee or how it was worked out.
             throw ValidationException::withMessages([
                 'expected_total_amount' => [sprintf(
-                    'The service fee has changed. Donation %s + fee %s = total %s %s. Please refresh the quote.',
-                    number_format($feeQuote->donationAmount, 2),
-                    number_format($feeQuote->feeAmount(), 2),
+                    'The amount to pay has changed to %s %s. Please refresh and try again.',
                     number_format($feeQuote->totalAmount(), 2),
                     $currency,
                 )],

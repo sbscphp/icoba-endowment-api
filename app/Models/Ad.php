@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\AdImageOrientation;
 use App\Traits\HasUuid;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -27,11 +29,44 @@ class Ad extends Model
     }
 
     /**
+     * Every image on the ad, grouped by orientation (landscape first) and then in rotation order.
+     *
      * @return HasMany<AdImage, $this>
      */
     public function images(): HasMany
     {
-        return $this->hasMany(AdImage::class, 'ad_uuid', 'uuid')->orderBy('sort_order');
+        return $this->hasMany(AdImage::class, 'ad_uuid', 'uuid')->orderBy('orientation')->orderBy('sort_order');
+    }
+
+    /**
+     * @return HasMany<AdImage, $this>
+     */
+    public function landscapeImages(): HasMany
+    {
+        return $this->images()->where('orientation', AdImageOrientation::LANDSCAPE->value);
+    }
+
+    /**
+     * @return HasMany<AdImage, $this>
+     */
+    public function portraitImages(): HasMany
+    {
+        return $this->images()->where('orientation', AdImageOrientation::PORTRAIT->value);
+    }
+
+    /**
+     * Filters the already-loaded `images` relation down to one orientation, keeping rotation order.
+     *
+     * @return Collection<int, AdImage>
+     */
+    public function imagesFor(AdImageOrientation $orientation): Collection
+    {
+        /** @var Collection<int, AdImage> $filtered */
+        $filtered = $this->images
+            ->filter(fn (AdImage $image): bool => $image->orientation === $orientation)
+            ->values();
+
+        return $filtered;
     }
 
     /**

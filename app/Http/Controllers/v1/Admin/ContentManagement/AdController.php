@@ -110,7 +110,7 @@ class AdController extends Controller
     {
         try {
             $adminUuid = $request->user()?->uuid;
-            $ad = $this->adService->syncImages($adId, (array) $request->validated('images'), $adminUuid);
+            $ad = $this->adService->syncImages($adId, AdService::imageSetsFromPayload($request->validated()), $adminUuid);
 
             return JsonResponser::send(false, 'Ad images updated.', AdResource::make($ad)->resolve());
         } catch (\Throwable $th) {

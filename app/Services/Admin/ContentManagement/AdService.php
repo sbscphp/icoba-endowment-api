@@ -2,6 +2,7 @@
 
 namespace App\Services\Admin\ContentManagement;
 
+use App\Enums\AdImageOrientation;
 use App\Enums\AuditActionEnum;
 use App\Exceptions\ApiException;
 use App\Helpers\FileUploadHelper;
@@ -24,6 +25,7 @@ class AdService
 
     private const UPLOAD_FOLDER = 'ads';
 
+    /** Maximum images per orientation (landscape and portrait each). */
     public const MAX_IMAGES = 10;
 
     public const MAX_INTERVAL_SECONDS = 300;
@@ -63,7 +65,7 @@ class AdService
                 'updated_by_admin_uuid' => $adminUuid,
             ]);
 
-            $this->reconcileImages($ad, (array) $payload['images']);
+            $this->reconcileImages($ad, self::imageSetsFromPayload($payload));
 
             $this->recordContentAudit(
                 AuditActionEnum::AD_CREATED,
@@ -108,10 +110,11 @@ class AdService
                 $updates['is_active'] = $payload['status'] !== 'archived';
             }
 
-            $imagesChanged = array_key_exists('images', $payload);
+            $imageSets = self::imageSetsFromPayload($payload);
+            $imagesChanged = $imageSets !== [];
             $previousImages = $imagesChanged ? $this->imageUrls($ad) : [];
             if ($imagesChanged) {
-                $this->reconcileImages($ad, (array) $payload['images']);
+                $this->reconcileImages($ad, $imageSets);
             }
 
             if ($updates !== [] || $imagesChanged) {
@@ -192,20 +195,21 @@ class AdService
     }
 
     /**
-     * Reconciles an ad's gallery to exactly match the given list: existing Cloudinary
-     * URLs are kept as-is (no re-upload), new base64/file entries are uploaded and inserted,
-     * and any image not present in the list is removed. Order of $inputs becomes sort_order,
-     * which is the order images rotate on the guest end.
+     * Reconciles an ad's galleries to exactly match the given per-orientation lists: existing
+     * Cloudinary URLs are kept as-is (no re-upload), new base64/file entries are uploaded and
+     * inserted, and any image of that orientation not present in its list is removed. Only the
+     * orientations present in $sets are touched. Order within a list becomes sort_order, which
+     * is the order images rotate on the guest end.
      *
-     * @param  array<int, mixed>  $inputs
+     * @param  array<string, array<int, mixed>>  $sets  orientation value => raw image inputs
      */
-    public function syncImages(string $adId, array $inputs, ?string $adminUuid = null): Ad
+    public function syncImages(string $adId, array $sets, ?string $adminUuid = null): Ad
     {
         $ad = $this->resolveAd($adId);
         $previousImages = $this->imageUrls($ad);
 
-        DB::transaction(function () use ($ad, $inputs): void {
-            $this->reconcileImages($ad, $inputs);
+        DB::transaction(function () use ($ad, $sets): void {
+            $this->reconcileImages($ad, $sets);
         });
 
         $ad->forceFill(['updated_by_admin_uuid' => $adminUuid])->save();
@@ -219,6 +223,31 @@ class AdService
         );
 
         return $ad->fresh(['images']) ?? $ad;
+    }
+
+    /**
+     * Pulls the per-orientation image lists out of a request payload. The legacy `images`
+     * key means `landscape_images` (the only slot that existed before portrait support) and
+     * is ignored when `landscape_images` is also sent.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, array<int, mixed>>  orientation value => raw inputs, only for orientations present
+     */
+    public static function imageSetsFromPayload(array $payload): array
+    {
+        $sets = [];
+        foreach (AdImageOrientation::cases() as $orientation) {
+            if (array_key_exists($orientation->payloadKey(), $payload)) {
+                $sets[$orientation->value] = (array) $payload[$orientation->payloadKey()];
+            }
+        }
+
+        $landscape = AdImageOrientation::LANDSCAPE->value;
+        if (! array_key_exists($landscape, $sets) && array_key_exists('images', $payload)) {
+            $sets[$landscape] = (array) $payload['images'];
+        }
+
+        return $sets;
     }
 
     public function deleteImage(string $adId, string $imageId, ?string $adminUuid = null): Ad
@@ -284,21 +313,49 @@ class AdService
     }
 
     /**
-     * @return list<string>
+     * @return array<string, list<string>>  orientation value => image URLs in rotation order
      */
     private function imageUrls(Ad $ad): array
     {
-        return $ad->images()->orderBy('sort_order')->pluck('image_url')->all();
+        $urls = [];
+        foreach (AdImageOrientation::cases() as $orientation) {
+            $urls[$orientation->value] = $ad->images()
+                ->where('orientation', $orientation->value)
+                ->orderBy('sort_order')
+                ->pluck('image_url')
+                ->all();
+        }
+
+        return $urls;
+    }
+
+    /**
+     * @param  array<string, array<int, mixed>>  $sets  orientation value => raw image inputs
+     */
+    private function reconcileImages(Ad $ad, array $sets): void
+    {
+        foreach ($sets as $orientationValue => $inputs) {
+            $orientation = AdImageOrientation::tryFrom((string) $orientationValue);
+            if ($orientation === null) {
+                throw new ApiException('Unknown image orientation "'.$orientationValue.'".', 422);
+            }
+
+            $this->reconcileOrientation($ad, $orientation, array_values($inputs));
+        }
+
+        if ($ad->images()->count() === 0) {
+            throw new ApiException('An ad must have at least one valid landscape or portrait image.', 422);
+        }
     }
 
     /**
      * @param  array<int, mixed>  $inputs
      */
-    private function reconcileImages(Ad $ad, array $inputs): void
+    private function reconcileOrientation(Ad $ad, AdImageOrientation $orientation, array $inputs): void
     {
         if (count($inputs) > self::MAX_IMAGES) {
             throw new ApiException(
-                'You may have at most '.self::MAX_IMAGES.' images for an ad.',
+                'You may have at most '.self::MAX_IMAGES.' '.$orientation->value.' images for an ad.',
                 422
             );
         }
@@ -307,17 +364,18 @@ class AdService
             // Existing http(s) URLs pass through unchanged; base64/file entries are uploaded.
             $finalUrls = array_values(array_unique(FileUploadHelper::smartMultipleFileUpload($inputs, self::UPLOAD_FOLDER)));
         } catch (InvalidArgumentException $e) {
-            throw new ApiException('Image upload failed: '.$e->getMessage(), 422);
+            throw new ApiException(ucfirst($orientation->value).' image upload failed: '.$e->getMessage(), 422);
         }
 
-        if ($finalUrls === []) {
-            throw new ApiException('An ad must have at least one valid image.', 422);
+        if ($inputs !== [] && $finalUrls === []) {
+            throw new ApiException('No valid '.$orientation->value.' image was provided.', 422);
         }
 
-        $existingByUrl = $ad->images()->get()->keyBy('image_url');
+        $existingByUrl = $ad->images()->where('orientation', $orientation->value)->get()->keyBy('image_url');
 
         AdImage::query()
             ->where('ad_uuid', $ad->uuid)
+            ->where('orientation', $orientation->value)
             ->whereNotIn('image_url', $finalUrls)
             ->delete();
 
@@ -333,6 +391,7 @@ class AdService
 
             AdImage::query()->create([
                 'ad_uuid' => $ad->uuid,
+                'orientation' => $orientation->value,
                 'image_url' => $url,
                 'sort_order' => $index,
             ]);
@@ -344,7 +403,7 @@ class AdService
      */
     private function baseListQuery(array $validated): Builder
     {
-        $query = Ad::query()->withCount('images');
+        $query = Ad::query()->withCount(['images', 'landscapeImages', 'portraitImages']);
 
         ListingFilterRules::applyResolvedDateRange($query, $validated, 'created_at');
 

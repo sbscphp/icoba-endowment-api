@@ -11,6 +11,7 @@ use App\Models\TierConfiguration;
 use App\Models\Transaction;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -39,20 +40,29 @@ class DashboardService
         $query = $this->successfulTransactionsQuery($filters);
         $period = ListingFilterRules::resolveDateWindow($filters);
         $amountColumn = $this->amountColumn($filters);
-        $current = $this->overviewMetrics($query, $amountColumn, $filters);
+        $feeColumn = $this->serviceFeeColumn($filters);
+        $current = $this->overviewMetrics($query, $amountColumn, $feeColumn, $filters);
         $comparisonPeriod = $this->resolvePreviousEquivalentPeriod($period);
-        $previous = $this->previousOverviewMetrics($filters, $comparisonPeriod, $amountColumn);
+        $previous = $this->previousOverviewMetrics($filters, $comparisonPeriod, $amountColumn, $feeColumn);
 
         return array_merge($this->responseContext($filters), [
             'currency' => $this->responseCurrency($filters),
             // Lets the UI distinguish naira rollup (false) from currency-specific totals (true).
             'currency_filter_applied' => $this->currencyFilterActive($filters),
+            // `amount` is always the donation alone, so total_fund_raised excludes the service fee;
+            // the including figure is what donors were actually charged (donation + fee).
             'total_fund_raised' => $current['total_fund_raised'],
+            'total_fund_raised_including_service_fee' => $current['total_fund_raised_including_service_fee'],
+            'total_service_fee_raised' => $current['total_service_fee_raised'],
             'total_transactions' => $current['total_transactions'],
             'total_pledges' => $current['total_pledges'],
             'total_donors' => $current['total_donors'],
             'total_fund_raised_change_percentage' => $this->changePercent($current['total_fund_raised_numeric'], $previous['total_fund_raised_numeric']),
             'total_fund_raised_change_direction' => $this->changeDirection($current['total_fund_raised_numeric'], $previous['total_fund_raised_numeric']),
+            'total_fund_raised_including_service_fee_change_percentage' => $this->changePercent($current['total_fund_raised_including_service_fee_numeric'], $previous['total_fund_raised_including_service_fee_numeric']),
+            'total_fund_raised_including_service_fee_change_direction' => $this->changeDirection($current['total_fund_raised_including_service_fee_numeric'], $previous['total_fund_raised_including_service_fee_numeric']),
+            'total_service_fee_raised_change_percentage' => $this->changePercent($current['total_service_fee_raised_numeric'], $previous['total_service_fee_raised_numeric']),
+            'total_service_fee_raised_change_direction' => $this->changeDirection($current['total_service_fee_raised_numeric'], $previous['total_service_fee_raised_numeric']),
             'total_transactions_change_percentage' => $this->changePercent($current['total_transactions_numeric'], $previous['total_transactions_numeric']),
             'total_transactions_change_direction' => $this->changeDirection($current['total_transactions_numeric'], $previous['total_transactions_numeric']),
             'total_pledges_change_percentage' => $this->changePercent($current['total_pledges_numeric'], $previous['total_pledges_numeric']),
@@ -414,6 +424,22 @@ class DashboardService
     }
 
     /**
+     * Expression to SUM for service-fee metrics, mirroring {@see amountColumn()}: naira rollup when
+     * no currency filter is active, native fee otherwise. Rows created before the fee feature carry
+     * a null `fee_amount_in_naira`, hence the COALESCE.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    private function serviceFeeColumn(array $filters): Expression
+    {
+        if (! $this->currencyFilterActive($filters)) {
+            return DB::raw('COALESCE(transactions.fee_amount_in_naira, 0)');
+        }
+
+        return DB::raw('COALESCE(transactions.fee_amount, 0)');
+    }
+
+    /**
      * True when the client sent a non-empty `currency` query param (after request normalization).
      * Absence means “all currencies, reported in naira” — not the same as `currency=NGN`.
      *
@@ -459,9 +485,11 @@ class DashboardService
      * @param  Builder<Transaction>  $query
      * @return array<string, int|float|string>
      */
-    private function overviewMetrics(Builder $query, string $amountColumn, array $filters): array
+    private function overviewMetrics(Builder $query, string $amountColumn, Expression $feeColumn, array $filters): array
     {
         $fundRaised = (float) ((clone $query)->sum($amountColumn) ?? 0);
+        $serviceFee = (float) ((clone $query)->sum($feeColumn) ?? 0);
+        $grossRaised = round($fundRaised + $serviceFee, 2);
         $transactions = (int) ((clone $query)->count());
         $range = ListingFilterRules::resolveDateWindow($filters);
         $pledgeQ = Pledge::query();
@@ -476,10 +504,14 @@ class DashboardService
 
         return [
             'total_fund_raised' => (string) $fundRaised,
+            'total_fund_raised_including_service_fee' => (string) $grossRaised,
+            'total_service_fee_raised' => (string) $serviceFee,
             'total_transactions' => $transactions,
             'total_pledges' => $pledges,
             'total_donors' => $donors,
             'total_fund_raised_numeric' => $fundRaised,
+            'total_fund_raised_including_service_fee_numeric' => $grossRaised,
+            'total_service_fee_raised_numeric' => $serviceFee,
             'total_transactions_numeric' => $transactions,
             'total_pledges_numeric' => $pledges,
             'total_donors_numeric' => $donors,
@@ -515,11 +547,13 @@ class DashboardService
      * @param  array{days: int, start: Carbon, end: Carbon}|null  $comparisonPeriod
      * @return array<string, int|float|string>
      */
-    private function previousOverviewMetrics(array $filters, ?array $comparisonPeriod, string $amountColumn): array
+    private function previousOverviewMetrics(array $filters, ?array $comparisonPeriod, string $amountColumn, Expression $feeColumn): array
     {
         if ($comparisonPeriod === null) {
             return [
                 'total_fund_raised_numeric' => 0.0,
+                'total_fund_raised_including_service_fee_numeric' => 0.0,
+                'total_service_fee_raised_numeric' => 0.0,
                 'total_transactions_numeric' => 0,
                 'total_pledges_numeric' => 0,
                 'total_donors_numeric' => 0,
@@ -531,7 +565,7 @@ class DashboardService
         $previousFilters['end_date'] = $comparisonPeriod['end']->toDateString();
         $previousFilters['period'] = 'custom';
 
-        return $this->overviewMetrics($this->successfulTransactionsQuery($previousFilters), $amountColumn, $previousFilters);
+        return $this->overviewMetrics($this->successfulTransactionsQuery($previousFilters), $amountColumn, $feeColumn, $previousFilters);
     }
 
     private function changePercent(float|int $current, float|int $previous): float

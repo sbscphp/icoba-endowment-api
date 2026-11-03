@@ -80,7 +80,22 @@ final readonly class PaymentFeeQuote
     }
 
     /**
-     * Public API shape (quote endpoint, checkout response).
+     * Donor-facing shape (quote endpoint, checkout response): only what they give and what they pay.
+     * The fee itself, the rule and its percentage are deliberately left out.
+     *
+     * @return array<string, string>
+     */
+    public function toCustomerArray(): array
+    {
+        return [
+            'donation_amount' => $this->money($this->donationAmount),
+            'total_amount' => $this->money($this->totalAmount()),
+            'currency' => $this->currency,
+        ];
+    }
+
+    /**
+     * Admin shape (fee rule preview): full breakdown including the rule that applied.
      *
      * @return array<string, mixed>
      */

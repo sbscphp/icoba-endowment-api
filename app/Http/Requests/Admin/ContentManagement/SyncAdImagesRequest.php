@@ -2,30 +2,35 @@
 
 namespace App\Http\Requests\Admin\ContentManagement;
 
+use App\Http\Requests\Admin\ContentManagement\Concerns\AdImageSetRules;
 use App\Http\Requests\ApiFormRequest;
-use App\Services\Admin\ContentManagement\AdService;
+use Illuminate\Contracts\Validation\Validator;
 
 class SyncAdImagesRequest extends ApiFormRequest
 {
+    use AdImageSetRules;
+
     /**
-     * `images` is the full desired gallery: each entry is either an existing Cloudinary URL
-     * to keep, or a new base64/file upload. An ad must always keep at least one image.
+     * Send `landscape_images` and/or `portrait_images`; each is the full desired gallery for
+     * that orientation (existing Cloudinary URLs to keep + new base64/file uploads). Only the
+     * orientations sent are reconciled. The ad must always keep at least one image overall.
      */
     public function rules(): array
     {
-        return [
-            'images' => ['required', 'array', 'min:1', 'max:'.AdService::MAX_IMAGES],
-            'images.*' => ['required'],
-        ];
+        return $this->imageSetRules();
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            if (! $this->hasAnyImageSet()) {
+                $validator->errors()->add('landscape_images', 'Provide landscape_images and/or portrait_images to update.');
+            }
+        });
     }
 
     public function messages(): array
     {
-        return array_merge(parent::messages(), [
-            'images.required' => 'The images field must be provided.',
-            'images.array' => 'Images must be provided as a list.',
-            'images.min' => 'An ad must have at least one image.',
-            'images.max' => 'You may have at most '.AdService::MAX_IMAGES.' images per ad.',
-        ]);
+        return array_merge(parent::messages(), $this->imageSetMessages());
     }
 }

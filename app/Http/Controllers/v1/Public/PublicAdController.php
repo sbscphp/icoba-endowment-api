@@ -4,6 +4,7 @@ namespace App\Http\Controllers\v1\Public;
 
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Public\PublicAdListRequest;
 use App\Http\Resources\PublicAdResource;
 use App\Responser\JsonResponser;
 use App\Services\Public\PublicAdService;
@@ -14,12 +15,14 @@ class PublicAdController extends Controller
         private readonly PublicAdService $publicAdService,
     ) {}
 
-    public function index()
+    public function index(PublicAdListRequest $request)
     {
         try {
-            $ads = $this->publicAdService->listVisible();
+            $orientation = $request->orientation();
+            $ads = $this->publicAdService->listVisible($orientation);
 
             return JsonResponser::send(false, 'Ads retrieved.', [
+                'orientation' => $orientation?->value,
                 'ads_transition_seconds' => $this->publicAdService->transitionSeconds(),
                 'ads' => PublicAdResource::collection($ads)->resolve(),
             ]);

@@ -179,6 +179,11 @@ class OtpService
                 'cooldown_active' => true,
                 'retry_after_seconds' => $gate['retry_after_seconds'],
                 'retry_after_human' => OpaqueMessageHelper::humanizeSecondsRemaining($gate['retry_after_seconds']),
+                'new_code_sent' => false,
+                'code_sent_at' => $challenge->created_at?->toIso8601String(),
+                'code_sent_seconds_ago' => $challenge->created_at !== null
+                    ? max(0, now()->timestamp - $challenge->created_at->getTimestamp())
+                    : null,
                 'otp_purpose' => $purpose->value,
                 'otp_channel' => $challenge->channel,
             ];
@@ -242,6 +247,9 @@ class OtpService
             'challenge_token' => $issuedToken,
             'expires_in' => $expiresIn,
             'cooldown_active' => false,
+            'new_code_sent' => true,
+            'code_sent_at' => $challenge->created_at?->toIso8601String(),
+            'code_sent_seconds_ago' => 0,
             'otp_purpose' => $purpose->value,
             'otp_channel' => $channel->value,
         ];
@@ -482,7 +490,10 @@ class OtpService
                 throw $this->staleChallengeTokenException();
             }
 
-            throw new ApiException('Invalid or expired verification code.', 422);
+            throw new ApiException('Invalid or expired verification code.', 422, [
+                'session_expired' => true,
+                'can_resend' => $this->challengeTokenService->canResend($payload),
+            ]);
         }
 
         if (! $latest || $latest->id !== $challenge->id || $challenge->attempts >= self::MAX_ATTEMPTS) {
@@ -501,7 +512,11 @@ class OtpService
                 throw $this->staleChallengeTokenException();
             }
 
-            throw new ApiException('Invalid or expired verification code.', 422);
+            throw new ApiException('Invalid or expired verification code.', 422, [
+                'attempts_remaining' => 0,
+                'max_attempts_reached' => true,
+                'can_resend' => $this->challengeTokenService->canResend($payload),
+            ]);
         }
 
         $attemptsBefore = (int) $challenge->attempts;
@@ -519,7 +534,13 @@ class OtpService
                 'challenge_exp_in_sec' => $this->challengeSecondsRemaining($challenge),
             ]);
 
-            throw new ApiException('Invalid or expired verification code.', 422);
+            $attemptsRemaining = max(0, self::MAX_ATTEMPTS - ($attemptsBefore + 1));
+
+            throw new ApiException('Invalid or expired verification code.', 422, [
+                'attempts_remaining' => $attemptsRemaining,
+                'max_attempts_reached' => $attemptsRemaining === 0,
+                'can_resend' => $this->challengeTokenService->canResend($payload),
+            ]);
         }
 
         $challenge->forceFill(['used_at' => now()])->save();

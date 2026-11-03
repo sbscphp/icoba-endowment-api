@@ -47,10 +47,25 @@ class ChallengeTokenService
                 'skew_seconds' => $nowTs - $exp,
             ]));
 
-            throw new ApiException('Invalid or expired verification session.', 422);
+            throw new ApiException('Invalid or expired verification session.', 422, [
+                'session_expired' => true,
+                'can_resend' => $this->canResend($payload),
+            ]);
         }
 
         return $payload;
+    }
+
+    /**
+     * Whether a resend endpoint will still accept this (already decoded) token.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function canResend(array $payload): bool
+    {
+        $iat = (int) ($payload['iat'] ?? 0);
+
+        return $iat > 0 && (now()->timestamp - $iat) <= $this->resendTokenMaxAgeSeconds();
     }
 
     /**
@@ -89,7 +104,7 @@ class ChallengeTokenService
         $iat = (int) ($payload['iat'] ?? 0);
         $maxReuseSeconds = $this->resendTokenMaxAgeSeconds();
 
-        if ($iat <= 0 || ($nowTs - $iat) > $maxReuseSeconds) {
+        if (! $this->canResend($payload)) {
             $this->logDecodeFailure('resend_token_max_age_exceeded', array_merge($requestContext, [
                 'iat' => $iat,
                 'now' => $nowTs,

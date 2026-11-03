@@ -117,8 +117,9 @@ class ContentManagementAuditTest extends TestCase
         ]);
 
         $update = $this->log(AuditActionEnum::AD_UPDATED);
-        $this->assertSame(['https://cdn.example.com/1.jpg'], $update->metadata['data']['previous_images']);
-        $this->assertCount(2, $update->metadata['data']['new_images']);
+        $this->assertSame(['https://cdn.example.com/1.jpg'], $update->metadata['data']['previous_images']['landscape']);
+        $this->assertSame([], $update->metadata['data']['previous_images']['portrait']);
+        $this->assertCount(2, $update->metadata['data']['new_images']['landscape']);
     }
 
     public function test_event_lifecycle_is_audited(): void
