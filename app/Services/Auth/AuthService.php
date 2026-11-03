@@ -879,7 +879,13 @@ class AuthService
 
         $status = $th instanceof ApiException ? $th->status : 422;
 
-        throw new ApiException(OpaqueMessageHelper::MESSAGE_GENERIC_LOGIN_OTP_VERIFY_FAILURE, $status);
+        // Keep the session/attempt hints for the app. The password was already accepted at this point,
+        // so they reveal nothing about whether the account exists.
+        throw new ApiException(
+            OpaqueMessageHelper::MESSAGE_GENERIC_LOGIN_OTP_VERIFY_FAILURE,
+            $status,
+            $th instanceof ApiException ? $th->payload : null
+        );
     }
 
     private function autoUnlockIfExpired(User|Admin $authenticatable): void

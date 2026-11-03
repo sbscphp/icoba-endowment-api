@@ -9,7 +9,8 @@ use App\Responser\JsonResponser;
 use App\Services\Payment\Fee\PaymentFeeQuoteService;
 
 /**
- * Prices a donation before checkout so the frontend can show donation, service fee and total.
+ * Prices a donation before checkout so the frontend can show what the donor gives and what they pay.
+ * The fee amount, rule and percentage are not exposed to donors; admins see them via the fee-rule preview.
  * The gateway is not needed: the fee is the same whichever one the donor picks.
  */
 class DonationFeeQuoteController extends Controller
@@ -24,7 +25,7 @@ class DonationFeeQuoteController extends Controller
             $validated = $request->validated();
             $quote = $this->feeQuoteService->quote((float) $validated['amount'], (string) $validated['currency']);
 
-            return JsonResponser::send(false, 'Fee quote retrieved.', $quote->toArray());
+            return JsonResponser::send(false, 'Fee quote retrieved.', $quote->toCustomerArray());
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Customer\Donation\DonationFeeQuoteController@show');
         }

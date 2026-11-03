@@ -85,9 +85,7 @@ class EmailVerificationController extends Controller
                 $request
             );
 
-            $message = isset($payload['otp_channel'])
-                ? (OtpChannelEnum::tryFrom($payload['otp_channel']) ?? OtpChannelEnum::EMAIL)->deliveryMessage()
-                : 'Verification code sent.';
+            $message = OtpChannelEnum::sendMessageFor($payload);
 
             OtpFlowLogger::log('EMAIL_VERIFICATION', 'HTTP resend-otp response 200', array_merge(
                 OtpFlowLogger::tokenMeta((string) ($payload['challenge_token'] ?? '')),

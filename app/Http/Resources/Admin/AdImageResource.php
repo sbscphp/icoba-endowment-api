@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Admin;
 
+use App\Enums\AdImageOrientation;
 use App\Models\AdImage;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -19,6 +20,7 @@ class AdImageResource extends JsonResource
         return [
             'image_id' => $this->uuid,
             'image_url' => $this->image_url,
+            'orientation' => ($this->orientation ?? AdImageOrientation::LANDSCAPE)->value,
             'sort_order' => (int) $this->sort_order,
         ];
     }

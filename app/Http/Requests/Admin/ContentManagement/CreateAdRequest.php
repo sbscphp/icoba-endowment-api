@@ -2,15 +2,23 @@
 
 namespace App\Http\Requests\Admin\ContentManagement;
 
+use App\Http\Requests\Admin\ContentManagement\Concerns\AdImageSetRules;
 use App\Http\Requests\ApiFormRequest;
 use App\Services\Admin\ContentManagement\AdService;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Validation\Rule;
 
 class CreateAdRequest extends ApiFormRequest
 {
+    use AdImageSetRules;
+
+    /**
+     * Images are supplied per orientation (`landscape_images` / `portrait_images`); see
+     * AdImageSetRules. At least one image across both orientations is required.
+     */
     public function rules(): array
     {
-        return [
+        return array_merge([
             'title' => ['required', 'string', 'max:255'],
             'target_url' => ['sometimes', 'nullable', 'string', 'url', 'max:2048'],
             'image_interval_seconds' => ['sometimes', 'integer', 'min:1', 'max:'.AdService::MAX_INTERVAL_SECONDS],
@@ -19,9 +27,12 @@ class CreateAdRequest extends ApiFormRequest
             'is_active' => ['sometimes', 'boolean'],
             'status' => ['sometimes', 'nullable', Rule::in(['live', 'scheduled', 'expired', 'archived'])],
             'sort_order' => ['sometimes', 'integer', 'min:0'],
-            'images' => ['required', 'array', 'min:1', 'max:'.AdService::MAX_IMAGES],
-            'images.*' => ['required'],
-        ];
+        ], $this->imageSetRules());
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $this->requireAtLeastOneImageEntry($validator);
     }
 
     public function messages(): array
@@ -42,10 +53,6 @@ class CreateAdRequest extends ApiFormRequest
             'is_active.boolean' => 'Active status must be true or false.',
             'status.in' => 'Ad status is invalid.',
             'sort_order.integer' => 'Sort order must be a whole number.',
-            'images.required' => 'At least one ad image is required.',
-            'images.array' => 'Images must be provided as a list.',
-            'images.min' => 'At least one ad image is required.',
-            'images.max' => 'You may upload at most '.AdService::MAX_IMAGES.' images per ad.',
-        ]);
+        ], $this->imageSetMessages());
     }
 }

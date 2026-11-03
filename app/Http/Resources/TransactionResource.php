@@ -7,6 +7,7 @@ use App\Enums\House;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
 use App\Enums\WivesType;
+use App\Models\Admin;
 use App\Models\GivingIdentity;
 use App\Models\TierConfiguration;
 use App\Models\Transaction;
@@ -30,6 +31,8 @@ class TransactionResource extends JsonResource
         $affiliatedSet = $this->donor?->affiliatedGraduationSet ?? $this->givingIdentity?->affiliatedGraduationSet;
         /** @var TierConfiguration|null $tier */
         $tier = $this->resource->getAttribute('matched_tier');
+        // Only an authenticated admin may see fee and gateway-cost details; donors and guests never do.
+        $isAdmin = $request->user() instanceof Admin;
 
         $metadata = is_array($this->metadata) ? $this->metadata : [];
         $reconciliationDraft = is_array($metadata['reconciliation_draft'] ?? null)
@@ -107,17 +110,20 @@ class TransactionResource extends JsonResource
             'currency' => $this->currency,
             'amount_in_naira' => $this->amount_in_naira !== null ? (string) $this->amount_in_naira : null,
             'exchange_rate_to_naira' => $this->exchange_rate_to_naira !== null ? (string) $this->exchange_rate_to_naira : null,
-            // Service fee is kept apart from the donation: amount is the donation, total_amount is what was charged.
-            'fee_amount' => (string) ($this->fee_amount ?? '0.00'),
+            // Donors see what they gave and what they paid. The fee, the rule behind it and the
+            // gateway's figures are admin-only so the percentage is never derivable client-side.
             'total_amount' => number_format($this->resource->chargeAmount(), 2, '.', ''),
-            'fee_amount_in_naira' => $this->fee_amount_in_naira !== null ? (string) $this->fee_amount_in_naira : null,
-            'gateway_amount_received' => $this->gateway_amount_received !== null ? (string) $this->gateway_amount_received : null,
-            'gateway_fee_amount' => $this->gateway_fee_amount !== null ? (string) $this->gateway_fee_amount : null,
-            'realized_margin_amount' => $this->resource->realizedMarginAmount() !== null
-                ? number_format($this->resource->realizedMarginAmount(), 2, '.', '')
-                : null,
-            'gateway_amount_mismatch' => $this->resource->hasGatewayAmountMismatch(),
-            'fee_snapshot' => $this->fee_snapshot,
+            $this->mergeWhen($isAdmin, fn (): array => [
+                'fee_amount' => (string) ($this->fee_amount ?? '0.00'),
+                'fee_amount_in_naira' => $this->fee_amount_in_naira !== null ? (string) $this->fee_amount_in_naira : null,
+                'gateway_amount_received' => $this->gateway_amount_received !== null ? (string) $this->gateway_amount_received : null,
+                'gateway_fee_amount' => $this->gateway_fee_amount !== null ? (string) $this->gateway_fee_amount : null,
+                'realized_margin_amount' => $this->resource->realizedMarginAmount() !== null
+                    ? number_format($this->resource->realizedMarginAmount(), 2, '.', '')
+                    : null,
+                'gateway_amount_mismatch' => $this->resource->hasGatewayAmountMismatch(),
+                'fee_snapshot' => $this->fee_snapshot,
+            ]),
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
             'pledge_uuid' => $this->pledge_uuid,
             'application_type' => $this->application_type instanceof \BackedEnum ? $this->application_type->value : $this->application_type,
@@ -140,8 +146,29 @@ class TransactionResource extends JsonResource
             'reconciliation_status' => $this->resolveReconciliationStatus(),
             'reconciliation_draft' => $reconciliationDraft !== [] ? $reconciliationDraft : null,
             'certificates' => $this->whenLoaded('certificates', fn () => \App\Http\Resources\Customer\CustomerRecognitionResource::collection($this->certificates)),
-            'metadata' => $metadata,
+            'metadata' => $isAdmin ? $metadata : self::withoutFeeMetadata($metadata),
         ];
+    }
+
+    /**
+     * Metadata keys that would reveal the service fee or the gateway's cut to a donor.
+     *
+     * @param  array<string, mixed>  $metadata
+     * @return array<string, mixed>
+     */
+    public static function withoutFeeMetadata(array $metadata): array
+    {
+        foreach (array_keys($metadata) as $key) {
+            if (str_starts_with((string) $key, 'gateway_amount_')
+                || str_starts_with((string) $key, 'gateway_charged_')
+                || str_starts_with((string) $key, 'stripe_balance_fee')
+                || str_starts_with((string) $key, 'stripe_fee_')
+                || in_array($key, ['fcmb_original_amount', 'fcmb_amount'], true)) {
+                unset($metadata[$key]);
+            }
+        }
+
+        return $metadata;
     }
 
     private function resolveReconciliationStatus(): ?string

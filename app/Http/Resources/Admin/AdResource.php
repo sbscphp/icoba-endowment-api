@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Admin;
 
+use App\Enums\AdImageOrientation;
 use App\Models\Ad;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -18,6 +19,9 @@ class AdResource extends JsonResource
     {
         $this->resource->loadMissing('images', 'creator:uuid,name,email', 'updater:uuid,name,email');
 
+        $landscape = $this->resource->imagesFor(AdImageOrientation::LANDSCAPE);
+        $portrait = $this->resource->imagesFor(AdImageOrientation::PORTRAIT);
+
         return [
             'ad_id' => $this->uuid,
             'ad_code' => $this->ad_code,
@@ -30,7 +34,11 @@ class AdResource extends JsonResource
             'status' => $this->resource->derivedStatus(),
             'sort_order' => (int) $this->sort_order,
             'images' => AdImageResource::collection($this->images)->resolve(),
+            'landscape_images' => AdImageResource::collection($landscape)->resolve(),
+            'portrait_images' => AdImageResource::collection($portrait)->resolve(),
             'images_count' => $this->images->count(),
+            'landscape_images_count' => $landscape->count(),
+            'portrait_images_count' => $portrait->count(),
             'created_by' => $this->creator !== null ? [
                 'admin_id' => $this->creator->uuid,
                 'name' => $this->creator->name,

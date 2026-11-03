@@ -34,7 +34,7 @@ class AdminLoginController extends Controller
                 return JsonResponser::send(false, 'Login successful.', AuthResource::make($payload), 200);
             }
 
-            return JsonResponser::send(false, 'Verification code sent.', $payload, 200);
+            return JsonResponser::send(false, OtpChannelEnum::sendMessageFor($payload), $payload, 200);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'AdminLoginController@login');
         }
@@ -66,9 +66,7 @@ class AdminLoginController extends Controller
                 $request
             );
 
-            $message = isset($payload['otp_channel'])
-                ? (OtpChannelEnum::tryFrom($payload['otp_channel']) ?? OtpChannelEnum::EMAIL)->deliveryMessage()
-                : 'Verification code sent.';
+            $message = OtpChannelEnum::sendMessageFor($payload);
 
             return JsonResponser::send(false, $message, $payload, 200);
         } catch (\Throwable $th) {

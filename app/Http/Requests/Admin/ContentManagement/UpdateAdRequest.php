@@ -2,17 +2,21 @@
 
 namespace App\Http\Requests\Admin\ContentManagement;
 
+use App\Http\Requests\Admin\ContentManagement\Concerns\AdImageSetRules;
 use App\Http\Requests\ApiFormRequest;
 use App\Services\Admin\ContentManagement\AdService;
 use Illuminate\Validation\Rule;
 
 class UpdateAdRequest extends ApiFormRequest
 {
+    use AdImageSetRules;
+
     /**
-     * `images`, when present, is the full desired gallery (existing URLs to keep + new
-     * base64/file entries to upload) — see SyncAdImagesRequest. Omit the field entirely
-     * to leave the gallery untouched. The start/end window coherence is validated in the
-     * service against the effective (merged) values.
+     * `landscape_images` / `portrait_images`, when present, are each the full desired gallery
+     * for that orientation (existing URLs to keep + new base64/file entries to upload) — see
+     * AdImageSetRules. Omit a key entirely to leave that orientation untouched. The ad must
+     * keep at least one image overall, which the service enforces after reconciling. The
+     * start/end window coherence is validated in the service against the effective (merged) values.
      *
      * `status` is a convenience alias over `is_active`: sending "archived" archives the
      * ad; "live"/"scheduled"/"expired" un-archive it (the actual label is still derived
@@ -21,7 +25,7 @@ class UpdateAdRequest extends ApiFormRequest
      */
     public function rules(): array
     {
-        return [
+        return array_merge([
             'title' => ['sometimes', 'string', 'max:255'],
             'target_url' => ['sometimes', 'nullable', 'string', 'url', 'max:2048'],
             'image_interval_seconds' => ['sometimes', 'integer', 'min:1', 'max:'.AdService::MAX_INTERVAL_SECONDS],
@@ -30,9 +34,7 @@ class UpdateAdRequest extends ApiFormRequest
             'is_active' => ['sometimes', 'boolean'],
             'status' => ['sometimes', 'nullable', Rule::in(['live', 'scheduled', 'expired', 'archived'])],
             'sort_order' => ['sometimes', 'integer', 'min:0'],
-            'images' => ['sometimes', 'array', 'min:1', 'max:'.AdService::MAX_IMAGES],
-            'images.*' => ['required'],
-        ];
+        ], $this->imageSetRules());
     }
 
     public function messages(): array
@@ -49,9 +51,6 @@ class UpdateAdRequest extends ApiFormRequest
             'is_active.boolean' => 'Active status must be true or false.',
             'status.in' => 'Ad status is invalid.',
             'sort_order.integer' => 'Sort order must be a whole number.',
-            'images.array' => 'Images must be provided as a list.',
-            'images.min' => 'An ad must have at least one image.',
-            'images.max' => 'You may have at most '.AdService::MAX_IMAGES.' images per ad.',
-        ]);
+        ], $this->imageSetMessages());
     }
 }

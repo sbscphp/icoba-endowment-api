@@ -121,7 +121,6 @@ class FcmbCheckoutServiceTest extends TestCase
         );
         $this->assertSame($transaction->uuid, $payload['invoiceRequestReference']);
         $this->assertSame(['label' => 'transaction_uuid', 'value' => $transaction->uuid], $payload['customFields'][0]);
-        $this->assertContains(['label' => 'donation_amount', 'value' => '5000.00'], $payload['customFields']);
         $this->assertSame(5000.0, $payload['amount']);
         $this->assertSame('NGN', $payload['currency']);
         $this->assertSame('Ada', $payload['firstName']);
@@ -178,8 +177,10 @@ class FcmbCheckoutServiceTest extends TestCase
         );
 
         $this->assertSame(5150.0, $payload['amount']);
-        $this->assertContains(['label' => 'donation_amount', 'value' => '5000.00'], $payload['customFields']);
-        $this->assertContains(['label' => 'service_fee', 'value' => '150.00'], $payload['customFields']);
+        // The donation/fee split never travels to the payer-facing CLNX page.
+        $labels = array_column($payload['customFields'], 'label');
+        $this->assertNotContains('donation_amount', $labels);
+        $this->assertNotContains('service_fee', $labels);
         $this->assertSame(
             hash('sha512', implode('|', ['5150', 'donor@example.com', $transaction->uuid, 'test-secret-key'])),
             $payload['hash'],

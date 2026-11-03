@@ -252,6 +252,78 @@ final class EmailVerificationResendTest extends TestCase
         $this->assertSame(OtpChannelEnum::EMAIL->value, $result['otp_channel']);
     }
 
+    public function test_expired_token_on_verify_flags_session_expired_and_resendable(): void
+    {
+        $token = $this->issueTokenForUser(User::factory()->unverified()->create(), OtpPurposeEnum::EMAIL_VERIFICATION, ttlSeconds: 300);
+
+        $this->travel(550)->seconds();
+
+        try {
+            $this->otpService->verifyEmailVerificationOtp($token, '123456');
+            $this->fail('Expected expired session to fail.');
+        } catch (ApiException $e) {
+            $this->assertTrue($e->payload['session_expired']);
+            $this->assertTrue($e->payload['can_resend']);
+        }
+    }
+
+    public function test_expired_token_past_resend_window_is_not_resendable(): void
+    {
+        config(['security.otp_resend_token_max_minutes' => 10]);
+
+        $token = $this->issueTokenForUser(User::factory()->unverified()->create(), OtpPurposeEnum::EMAIL_VERIFICATION, ttlSeconds: 300);
+
+        $this->travel(601)->seconds();
+
+        try {
+            $this->challengeTokenService->decode($token, OtpPurposeEnum::EMAIL_VERIFICATION);
+            $this->fail('Expected expired session to fail.');
+        } catch (ApiException $e) {
+            $this->assertTrue($e->payload['session_expired']);
+            $this->assertFalse($e->payload['can_resend']);
+        }
+    }
+
+    public function test_wrong_otp_reports_attempts_remaining(): void
+    {
+        $token = $this->issueTokenForUser(User::factory()->unverified()->create(), OtpPurposeEnum::EMAIL_VERIFICATION, ttlSeconds: 300);
+
+        try {
+            $this->otpService->verifyEmailVerificationOtp($token, '000000');
+            $this->fail('Expected wrong OTP to fail.');
+        } catch (ApiException $e) {
+            $this->assertSame(4, $e->payload['attempts_remaining']);
+            $this->assertFalse($e->payload['max_attempts_reached']);
+        }
+    }
+
+    public function test_send_during_cooldown_reports_no_new_code_and_when_it_was_sent(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->unverified()->create();
+        $first = $this->otpService->sendEmailVerificationOtp($user);
+
+        $this->assertTrue($first['new_code_sent']);
+        $this->assertSame(0, $first['code_sent_seconds_ago']);
+        $this->assertSame(OtpChannelEnum::EMAIL->deliveryMessage(), OtpChannelEnum::sendMessageFor($first));
+
+        $this->travel(94)->seconds();
+
+        $second = $this->otpService->sendEmailVerificationOtp($user);
+
+        $this->assertTrue($second['cooldown_active']);
+        $this->assertFalse($second['new_code_sent']);
+        $this->assertSame(94, $second['code_sent_seconds_ago']);
+        $this->assertSame($first['code_sent_at'], $second['code_sent_at']);
+        $this->assertSame(
+            'We already sent a verification code to your email 1 minute 34 seconds ago. Please use the code from that message. It is still valid for 3 minutes 26 seconds.',
+            OtpChannelEnum::sendMessageFor($second)
+        );
+
+        Mail::assertSent(OTPMail::class, 1);
+    }
+
     private function issueTokenForUser(
         User $user,
         OtpPurposeEnum $purpose,

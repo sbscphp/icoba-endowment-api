@@ -28,6 +28,8 @@ class AdListResource extends JsonResource
             'status' => $this->resource->derivedStatus(),
             'sort_order' => (int) $this->sort_order,
             'images_count' => (int) ($this->resource->images_count ?? 0),
+            'landscape_images_count' => (int) ($this->resource->landscape_images_count ?? 0),
+            'portrait_images_count' => (int) ($this->resource->portrait_images_count ?? 0),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

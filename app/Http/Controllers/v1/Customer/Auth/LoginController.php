@@ -48,9 +48,10 @@ class LoginController extends Controller
                     JsonResponser::send(false, 'Login successful.', AuthResource::make($payload), 200));
             }
 
-            $message = ($payload['registration_step'] ?? '') === CustomerRegistrationStepEnum::AWAITING_OTP->value
-                ? 'Please verify your email. A verification code has been sent.'
-                : 'Verification code sent.';
+            $message = OtpChannelEnum::sendMessageFor($payload);
+            if (($payload['registration_step'] ?? '') === CustomerRegistrationStepEnum::AWAITING_OTP->value) {
+                $message = 'Please verify your email. '.$message;
+            }
 
             OtpFlowLogger::log(self::FLOW, 'HTTP login response 200 (OTP required)', OtpFlowLogger::authPayloadMeta($payload));
 
@@ -112,9 +113,7 @@ class LoginController extends Controller
                 $request
             );
 
-            $message = isset($payload['otp_channel'])
-                ? (OtpChannelEnum::tryFrom($payload['otp_channel']) ?? OtpChannelEnum::EMAIL)->deliveryMessage()
-                : 'Verification code sent.';
+            $message = OtpChannelEnum::sendMessageFor($payload);
 
             OtpFlowLogger::log(self::FLOW, 'HTTP resend-otp response 200', array_merge(
                 OtpFlowLogger::authPayloadMeta($payload),
