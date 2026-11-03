@@ -43,6 +43,9 @@ class TransactionListResource extends JsonResource
             'amount' => (string) $this->amount,
             'currency' => $this->currency,
             'amount_in_naira' => $this->amount_in_naira !== null ? (string) $this->amount_in_naira : null,
+            // service_fee mirrors fee_amount under the name the dashboard uses.
+            'service_fee' => (string) ($this->fee_amount ?? '0.00'),
+            'service_fee_in_naira' => $this->fee_amount_in_naira !== null ? (string) $this->fee_amount_in_naira : null,
             'fee_amount' => (string) ($this->fee_amount ?? '0.00'),
             'total_amount' => number_format($this->resource->chargeAmount(), 2, '.', ''),
             'gateway_amount_received' => $this->gateway_amount_received !== null ? (string) $this->gateway_amount_received : null,

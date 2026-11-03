@@ -6,6 +6,7 @@ use App\Enums\CampaignStatus;
 use App\Enums\PaymentGateway;
 use App\Enums\TransactionApplicationType;
 use App\Enums\TransactionStatus;
+use App\Http\Resources\Admin\TransactionListResource;
 use App\Http\Resources\TransactionResource;
 use App\Models\Admin;
 use App\Models\Campaign;
@@ -32,7 +33,7 @@ final class TransactionResourceFeeVisibilityTest extends TestCase
 
         $this->assertSame('10000.00', $payload['amount']);
         $this->assertSame('10300.00', $payload['total_amount']);
-        foreach (['fee_amount', 'fee_amount_in_naira', 'fee_snapshot', 'gateway_amount_received', 'gateway_fee_amount', 'realized_margin_amount', 'gateway_amount_mismatch'] as $hidden) {
+        foreach (['service_fee', 'service_fee_in_naira', 'fee_amount', 'fee_amount_in_naira', 'fee_snapshot', 'gateway_amount_received', 'gateway_fee_amount', 'realized_margin_amount', 'gateway_amount_mismatch'] as $hidden) {
             $this->assertArrayNotHasKey($hidden, $payload, $hidden.' leaked to a customer');
         }
         $this->assertArrayNotHasKey('gateway_amount_mismatch', $payload['metadata']);
@@ -58,11 +59,22 @@ final class TransactionResourceFeeVisibilityTest extends TestCase
         $payload = TransactionResource::make($transaction)->resolve($request);
 
         $this->assertSame('300.00', $payload['fee_amount']);
+        $this->assertSame('300.00', $payload['service_fee']);
+        $this->assertSame('300.00', $payload['service_fee_in_naira']);
         $this->assertSame('10300.00', $payload['total_amount']);
         $this->assertSame('250.00', $payload['gateway_fee_amount']);
         $this->assertSame('50.00', $payload['realized_margin_amount']);
         $this->assertSame('3.0000', $payload['fee_snapshot']['rule']['percentage']);
         $this->assertSame('0.49', $payload['metadata']['stripe_balance_fee']);
+    }
+
+    public function test_admin_list_row_exposes_service_fee(): void
+    {
+        $payload = TransactionListResource::make($this->makeTransaction())->resolve(Request::create('/'));
+
+        $this->assertSame('300.00', $payload['service_fee']);
+        $this->assertSame('300.00', $payload['service_fee_in_naira']);
+        $this->assertSame('300.00', $payload['fee_amount']);
     }
 
     private function makeTransaction(): Transaction

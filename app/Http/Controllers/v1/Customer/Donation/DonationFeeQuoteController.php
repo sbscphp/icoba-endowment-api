@@ -10,7 +10,7 @@ use App\Services\Payment\Fee\PaymentFeeQuoteService;
 
 /**
  * Prices a donation before checkout so the frontend can show what the donor gives and what they pay.
- * The fee amount, rule and percentage are not exposed to donors; admins see them via the fee-rule preview.
+ * The fee amount is shown; the rule and its percentage are not. Admins see those via the fee-rule preview.
  * The gateway is not needed: the fee is the same whichever one the donor picks.
  */
 class DonationFeeQuoteController extends Controller

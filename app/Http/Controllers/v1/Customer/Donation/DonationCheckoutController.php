@@ -127,9 +127,11 @@ class DonationCheckoutController extends Controller
                 'checkout_url' => $checkout['url'],
                 'checkout_session_id' => $checkout['session_id'],
                 'transaction_uuid' => $transaction->uuid,
-                // Donors see what they give and what they pay; the fee itself is admin-only.
+                // Donors see what they give, the service fee and what they pay; the rule behind the fee is admin-only.
                 'currency' => $transaction->currency,
                 'donation_amount' => (string) $transaction->amount,
+                'service_fee' => (string) ($transaction->fee_amount ?? '0.00'),
+                'fee_amount' => (string) ($transaction->fee_amount ?? '0.00'),
                 'total_amount' => number_format($transaction->chargeAmount(), 2, '.', ''),
                 'success_url' => $checkout['success_url'],
                 'failed_url' => $checkout['failed_url'],
