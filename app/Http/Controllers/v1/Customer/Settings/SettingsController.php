@@ -5,6 +5,7 @@ namespace App\Http\Controllers\v1\Customer\Settings;
 use App\Helpers\GeneralHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\Settings\CustomerProfileUpdateRequest;
+use App\Http\Requests\Customer\Settings\DeleteCustomerAccountRequest;
 use App\Http\Requests\Customer\Settings\ToggleBiometricsRequest;
 use App\Http\Requests\Customer\Settings\ToggleTwoFactorRequest;
 use App\Http\Requests\Settings\ChangeSettingsPasswordRequest;
@@ -12,11 +13,15 @@ use App\Http\Requests\Settings\UpdateNotificationPreferencesRequest;
 use App\Models\User;
 use App\Responser\JsonResponser;
 use App\Services\Settings\AccountSettingsService;
+use App\Services\Settings\CustomerAccountDeletionService;
 use Illuminate\Http\Request;
 
 class SettingsController extends Controller
 {
-    public function __construct(private readonly AccountSettingsService $settingsService) {}
+    public function __construct(
+        private readonly AccountSettingsService $settingsService,
+        private readonly CustomerAccountDeletionService $accountDeletionService,
+    ) {}
 
     public function profile(Request $request)
     {
@@ -39,6 +44,19 @@ class SettingsController extends Controller
             return JsonResponser::send(false, 'Profile updated.', $profile, 200);
         } catch (\Throwable $th) {
             return GeneralHelper::handleControllerThrowable($th, 'Customer\Settings\SettingsController@updateProfile');
+        }
+    }
+
+    public function destroy(DeleteCustomerAccountRequest $request)
+    {
+        try {
+            $user = $this->requireCustomer($request);
+            $reason = $request->input('reason');
+            $this->accountDeletionService->delete($user, is_string($reason) ? $reason : null, $request);
+
+            return JsonResponser::send(false, 'Your account has been deleted.', null, 200);
+        } catch (\Throwable $th) {
+            return GeneralHelper::handleControllerThrowable($th, 'Customer\Settings\SettingsController@destroy');
         }
     }
 

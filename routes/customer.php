@@ -49,6 +49,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/profile', [SettingsController::class, 'profile']);
         Route::patch('/profile', [SettingsController::class, 'updateProfile']);
         Route::post('/profile', [SettingsController::class, 'updateProfile']);
+        Route::delete('/profile', [SettingsController::class, 'destroy']);
+        Route::post('/profile/delete', [SettingsController::class, 'destroy']);
         Route::patch('/2fa', [SettingsController::class, 'toggleTwoFactor']);
         Route::post('/2fa', [SettingsController::class, 'toggleTwoFactor']);
         Route::patch('/biometrics', [SettingsController::class, 'toggleBiometrics']);
